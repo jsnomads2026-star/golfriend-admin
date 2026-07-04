@@ -6,6 +6,24 @@ export default function TournamentTV() {
   const [players, setPlayers] = useState<any[]>([]);
   const [displayState, setDisplayState] = useState<string>('leaderboard');
   const [raffleWinner, setRaffleWinner] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(0); // 🔥 NEW: Auto-Pagination State
+
+  const PLAYERS_PER_PAGE = 10;
+
+  // 🔥 STRICT PRODUCTION LOGIC: Driven entirely by live Firebase 'players' state
+  const totalPages = Math.ceil(players.length / PLAYERS_PER_PAGE) || 1;
+  const visiblePlayers = players.slice(currentPage * PLAYERS_PER_PAGE, (currentPage + 1) * PLAYERS_PER_PAGE);
+
+  // 🔥 THE 8-SECOND AUTO-PAGINATION TIMER
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (displayState === 'leaderboard' && totalPages > 1) {
+      timer = setInterval(() => {
+        setCurrentPage(prev => (prev + 1) % totalPages);
+      }, 8000); // Broadcast rotation speed
+    }
+    return () => clearInterval(timer);
+  }, [displayState, totalPages]);
 
   // LIVE SYNC: The TV listens directly to the course data
   useEffect(() => {
@@ -25,6 +43,13 @@ export default function TournamentTV() {
       snapshot.forEach((doc) => {
         // Default to 'E' (Even) if no score exists yet
         activePlayers.push({ id: doc.id, ...doc.data(), currentScore: doc.data().currentScore || 'E' });
+      });
+      
+      // 🔥 LEADERBOARD MATH: Sort by score (Lowest first, 'E' = 0)
+      activePlayers.sort((a, b) => {
+        const scoreA = a.currentScore === 'E' ? 0 : parseInt(a.currentScore) || 0;
+        const scoreB = b.currentScore === 'E' ? 0 : parseInt(b.currentScore) || 0;
+        return scoreA - scoreB;
       });
       
       setPlayers(activePlayers);
@@ -54,58 +79,111 @@ export default function TournamentTV() {
       </div>
 
       {/* ========================================== */}
-      {/* STAGE 1: THE LEADERBOARD */}
+      {/* STAGE 1: THE LEADERBOARD (PGA-STYLE) */}
       {/* ========================================== */}
       {displayState === 'leaderboard' && (
-      <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         
         {/* Table Headers */}
-        <div style={{ display: 'flex', borderBottom: '2px solid #D4AF37', paddingBottom: '10px', color: '#D4AF37', fontWeight: 'bold', fontSize: '1.2rem' }}>
-          <div style={{ width: '100px', textAlign: 'center' }}>POS</div>
-          <div style={{ flex: 1 }}>PLAYER</div>
-          <div style={{ width: '150px', textAlign: 'center' }}>FLIGHT</div>
-          <div style={{ width: '100px', textAlign: 'center' }}>SCORE</div>
+        <div style={{ display: 'flex', borderBottom: '1px solid #444', paddingBottom: '12px', color: '#888', fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
+          <div style={{ width: '80px', textAlign: 'center' }}>POS</div>
+          <div style={{ flex: 1, paddingLeft: '20px' }}>PLAYER</div>
+          <div style={{ width: '120px', textAlign: 'center' }}>FLIGHT</div>
+          <div style={{ width: '120px', textAlign: 'center' }}>TO PAR</div>
+          <div style={{ width: '100px', textAlign: 'center' }}>THRU</div>
+          <div style={{ width: '100px', textAlign: 'center' }}>TOTAL</div>
         </div>
 
-        {/* Player Rows */}
-        {players.map((player, index) => (
+        {/* Player Rows (Controlled by Pagination Engine) */}
+        {visiblePlayers.map((player, index) => {
+          // Calculate the true position number across pages
+          const trueRank = (currentPage * PLAYERS_PER_PAGE) + index + 1;
+          return (
           <div key={player.id} style={{ 
-            display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', 
-            padding: '20px 10px', borderRadius: '8px', fontSize: '1.5rem', border: '1px solid #222'
+            display: 'flex', alignItems: 'center', backgroundColor: index % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', 
+            padding: '16px 10px', borderBottom: '1px solid #222', fontSize: '1.4rem'
           }}>
-            <div style={{ width: '100px', textAlign: 'center', color: '#888', fontWeight: 'bold' }}>{index + 1}</div>
-            <div style={{ flex: 1, fontWeight: 'bold', letterSpacing: '1px' }}>{player.nickname}</div>
-            <div style={{ width: '150px', textAlign: 'center', color: '#888', fontSize: '1.2rem' }}>
+            <div style={{ width: '80px', textAlign: 'center', color: '#fff', fontWeight: 'bold' }}>{trueRank}</div>
+            <div style={{ flex: 1, paddingLeft: '20px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>{player.nickname}</div>
+            <div style={{ width: '120px', textAlign: 'center', color: '#888', fontSize: '1.1rem' }}>
               {player.flightNumber ? `F-${player.flightNumber}` : '--'}
             </div>
-            <div style={{ width: '100px', textAlign: 'center', fontWeight: '900', color: player.currentScore === 'E' ? '#fff' : (player.currentScore < 0 ? '#ff4444' : '#44ff44') }}>
-              {player.currentScore}
+            
+            {/* ⛳ BROADCAST SCORE PILL */}
+            <div style={{ width: '120px', display: 'flex', justifyContent: 'center' }}>
+              <div style={{ 
+                width: '60px', padding: '6px 0', textAlign: 'center', borderRadius: '4px', fontWeight: 'bold', fontSize: '1.2rem',
+                backgroundColor: player.currentScore === 'E' ? '#333' : (player.currentScore < 0 ? '#1c3a21' : '#3a1c1c'),
+                color: player.currentScore === 'E' ? '#fff' : (player.currentScore < 0 ? '#44ff66' : '#ff4444')
+              }}>
+                {player.currentScore === 'E' ? 'E' : (player.currentScore > 0 ? `+${player.currentScore}` : player.currentScore)}
+              </div>
+            </div>
+            
+            <div style={{ width: '100px', textAlign: 'center', color: '#ccc', fontWeight: 'bold', fontSize: '1.2rem' }}>
+              {player.thru || 'F'}
+            </div>
+            <div style={{ width: '100px', textAlign: 'center', color: '#fff', fontWeight: 'bold' }}>
+              {player.total || '--'}
             </div>
           </div>
-        ))}
+        );
+        })}
+        
+        {players.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#555', fontStyle: 'italic', fontSize: '18px', marginTop: '20px', border: '1px dashed #333', borderRadius: '8px', letterSpacing: '2px' }}>
+            AWAITING LIVE TOURNAMENT DATA...
+          </div>
+        )}
+
+        {/* 🔥 PAGE INDICATOR HUD */}
+        {totalPages > 1 && (
+          <div style={{ textAlign: 'right', color: '#888', fontWeight: 'bold', letterSpacing: '2px', paddingRight: '20px' }}>
+            PAGE {currentPage + 1} OF {totalPages}
+          </div>
+        )}
       </div>
       )}
 
       {/* ========================================== */}
-      {/* STAGE 2: THE PODIUM */}
+      {/* STAGE 2: THE PREMIUM PODIUM */}
       {/* ========================================== */}
       {displayState === 'podium' && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '20px', height: '400px', marginTop: '50px' }}>
-           {/* 2nd Place */}
-           <div style={{ width: '200px', height: '250px', background: 'silver', color: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '10px 10px 0 0' }}>
-              <h2>2ND</h2>
-              <h3>{players[1]?.nickname || 'TBA'}</h3>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '30px', height: '500px', marginTop: '60px' }}>
+          
+           {/* 🥈 2ND PLACE (SILVER) */}
+           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1 }}>
+             <div style={{ backgroundColor: '#1a1a1a', border: '1px solid #c0c0c0', padding: '15px 25px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', boxShadow: '0 10px 20px rgba(0,0,0,0.5)' }}>
+               <h3 style={{ margin: 0, color: '#fff', fontSize: '1.5rem', letterSpacing: '1px' }}>{players[1]?.nickname || 'TBA'}</h3>
+               <span style={{ color: '#c0c0c0', fontWeight: 'bold' }}>{players[1]?.currentScore === 'E' ? 'E' : (players[1]?.currentScore > 0 ? `+${players[1]?.currentScore}` : players[1]?.currentScore)}</span>
+             </div>
+             <div style={{ width: '200px', height: '280px', background: 'linear-gradient(180deg, #e6e6e6 0%, #a6a6a6 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '12px 12px 0 0', border: '2px solid #fff', borderBottom: 'none' }}>
+               <h2 style={{ fontSize: '4rem', color: '#000', margin: 0, opacity: 0.6 }}>2</h2>
+             </div>
            </div>
-           {/* 1st Place */}
-           <div style={{ width: '220px', height: '350px', background: '#D4AF37', color: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '10px 10px 0 0', boxShadow: '0 0 50px rgba(212,175,55,0.5)' }}>
-              <h1>1ST 🏆</h1>
-              <h2>{players[0]?.nickname || 'TBA'}</h2>
+
+           {/* 🥇 1ST PLACE (GOLD) */}
+           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2 }}>
+             <div style={{ backgroundColor: '#1a1a1a', border: '2px solid #D4AF37', padding: '20px 40px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', boxShadow: '0 15px 30px rgba(212,175,55,0.2)' }}>
+               <h3 style={{ margin: 0, color: '#fff', fontSize: '2rem', letterSpacing: '2px' }}>{players[0]?.nickname || 'TBA'}</h3>
+               <span style={{ color: '#D4AF37', fontWeight: 'bold', fontSize: '1.5rem' }}>{players[0]?.currentScore === 'E' ? 'E' : (players[0]?.currentScore > 0 ? `+${players[0]?.currentScore}` : players[0]?.currentScore)}</span>
+             </div>
+             <div style={{ width: '250px', height: '380px', background: 'linear-gradient(180deg, #FFDF73 0%, #B8860B 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '12px 12px 0 0', border: '2px solid #fff', borderBottom: 'none', boxShadow: '0 0 80px rgba(212,175,55,0.4)' }}>
+               <h2 style={{ fontSize: '6rem', color: '#000', margin: 0, opacity: 0.7, textShadow: '2px 2px 4px rgba(255,255,255,0.5)' }}>1</h2>
+             </div>
            </div>
-           {/* 3rd Place */}
-           <div style={{ width: '200px', height: '200px', background: '#cd7f32', color: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '10px 10px 0 0' }}>
-              <h2>3RD</h2>
-              <h3>{players[2]?.nickname || 'TBA'}</h3>
+
+           {/* 🥉 3RD PLACE (BRONZE) */}
+           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1 }}>
+             <div style={{ backgroundColor: '#1a1a1a', border: '1px solid #cd7f32', padding: '15px 25px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', boxShadow: '0 10px 20px rgba(0,0,0,0.5)' }}>
+               <h3 style={{ margin: 0, color: '#fff', fontSize: '1.5rem', letterSpacing: '1px' }}>{players[2]?.nickname || 'TBA'}</h3>
+               <span style={{ color: '#cd7f32', fontWeight: 'bold' }}>{players[2]?.currentScore === 'E' ? 'E' : (players[2]?.currentScore > 0 ? `+${players[2]?.currentScore}` : players[2]?.currentScore)}</span>
+             </div>
+             <div style={{ width: '200px', height: '220px', background: 'linear-gradient(180deg, #ffb380 0%, #8c5322 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '12px 12px 0 0', border: '2px solid #fff', borderBottom: 'none' }}>
+               <h2 style={{ fontSize: '4rem', color: '#000', margin: 0, opacity: 0.6 }}>3</h2>
+             </div>
            </div>
+
         </div>
       )}
 

@@ -1,159 +1,140 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Adjust to your web project path
+import { db } from '../../firebaseConfig';
+import ManualOverride from './ManualOverride'; // 🔥 Injecting the God-Mode HUD
+import { collection, query, where, onSnapshot, doc, writeBatch, serverTimestamp, increment } from 'firebase/firestore';
 
-interface EscrowGame {
-  id: string; // The gameId
-  hostUid: string;
-  courseName: string;
-  baseStakes: number;
-  escrow_pool: number;
-  status: 'open' | 'active' | 'completed' | 'cancelled';
-  participantIds: string[];
-}
+export default function EscrowWatchtower() {
+  const [lockedEscrows, setLockedEscrows] = useState<any[]>([]);
+  const [selectedUid, setSelectedUid] = useState(""); // 🔥 God-Mode Target State
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
-export default function LedgerWatchtower() {
-  const [activeGames, setActiveGames] = useState<EscrowGame[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   useEffect(() => {
-    fetchActiveEscrows();
+    const q = query(
+      collection(db, 'transactions'),
+      where('status', '==', 'escrow_locked')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setLockedEscrows(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const fetchActiveEscrows = async () => {
-    try {
-      // Query the 'games' collection for matches that still hold locked chips
-      const q = query(
-        collection(db, 'games'), 
-        where('status', 'in', ['open', 'active'])
-      );
-      const snap = await getDocs(q);
-      
-      const games = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as EscrowGame[];
-      
-      setActiveGames(games);
-    } catch (error) {
-      console.error("Failed to fetch escrow data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleForceRefund = async (game: EscrowGame) => {
-    const confirmRefund = window.confirm(
-      `WARNING: This will forcefully cancel the match at ${game.courseName} and refund ${game.baseStakes} chips to all participants. Proceed?`
-    );
-    if (!confirmRefund) return;
-
-    setProcessingId(game.id);
+  const resolveEscrow = async (txId: string, uid: string, amount: number, resolution: 'REFUND' | 'PAYOUT') => {
+    // 🛡️ Replaced native window.confirm with direct execution + UI notification
+    const batch = writeBatch(db);
+    const numericAmount = Math.abs(amount);
 
     try {
-      const batch = writeBatch(db);
-
-      // 1. Cancel the Game Document
-      const gameRef = doc(db, 'games', game.id);
-      batch.update(gameRef, { 
-        status: 'cancelled',
-        escrow_pool: 0, // Drain the pool
-        settledAt: serverTimestamp(),
-        settledBy: 'ADMIN_OVERRIDE'
+      // 1. Clear the Escrow status in the ledger
+      const txRef = doc(db, 'transactions', txId);
+      batch.update(txRef, {
+        status: resolution === 'REFUND' ? 'failed' : 'completed', 
+        resolvedBy: 'DIRECTOR_OVERRIDE',
+        resolvedAt: serverTimestamp()
       });
 
-      // 2. Loop through all participants to refund their chips
-      game.participantIds.forEach(uid => {
-        // A. Give the chips back to their master wallet
+      // 2. Return funds to the original buyer only if refunded
+      if (resolution === 'REFUND') {
         const userRef = doc(db, 'users', uid);
-        batch.update(userRef, { chips: increment(game.baseStakes) }); // 🔥 FIXED: Reverted to true master schema
-
-        // B. Write a mandatory receipt to the immutable ledger
-        const newTransactionRef = doc(collection(db, 'users', uid, 'transactions'));
-        batch.set(newTransactionRef, {
-          title: `Admin Escrow Refund: ${game.courseName}`,
-          amount: game.baseStakes,
-          type: 'ESCROW_REFUND',
-          enforcedBy: 'DIRECTOR_CONSOLE',
-          reference_id: game.id,
-          timestamp: serverTimestamp()
+        batch.update(userRef, {
+          chips: increment(numericAmount)
         });
-      });
+      }
 
-      // 3. Execute the Atomic Refund
       await batch.commit();
-
-      // Remove from UI
-      setActiveGames(prev => prev.filter(g => g.id !== game.id));
-      alert(`Escrow drained. Match cancelled and chips refunded to ${game.participantIds.length} players.`);
-
-    } catch (error) {
-      console.error("Atomic refund failed:", error);
-      alert("CRITICAL ERROR: Could not process refund. The ledger remains untouched.");
-    } finally {
-      setProcessingId(null);
+      showNotification(`Escrow successfully resolved via ${resolution}.`, "success");
+    } catch (error: any) {
+      showNotification(`Error resolving escrow: ${error.message}`, "error");
     }
   };
-
-  if (isLoading) return <div style={{ color: 'white', padding: 20 }}>Loading Escrow Ledgers...</div>;
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.header}>ESCROW WATCHTOWER (ACTIVE LOCKS: {activeGames.length})</h2>
+    <div style={{ padding: '24px', backgroundColor: '#121212', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif', position: 'relative' }}>
       
-      {activeGames.length === 0 ? (
-        <p style={{ color: '#aaa' }}>No chips currently locked in escrow.</p>
-      ) : (
-        <div style={styles.list}>
-          {activeGames.map(game => (
-            <div key={game.id} style={styles.row}>
-              <div style={styles.infoCol}>
-                <h3 style={styles.courseTitle}>{game.courseName}</h3>
-                <p style={styles.detailText}>
-                  Status: <span style={{color: '#d4af37'}}>{game.status.toUpperCase()}</span> | 
-                  Players: {game.participantIds.length}
-                </p>
-                <p style={styles.detailText}>Host UID: {game.hostUid}</p>
-              </div>
-
-              <div style={styles.financeCol}>
-                <p style={styles.poolText}>LOCKED POOL: {game.escrow_pool} CHIPS</p>
-                <p style={styles.detailText}>({game.baseStakes} / player)</p>
-              </div>
-
-              <div style={styles.actionCol}>
-                <button 
-                  style={{...styles.btn, ...styles.btnRefund}}
-                  onClick={() => handleForceRefund(game)}
-                  disabled={processingId === game.id}
-                >
-                  {processingId === game.id ? 'PROCESSING...' : 'FORCE REFUND & CANCEL'}
-                </button>
-              </div>
-            </div>
-          ))}
+      {/* NATIVE NOTIFICATION OVERLAY */}
+      {notification && (
+        <div style={{ position: 'absolute', top: '20px', right: '20px', padding: '16px 24px', zIndex: 1000, backgroundColor: notification.type === 'error' ? '#ff4444' : '#4CAF50', color: '#fff', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+          {notification.message}
         </div>
       )}
+
+      <h2 style={{ color: '#1E88E5', margin: '0 0 8px 0' }}>🔒 ESCROW WATCHTOWER</h2>
+      <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '24px' }}>
+        Granular control over all active financial holds. Force resolution for disputed matches or crashed tournaments.
+      </p>
+
+      <div style={{ backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#222', borderBottom: '2px solid #333' }}>
+              <th style={{ padding: '16px', color: '#888', fontSize: '12px' }}>ESCROW ID</th>
+              <th style={{ padding: '16px', color: '#888', fontSize: '12px' }}>USER (UID)</th>
+              <th style={{ padding: '16px', color: '#888', fontSize: '12px' }}>LOCKED AMOUNT</th>
+              <th style={{ padding: '16px', color: '#888', fontSize: '12px' }}>TIMESTAMP</th>
+              <th style={{ padding: '16px', color: '#888', fontSize: '12px', textAlign: 'right' }}>DIRECTOR ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lockedEscrows.length === 0 ? (
+              <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#555' }}>No active escrow holds detected.</td></tr>
+            ) : (
+              lockedEscrows.map(escrow => (
+                <tr key={escrow.id} style={{ borderBottom: '1px solid #2a2a2a' }}>
+                  <td style={{ padding: '16px', fontFamily: 'monospace', color: '#888', fontSize: '12px' }}>{escrow.id}</td>
+                  
+                  {/* 🔥 CLICKABLE UID TO LAUNCH OVERRIDE */}
+                  <td 
+                    style={{ padding: '16px', fontFamily: 'monospace', color: '#1E88E5', cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => setSelectedUid(escrow.uid)}
+                    title="Click to load into Manual Override"
+                  >
+                    {escrow.uid}
+                  </td>
+                  
+                  <td style={{ padding: '16px', fontWeight: 'bold', color: '#D4AF37' }}>{Math.abs(escrow.amount)} 🪙</td>
+                  <td style={{ padding: '16px', color: '#aaa', fontSize: '13px' }}>{escrow.timestamp?.toDate ? escrow.timestamp.toDate().toLocaleString() : 'N/A'}</td>
+                  
+                  <td style={{ padding: '16px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button 
+                      onClick={() => resolveEscrow(escrow.id, escrow.uid, escrow.amount, 'REFUND')}
+                      style={{ padding: '6px 12px', backgroundColor: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px' }}>
+                      REFUND
+                    </button>
+                    <button 
+                      onClick={() => resolveEscrow(escrow.id, escrow.uid, escrow.amount, 'PAYOUT')}
+                      style={{ padding: '6px 12px', backgroundColor: 'rgba(76, 175, 80, 0.1)', color: '#4CAF50', border: '1px solid #4CAF50', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px' }}>
+                      PAYOUT
+                    </button>
+                    
+                    {/* 🔥 THE TACTICAL OVERRIDE BUTTON */}
+                    <button 
+                      onClick={() => setSelectedUid(escrow.uid)}
+                      style={{ padding: '6px 12px', backgroundColor: 'rgba(212, 175, 55, 0.1)', color: '#D4AF37', border: '1px solid #D4AF37', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px' }}>
+                      ⚡ OVERRIDE
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 🔥 CONDITIONAL TACTICAL HUD */}
+      {selectedUid && (
+        <ManualOverride 
+          injectedUid={selectedUid} 
+          onClose={() => setSelectedUid("")} 
+        />
+      )}
+
     </div>
   );
 }
-
-// Basic inline styles for the web dashboard
-const styles = {
-  container: { padding: '24px', backgroundColor: '#121212', minHeight: '100vh', fontFamily: 'sans-serif' },
-  header: { color: '#d4af37', borderBottom: '1px solid #333', paddingBottom: '12px', marginBottom: '24px' },
-  list: { display: 'flex', flexDirection: 'column' as const, gap: '16px' },
-  row: { 
-    display: 'flex', alignItems: 'center', backgroundColor: '#1e1e1e', 
-    padding: '20px', borderRadius: '8px', border: '1px solid #333' 
-  },
-  infoCol: { flex: 2 },
-  financeCol: { flex: 1, textAlign: 'right' as const, paddingRight: '24px' },
-  actionCol: { flex: 1, display: 'flex', justifyContent: 'flex-end' },
-  courseTitle: { margin: '0 0 8px 0', color: '#fff', fontSize: '18px' },
-  detailText: { margin: '0 0 4px 0', color: '#888', fontSize: '13px' },
-  poolText: { margin: '0 0 4px 0', color: '#ff4444', fontSize: '16px', fontWeight: 'bold' as const },
-  btn: { padding: '12px 24px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' as const },
-  btnRefund: { backgroundColor: '#3a1c1c', color: '#ff4444', border: '1px solid #ff4444' }
-};

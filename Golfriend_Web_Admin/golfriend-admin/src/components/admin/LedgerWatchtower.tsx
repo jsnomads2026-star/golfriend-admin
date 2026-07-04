@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, increment, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, increment, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebaseConfig'; 
 
 export default function LedgerWatchtower() {
@@ -48,8 +48,9 @@ export default function LedgerWatchtower() {
 
   const executeEconomicOverride = async () => {
     if (!targetUser) return;
-    const chipsToAdjust = parseInt(chipAdjustment);
-    const reliabilityToAdjust = parseInt(reliabilityAdjustment);
+    // 🔥 SHIELD: Prevent NaN database corruption from empty admin inputs
+    const chipsToAdjust = parseInt(chipAdjustment) || 0;
+    const reliabilityToAdjust = parseInt(reliabilityAdjustment) || 0;
     
     if (chipsToAdjust === 0 && reliabilityToAdjust === 0) return;
     if (!overrideReason.trim()) return addLog(`❌ ERROR: Audit log reason is required.`); // 🔥 SHIELD
@@ -58,20 +59,28 @@ export default function LedgerWatchtower() {
     addLog(`⚡ INITIATING OVERRIDE for ${targetUser.nickname}...`);
 
     try {
+      const batch = writeBatch(db); // 🔥 PREVENT LEAKS: Atomic transaction protocol
       const userRef = doc(db, "users", targetUser.id);
-      await updateDoc(userRef, {
+      
+      batch.update(userRef, {
         chips: increment(chipsToAdjust), 
         reliability_score: increment(reliabilityToAdjust) 
       });
 
-      // 🔥 INJECTED: Write the permanent ledger receipt
-      await addDoc(collection(db, 'users', targetUser.id, 'transactions'), {
+      // 🔥 INJECTED: Write the permanent ledger receipt atomically to the MASTER ROOT
+      const txRef = doc(collection(db, 'transactions'));
+      batch.set(txRef, {
+        userId: targetUser.id, 
         title: `Admin Override: ${overrideReason.trim()}`,
         amount: chipsToAdjust,
+        reliabilityImpact: reliabilityToAdjust, // 🔥 INJECTED: Tracks the exact behavior score change
         type: 'ADMIN_OVERRIDE',
+        status: 'completed', 
         enforcedBy: 'DIRECTOR_CONSOLE',
-        timestamp: serverTimestamp()
+        createdAt: serverTimestamp() // 🔥 This MUST be 'createdAt' to match the Central Bank
       });
+      
+      await batch.commit(); // 🔥 Locks the math
 
       addLog(`💰 SUCCESS: Adjusted Chips by ${chipsToAdjust}.`);
       addLog(`📈 SUCCESS: Adjusted Reliability by ${reliabilityToAdjust}.`);
@@ -86,6 +95,52 @@ export default function LedgerWatchtower() {
       setReliabilityAdjustment("0");
     } catch (error: any) {
       addLog(`❌ OVERRIDE FAILED: ${error.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+// 🔥 INJECTED: B2B Commercial Partner Promotion & 10k Chip Bundle
+  const executeCommercialUpgrade = async () => {
+    if (!targetUser) return;
+    if (!window.confirm(`Are you sure you want to upgrade ${targetUser.nickname} to Commercial Tier and issue 10,000 Chips?`)) return;
+
+    setIsUpdating(true);
+    addLog(`⚡ INITIATING B2B UPGRADE for ${targetUser.nickname}...`);
+
+    try {
+      const batch = writeBatch(db);
+      const userRef = doc(db, "users", targetUser.id);
+      
+      batch.update(userRef, {
+        tier: 'commercial', 
+        chips: increment(10000) 
+      });
+
+      const txRef = doc(collection(db, 'transactions'));
+      batch.set(txRef, {
+        userId: targetUser.id, 
+        title: `Admin Action: B2B Commercial Promotion (10k Bundle)`,
+        amount: 10000,
+        reliabilityImpact: 0,
+        type: 'B2B_UPGRADE',
+        status: 'completed', 
+        enforcedBy: 'DIRECTOR_CONSOLE',
+        createdAt: serverTimestamp()
+      });
+      
+      await batch.commit();
+
+      addLog(`✅ SUCCESS: ${targetUser.nickname} is now a VIP Partner.`);
+      addLog(`💰 SUCCESS: 10,000 Commercial Chips Deposited.`);
+      
+      setTargetUser((prev: any) => ({
+        ...prev,
+        tier: 'commercial',
+        chips: (prev.chips || 0) + 10000 
+      }));
+    } catch (error: any) {
+      addLog(`❌ B2B UPGRADE FAILED: ${error.message}`);
     } finally {
       setIsUpdating(false);
     }
@@ -120,7 +175,12 @@ export default function LedgerWatchtower() {
       {targetUser && (
         <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
           <div style={{ flex: 1, padding: '20px', backgroundColor: 'rgba(212, 175, 55, 0.05)', border: '1px solid #d4af37', borderRadius: '8px' }}>
-            <h3 style={{ marginTop: 0, color: '#d4af37' }}>Target: {targetUser.nickname || 'Unnamed Player'}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <h3 style={{ marginTop: 0, color: '#d4af37', marginBottom: '5px' }}>Target: {targetUser.nickname || 'Unnamed Player'}</h3>
+              <span style={{ backgroundColor: targetUser.tier === 'commercial' ? '#d4af37' : '#333', color: targetUser.tier === 'commercial' ? '#000' : '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                {targetUser.tier === 'commercial' ? 'VIP PARTNER' : 'SOCIAL TIER'}
+              </span>
+            </div>
             <p style={{ color: '#888', fontSize: '12px', margin: '0 0 15px 0' }}>UID: {targetUser.id}</p>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', padding: '10px', backgroundColor: '#000', borderRadius: '4px' }}>
               <span style={{ color: '#aaa' }}>Current Chip Balance:</span>
@@ -128,12 +188,23 @@ export default function LedgerWatchtower() {
                 {targetUser.chips || 0} 
               </span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', backgroundColor: '#000', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', backgroundColor: '#000', borderRadius: '4px', marginBottom: '15px' }}>
               <span style={{ color: '#aaa' }}>Reliability Score:</span>
               <span style={{ color: targetUser.reliability_score >= 80 ? '#4CAF50' : '#ff4444', fontWeight: 'bold' }}>
                 {targetUser.reliability_score || 0} / 100
               </span>
             </div>
+            
+            {/* 🔥 B2B UPGRADE TERMINAL */}
+            {targetUser.tier !== 'commercial' && (
+              <button 
+                onClick={executeCommercialUpgrade} 
+                disabled={isUpdating} 
+                style={{ width: '100%', backgroundColor: isUpdating ? '#555' : '#d4af37', color: '#000', padding: '12px', fontWeight: 'bold', border: 'none', borderRadius: '4px', cursor: isUpdating ? 'not-allowed' : 'pointer' }}
+              >
+                {isUpdating ? 'PROCESSING...' : '💎 PROMOTE TO VIP & ISSUE 10K CHIPS'}
+              </button>
+            )}
           </div>
 
           <div style={{ flex: 1, padding: '20px', backgroundColor: '#1e1e1e', border: '1px solid #ff4444', borderRadius: '8px' }}>
