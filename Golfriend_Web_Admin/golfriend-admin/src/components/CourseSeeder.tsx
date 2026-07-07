@@ -142,6 +142,20 @@ export default function CourseSeeder() {
           }
         }
 
+        // 🔥 THE SIAM COUNTRY CLUB FIX: If top-level GPS is 0, steal it from the Greens Vector Grid!
+        if (exactLat === 0 || exactLng === 0) {
+          const coordRes = await fetch(`https://www.golfapi.io/api/v2.3/coordinates/${courseId}`, { headers });
+          if (coordRes.ok) {
+            const coordData = await coordRes.json();
+            const gpsGrid = coordData.data || coordData;
+            if (gpsGrid.greens && gpsGrid.greens.length > 0) {
+              exactLat = parseFloat(gpsGrid.greens[0].latitude);
+              exactLng = parseFloat(gpsGrid.greens[0].longitude);
+              addLog(`   🧩 Extracted fallback GPS from Hole 1 Green Vectors`);
+            }
+          }
+        }
+
         if (exactLat !== 0 && exactLng !== 0) {
           const healedData = {
             latitude: exactLat,
@@ -238,6 +252,7 @@ export default function CourseSeeder() {
   };
 
   // 🔥 THE MASS REGIONAL FETCH ENGINE (RADIUS SCANNER)
+  // 🔥 THE MASS REGIONAL FETCH ENGINE (RADIUS SCANNER)
   const fetchLiveCourse = async () => {
     if (!apiSearchId || !apiSearchId.includes(',')) {
       return addLog("❌ Please enter valid GPS coordinates (e.g., 12.9236, 100.8825 for Pattaya).");
@@ -253,7 +268,6 @@ export default function CourseSeeder() {
 
       // --- PING 1: The Regional Club Extraction ---
       addLog(`📡 PING: Executing Mass Regional Fetch...`);
-      // 🔥 ADDED &radius= TO API CALL
       const shellRes = await fetch(`https://www.golfapi.io/api/v2.3/clubs?lat=${lat}&lng=${lng}&radius=${radius}`, { headers });
       if (!shellRes.ok) throw new Error(`Network rejected Ping: ${shellRes.status}`);
       
@@ -279,22 +293,29 @@ export default function CourseSeeder() {
           let exactLat = parseFloat(club.latitude) || 0;
           let exactLng = parseFloat(club.longitude) || 0;
 
-          let greenGrid = [];
-          let bunkerGrid = [];
-          let waterGrid = [];
+          // 🔥 TS FIX: Explicitly type the arrays
+          let greenGrid: any[] = [];
+          let bunkerGrid: any[] = [];
+          let waterGrid: any[] = [];
+          let courseHoles: any[] = []; 
 
-          // 🔥 THE ROOT FIX: Hit BOTH endpoints to get the exact Lat/Lng AND the Coordinate Vectors
           try {
             addLog(`   📍 Pinging API for precise GPS & Grids: ${c.courseName || c.name}...`);
             
-            // 1. Get the exact top-level coordinates
-            const shellRes = await fetch(`https://www.golfapi.io/api/v2.3/courses/${courseId}`, { headers });
-            if (shellRes.ok) {
-              const shellData = await shellRes.json();
-              const shell = shellData.data || shellData;
-              if (shell.latitude && shell.longitude) {
-                exactLat = parseFloat(shell.latitude);
-                exactLng = parseFloat(shell.longitude);
+            // 1. Get the exact top-level coordinates & hole metadata
+            const courseRes = await fetch(`https://www.golfapi.io/api/v2.3/courses/${courseId}`, { headers });
+            if (courseRes.ok) {
+              const courseData = await courseRes.json();
+              const coursePayload = courseData.data || courseData;
+              if (coursePayload.latitude && coursePayload.longitude) {
+                exactLat = parseFloat(coursePayload.latitude);
+                exactLng = parseFloat(coursePayload.longitude);
+              }
+              // Extract the actual hole array (pars, stroke index, etc.)
+              if (Array.isArray(coursePayload.holes)) {
+                courseHoles = coursePayload.holes;
+              } else if (Array.isArray(c.holes)) {
+                courseHoles = c.holes;
               }
             }
 
@@ -306,6 +327,25 @@ export default function CourseSeeder() {
               greenGrid = gpsGrid.greens || [];
               bunkerGrid = gpsGrid.bunkers || [];
               waterGrid = gpsGrid.water || [];
+            }
+            
+            // 3. 🔥 THE STITCH: Fuse the Green GPS coordinates directly into the Holes array
+            if (courseHoles.length > 0 && greenGrid.length > 0) {
+              courseHoles = courseHoles.map((hole: any) => {
+                const matchingGreen = greenGrid.find((g: any) => Number(g.holeNumber) === Number(hole.holeNumber || hole.hole || hole.num));
+                return {
+                  ...hole,
+                  green_gps: matchingGreen ? { lat: parseFloat(matchingGreen.latitude), lng: parseFloat(matchingGreen.longitude) } : null
+                };
+              });
+            } else if (courseHoles.length === 0) {
+              // 🛟 Failsafe Generator if the API completely omits the holes array
+              courseHoles = Array.from({ length: 18 }, (_, i) => ({
+                num: i + 1,
+                par: 4,
+                holeNumber: i + 1,
+                strokeIndex: i + 1
+              }));
             }
           } catch (apiErr) {
             console.error("GolfAPI Fetch error:", apiErr);
@@ -324,21 +364,21 @@ export default function CourseSeeder() {
             longitude: exactLng,
             lat: exactLat,
             lng: exactLng,
-            holes: c.holes || 18,
+            holes: courseHoles, // 🔥 THE FIX: Saving the fully stitched Object Array
             greenCoordinates: greenGrid,
             bunkerCoordinates: bunkerGrid,
             waterCoordinates: waterGrid,
             apiImported: true,
             cachedAt: new Date().toISOString(),
             isActive: true,
-            requiresManualGPS: false // 🔥 THE FIX: Instantly lifts the quarantine upon successful manual injection
+            requiresManualGPS: false 
           };
 
           // Inject to Firebase using merge to safely overwrite bad data
           await setDoc(doc(db, "courses", mergedCourse.courseID), mergedCourse, { merge: true });
           injectedCount++;
           
-          // 1.5-second throttle to prevent GolfAPI rate limiting during dual-endpoint extraction
+          // 1.5-second throttle to prevent GolfAPI rate limiting
           await new Promise(resolve => setTimeout(resolve, 1500));
         }
       }
@@ -353,7 +393,6 @@ export default function CourseSeeder() {
       setApiSearchId("");
     }
   };
-
   
 
   return (

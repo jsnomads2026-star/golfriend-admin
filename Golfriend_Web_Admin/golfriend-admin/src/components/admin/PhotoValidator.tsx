@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { collection, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
+import { collection, getDocs, doc, writeBatch, increment, query, where, limit } from 'firebase/firestore';
 import { db } from '../../firebaseConfig'; 
 import ManualOverride from './ManualOverride'; // 🔥 Injecting the God-Mode HUD
 
@@ -40,22 +40,31 @@ export default function PhotoValidator() {
 
   const fetchWatchtowerData = async () => {
     try {
-      const snap = await getDocs(collection(db, 'users'));
+      // 1. URGE QUEUE: Fetch only the exact users that need review (Saves massive read costs)
+      const pendingQ = query(collection(db, 'users'), where('requiresManualReview', '==', true));
+      const pendingSnap = await getDocs(pendingQ);
       
       const pending: PendingValidation[] = [];
-      const history: any[] = [];
-      
-      snap.docs.forEach(doc => {
+      pendingSnap.docs.forEach(doc => {
         const data = doc.data();
-        if (data.requiresManualReview === true) {
-          pending.push({
-            id: doc.id,
-            nickname: data.nickname || 'Unknown',
-            photo_url: data.photo_url || '',
-            verification_status: data.verification_status || 'unverified',
-            flagReason: data.flagReason || 'FLAGGED_BY_AI'
-          });
-        } else if (data.verification_status === 'verified' || data.verification_status === 'rejected' || data.photoValidated === true) {
+        pending.push({
+          id: doc.id,
+          nickname: data.nickname || 'Unknown',
+          photo_url: data.photo_url || '',
+          verification_status: data.verification_status || 'unverified',
+          flagReason: data.flagReason || 'FLAGGED_BY_AI'
+        });
+      });
+
+      // 2. LEDGER: Cap the historical fetch to the 250 most recent to prevent browser memory crashes
+      // Note: In a future iteration, we should add orderBy('created_at', 'desc') here.
+      const historyQ = query(collection(db, 'users'), limit(250));
+      const historySnap = await getDocs(historyQ);
+      
+      const history: any[] = [];
+      historySnap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.requiresManualReview !== true && (data.verification_status === 'verified' || data.verification_status === 'rejected' || data.photoValidated === true)) {
           history.push({ id: doc.id, ...data });
         }
       });

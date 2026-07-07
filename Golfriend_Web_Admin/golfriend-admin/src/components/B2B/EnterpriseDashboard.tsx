@@ -1,5 +1,5 @@
 // ==========================================
-// FILE: src/components/B2B/HostDashboard599.tsx
+// FILE: src/components/B2B/EnterpriseDashboard.tsx
 // ==========================================
 import { useState, useEffect, useRef } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
@@ -12,6 +12,7 @@ import TournamentTV from '../admin/TournamentTV';
 import RaffleEngine from '../admin/RaffleEngine';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import AdLeadsInbox from './AdLeadsInbox'; 
+import CourseTeeSheet from './CourseTeeSheet'; // 🔥 New B2B Liability Engine 
 
 const MasterInventory = ({ onLaunchClick, onEditClick, isLimitReached, partnerUid }: { onLaunchClick: () => void, onEditClick: (item: any) => void, isLimitReached: boolean, partnerUid: string }) => {
   const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
@@ -448,8 +449,9 @@ interface PartnerDashboardProps {
 }
 
 export default function EnterpriseDashboard({ partnerData }: PartnerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm'>('adhub');
-  const [liveTier, setLiveTier] = useState<string>(partnerData?.tier || 'basic_operator');
+  // 🔥 Added 'teesheet' to the allowed state literal
+  const [activeTab, setActiveTab] = useState<'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm'>('teesheet');
+  const [liveTier, setLiveTier] = useState<string>(partnerData?.tier || 'basic_operator');
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -518,10 +520,13 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         </div>
         
         <div style={styles.sectionHeader}>CORE OPERATIONS</div>
-        <button style={{...styles.navBtn, ...(activeTab === 'genesis' ? styles.activeBtn : {})}} onClick={() => setActiveTab('genesis')}>
-          🏗️ Event Genesis
-        </button>
-        <button style={{...styles.navBtn, ...(activeTab === 'tournaments' ? styles.activeBtn : {})}} onClick={() => setActiveTab('tournaments')}>
+        <button style={{...styles.navBtn, ...(activeTab === 'teesheet' ? styles.activeBtn : {})}} onClick={() => setActiveTab('teesheet')}>
+          📋 Daily Tee Sheet
+        </button>
+        <button style={{...styles.navBtn, ...(activeTab === 'genesis' ? styles.activeBtn : {})}} onClick={() => setActiveTab('genesis')}>
+          🏗️ Event Genesis
+        </button>
+        <button style={{...styles.navBtn, ...(activeTab === 'tournaments' ? styles.activeBtn : {})}} onClick={() => setActiveTab('tournaments')}>
           🏆 Tournament Manager
         </button>
         <button style={{...styles.navBtn, ...(activeTab === 'adhub' ? styles.activeBtn : {})}} onClick={() => setActiveTab('adhub')}>
@@ -562,7 +567,8 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
       </div>
 
       <div style={styles.content}>
-        {activeTab === 'genesis' && <EventGenesisConsole />}
+        {activeTab === 'teesheet' && <CourseTeeSheet />}
+        {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
         {activeTab === 'tournaments' && <TournamentManager tournamentId="PUI_SPORTS_BAR_0007" isPremium={isMasterHost} />}
         {activeTab === 'adhub' && <AdHub isMasterHost={isMasterHost} partnerUid={authUid} />}

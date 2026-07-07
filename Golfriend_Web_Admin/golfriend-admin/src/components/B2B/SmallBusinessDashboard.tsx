@@ -1,5 +1,5 @@
 // ==========================================
-// FILE: src/components/B2B/PartnerDashboard.tsx
+// FILE: src/components/B2B/SmallBusinessDashboard.tsx
 // ==========================================
 import { useState, useEffect, useRef } from 'react';
 import AdLeadsInbox from './AdLeadsInbox';
