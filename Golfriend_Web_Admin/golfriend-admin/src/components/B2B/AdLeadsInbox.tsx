@@ -161,14 +161,14 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
       {/* LEFT PANEL: The Leads Rolodex */}
       <div style={{ width: '320px', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid #222' }}>
-          <h3 style={{ margin: 0, color: '#d4af37', fontSize: '16px', letterSpacing: '1px' }}>Ad Leads & Inbox</h3>
-          <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '12px' }}>Golfers who claimed your offers</p>
+          <h3 style={{ margin: 0, color: '#d4af37', fontSize: '16px', letterSpacing: '1px' }}>Unified Host Inbox</h3>
+          <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '12px' }}>Golfer replies for Ads & Tournaments</p>
         </div>
         
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {leads.length === 0 ? (
             <div style={{ padding: '30px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>
-              No active leads. When a golfer claims an ad, their chat thread will appear here.
+              No active leads. When a golfer claims an ad or joins a tournament, their chat thread will appear here.
             </div>
           ) : (
             leads.map(lead => (
@@ -207,7 +207,10 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
                 <img src={selectedLead.golferPhoto} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '20px', border: '1px solid #333' }} />
                 <div>
                   <h4 style={{ margin: 0, fontSize: '16px', color: '#fff' }}>{selectedLead.golferName}</h4>
-                  <div style={{ fontSize: '12px', color: '#4CAF50', marginTop: '4px' }}>Lead Origin: {selectedLead.adHeadline || 'Sponsor Ad'}</div>
+                  <div style={{ fontSize: '12px', color: '#4CAF50', marginTop: '4px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span>{selectedLead.adHeadline ? '🟢 [AD]' : selectedLead.tournamentName || selectedLead.isTournament ? '🏆 [TOURNAMENT]' : '✉️ [DIRECT]'}</span>
+                    <span>{selectedLead.adHeadline || selectedLead.tournamentName || 'Platform Connection'}</span>
+                  </div>
                 </div>
               </div>
               <span style={{ padding: '4px 8px', backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', fontSize: '11px', color: '#888' }}>MOBILE ENCRYPTED</span>

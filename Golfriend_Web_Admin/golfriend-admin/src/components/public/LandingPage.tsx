@@ -60,7 +60,7 @@ export default function LandingPage() {
         <div style={styles.card}>
           <h3>🤝 B2B Commercial Portals</h3>
           <p>Are you a golf club, sponsor, or vendor? Navigate to our partner portal to claim premium inventory and engage our community.</p>
-          <a href="/partners" style={styles.partnerLink}>Explore Partner Plans →</a>
+          <a href="/storefront" style={styles.partnerLink}>Explore Partner Plans →</a>
         </div>
       </section>
     </div>

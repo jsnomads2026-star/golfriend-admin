@@ -17,6 +17,20 @@ export default function EventGenesisConsole() {
   const [startTime, setStartTime] = useState('08:00');
   const [matchFormat, setMatchFormat] = useState('Stroke Play (Net)');
   const [entryFee, setEntryFee] = useState('');
+  const [currency, setCurrency] = useState('THB');
+  const [maxPlayers, setMaxPlayers] = useState('');
+  
+  // 🔥 NEW: Searchable Course State
+  const [courseSearch, setCourseSearch] = useState('');
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
+
+  // 🔥 NEW: Calculator State
+  const [isCalcOpen, setIsCalcOpen] = useState(false);
+  const [calcPlayers, setCalcPlayers] = useState(144);
+  const [calcCut, setCalcCut] = useState(20);
+  const [calcSkillSplit, setCalcSkillSplit] = useState(60);
+  const [calcGreenFee, setCalcGreenFee] = useState(1500); // Default placeholder
+  const [calcFnB, setCalcFnB] = useState(500); // Default placeholder
   
   // 🔥 UPGRADED: Dynamic Array States
   const [prizePool, setPrizePool] = useState<string[]>([]);
@@ -49,16 +63,15 @@ export default function EventGenesisConsole() {
     }, 1500);
   };
 
-  // 🔥 FETCH LIVE COURSES ON MOUNT
+  // 🔥 FETCH LIVE COURSES ON MOUNT (Unrestricted Worldwide Engine)
   useEffect(() => {
     const fetchCourses = async () => {
       try {
         const snapshot = await getDocs(collection(db, 'courses'));
         const courses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Mock Geospatial filter: Show local courses (Assuming Admin is in Pattaya/Chonburi)
-        const localCourses = courses.filter((c: any) => c.latitude > 12.5 && c.latitude < 13.5 && c.longitude > 100.5 && c.longitude < 101.5);
-        setAvailableCourses(localCourses.length > 0 ? localCourses : courses); // Fallback to all if none match
-        if (localCourses.length > 0) setCourseId(localCourses[0].id);
+        // 🌍 REMOVED PATTAYA GEOFENCE: Load all worldwide courses for Admin selection
+        setAvailableCourses(courses);
+        if (courses.length > 0) setCourseId(courses[0].id);
       } catch (error) {
         console.error("Failed to fetch courses:", error);
       }
@@ -120,9 +133,10 @@ export default function EventGenesisConsole() {
         date: eventDate || new Date().toISOString().split('T')[0],
         time: startTime,
         format: matchFormat,
+        maxPlayers: Number(maxPlayers) || 144, // Defaults to a standard full field if left blank
         entryFeeFiat: Number(entryFee) || 0,
-        currency: 'THB',
-        paymentGateway: 'PromptPay',
+        currency: currency,
+        paymentGateway: 'Direct QR',
         agenda: {
           prizePool: prizePool,
           raffleItems: raffleItems,
@@ -186,17 +200,41 @@ export default function EventGenesisConsole() {
                   style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #444', color: '#fff', borderRadius: '6px' }}
                 />
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>Host Course</label>
-                <select 
-                  value={courseId} onChange={(e) => setCourseId(e.target.value)}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>Host Course (Search)</label>
+                <input 
+                  type="text" 
+                  value={courseSearch} 
+                  onChange={(e) => {
+                    setCourseSearch(e.target.value);
+                    setShowCourseDropdown(true);
+                  }}
+                  onFocus={() => setShowCourseDropdown(true)}
+                  placeholder="Type to search courses..."
                   style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #444', color: '#fff', borderRadius: '6px' }}
-                >
-                  {availableCourses.length === 0 && <option value="">Loading...</option>}
-                  {availableCourses.map(course => (
-                    <option key={course.id} value={course.id}>{course.clubName || course.name}</option>
-                  ))}
-                </select>
+                />
+                {showCourseDropdown && courseSearch.length > 1 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#222', border: '1px solid #444', maxHeight: '200px', overflowY: 'auto', zIndex: 50, borderRadius: '6px', marginTop: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                    {availableCourses
+                      .filter(c => (c.clubName || c.name || '').toLowerCase().includes(courseSearch.toLowerCase()))
+                      .slice(0, 50) // Limit results for performance
+                      .map(course => (
+                        <div 
+                          key={course.id} 
+                          onClick={() => {
+                            setCourseId(course.id);
+                            setCourseSearch(course.clubName || course.name);
+                            setShowCourseDropdown(false);
+                          }}
+                          style={{ padding: '10px 12px', color: '#fff', cursor: 'pointer', borderBottom: '1px solid #333' }}
+                          onMouseOver={(e) => e.currentTarget.style.background = '#333'}
+                          onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          {course.clubName || course.name}
+                        </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -219,6 +257,10 @@ export default function EventGenesisConsole() {
                   <option value="Stableford">Stableford</option>
                 </select>
               </div>
+              <div style={{ flex: 0.5 }}>
+                <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>Max Players</label>
+                <input type="number" value={maxPlayers} onChange={(e) => setMaxPlayers(e.target.value)} placeholder="144" style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #444', color: '#fff', borderRadius: '6px' }} />
+              </div>
             </div>
 
             <hr style={{ borderColor: '#333', margin: '10px 0' }} />
@@ -226,7 +268,12 @@ export default function EventGenesisConsole() {
             {/* ROW 3: Dynamic Tags for Perks & Agenda */}
             <div style={{ display: 'flex', gap: '20px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>Skill Prize Pool (Press Enter)</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ color: '#888', fontWeight: 'bold' }}>Skill Prize Pool (Press Enter)</label>
+                  <button type="button" onClick={() => setIsCalcOpen(true)} style={{ background: '#3a2a00', color: '#D4AF37', border: '1px solid #D4AF37', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+                    🧮 ESTIMATOR
+                  </button>
+                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px', background: '#222', border: '1px solid #444', borderRadius: '6px', minHeight: '45px' }}>
                   {prizePool.map((tag, idx) => (
                     <span key={idx} style={{ background: '#3a2a00', color: '#D4AF37', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', border: '1px solid #D4AF37' }}>
@@ -274,8 +321,18 @@ export default function EventGenesisConsole() {
             {/* ROW 5: Fee & Dinner */}
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>Fiat Entry Fee (THB)</label>
-                <input type="number" value={entryFee} onChange={(e) => setEntryFee(e.target.value)} placeholder="e.g., 3500" style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #D4AF37', color: '#fff', borderRadius: '6px' }} />
+                <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>Entry Fee & Currency</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input type="number" value={entryFee} onChange={(e) => setEntryFee(e.target.value)} placeholder="e.g., 3500" style={{ flex: 2, padding: '12px', background: '#222', border: '1px solid #D4AF37', color: '#fff', borderRadius: '6px' }} />
+                  <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={{ flex: 1, padding: '12px', background: '#222', border: '1px solid #D4AF37', color: '#fff', borderRadius: '6px' }}>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="THB">THB (฿)</option>
+                    <option value="AUD">AUD ($)</option>
+                    <option value="SGD">SGD ($)</option>
+                  </select>
+                </div>
               </div>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '20px' }}>
                 <input type="checkbox" id="dinnerCheck" checked={includesDinner} onChange={(e) => setIncludesDinner(e.target.checked)} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
@@ -286,11 +343,11 @@ export default function EventGenesisConsole() {
             {/* 🔥 NEW ROW 6: Manual Payment Routing */}
             <div style={{ background: '#1a1a1a', padding: '20px', borderRadius: '8px', borderLeft: '4px solid #44ff44', marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h4 style={{ margin: 0, color: '#44ff44', letterSpacing: '1px' }}>🏦 DIRECT PAYMENT ROUTING</h4>
-              <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Upload your PromptPay QR or Bank Details. Mobile users will pay you directly.</p>
+              <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Upload your Payment QR (PromptPay, Venmo, WeChat, etc). Mobile users scan and pay you directly.</p>
               
               <div style={{ display: 'flex', gap: '20px' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', color: '#ccc', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold' }}>PromptPay QR Image</label>
+                  <label style={{ display: 'block', color: '#ccc', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold' }}>Direct Payment QR Image</label>
                   <input type="file" accept="image/*" onChange={(e) => setQrFile(e.target.files?.[0] || null)} style={{ width: '100%', padding: '8px', background: '#222', border: '1px solid #444', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }} />
                 </div>
                 <div style={{ flex: 1 }}>
@@ -339,10 +396,10 @@ export default function EventGenesisConsole() {
                 <p style={{ color: '#FFF', fontSize: '15px', lineHeight: '22px', margin: '0 0 20px 0' }}>
                   {salesPitch || "No description provided. Add a sales pitch to excite your audience!"}
                 </p>
-                <div style={{ color: '#aaa', fontSize: '13px', marginBottom: '20px', lineHeight: '20px' }}>
-                  <div>⛳ Format: <span style={{ color: '#fff' }}>{matchFormat}</span></div>
-                  {includesDinner && <div>🍽️ Perk: <span style={{ color: '#fff' }}>Dinner Included</span></div>}
-                </div>
+                {/* NATIVE "JOIN TOURNAMENT" BUTTON */}
+              <button style={{ width: '100%', padding: '18px', backgroundColor: '#44ff44', color: '#000', border: 'none', borderRadius: '30px', fontWeight: '900', fontSize: '16px', cursor: 'default', boxShadow: '0 4px 15px rgba(68,255,68,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                <span>{qrFile || bankDetails ? 'VIEW PAYMENT INFO & JOIN' : 'JOIN TOURNAMENT'} • {entryFee || '0'} {currency}</span>
+              </button>
                 {(prizePool.length > 0 || raffleItems.length > 0) && (
                   <div style={{ display: 'flex', gap: '10px' }}>
                     {prizePool.length > 0 && (
@@ -372,10 +429,11 @@ export default function EventGenesisConsole() {
                 </div>
               </div>
 
-              {/* NATIVE "JOIN TOURNAMENT" BUTTON */}
-              <button style={{ width: '100%', padding: '18px', backgroundColor: '#44ff44', color: '#000', border: 'none', borderRadius: '30px', fontWeight: '900', fontSize: '16px', cursor: 'default', boxShadow: '0 4px 15px rgba(68,255,68,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                <span>{qrFile || bankDetails ? 'VIEW PAYMENT INFO & JOIN' : 'JOIN TOURNAMENT'} • {entryFee || '0'} THB</span>
-              </button>
+              <div style={{ color: '#aaa', fontSize: '13px', marginBottom: '20px', lineHeight: '20px' }}>
+                  <div>⛳ Format: <span style={{ color: '#fff' }}>{matchFormat}</span></div>
+                  <div>👥 Capacity: <span style={{ color: '#fff' }}>{maxPlayers || '144'} Players</span></div>
+                  {includesDinner && <div>🍽️ Perk: <span style={{ color: '#fff' }}>Dinner Included</span></div>}
+                </div>
             </div>
           </div>
 
@@ -391,6 +449,89 @@ export default function EventGenesisConsole() {
         </div>
       </div>
 
+      {/* 🔥 THE PRIZE CALCULATOR POPUP */}
+      {isCalcOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#111', width: '500px', padding: '30px', borderRadius: '16px', border: '1px solid #D4AF37', boxShadow: '0 10px 40px rgba(0,0,0,0.9)' }}>
+            <h3 style={{ color: '#D4AF37', marginTop: 0, borderBottom: '1px solid #333', paddingBottom: '10px' }}>🧮 Prize Pool Estimator</h3>
+            
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ color: '#888', fontSize: '12px' }}>Players</label>
+                <input type="number" value={calcPlayers} onChange={e => setCalcPlayers(Number(e.target.value))} style={{ width: '100%', padding: '8px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: '4px' }} />
+              </div>
+              <div style={{ flex: 1.5 }}>
+                <label style={{ color: '#888', fontSize: '12px' }}>Green Fee Cost (Per Pax)</label>
+                <input type="number" value={calcGreenFee} onChange={e => setCalcGreenFee(Number(e.target.value))} style={{ width: '100%', padding: '8px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: '4px' }} />
+              </div>
+              <div style={{ flex: 1.5 }}>
+                <label style={{ color: '#888', fontSize: '12px' }}>F&B Cost (Per Pax)</label>
+                <input type="number" value={calcFnB} onChange={e => setCalcFnB(Number(e.target.value))} style={{ width: '100%', padding: '8px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: '4px' }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ color: '#888', fontSize: '12px' }}>Organizer Margin (%)</label>
+                <input type="number" value={calcCut} onChange={e => setCalcCut(Number(e.target.value))} style={{ width: '100%', padding: '8px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: '4px' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ color: '#888', fontSize: '12px' }}>Skill Split (%)</label>
+                <input type="number" value={calcSkillSplit} onChange={e => setCalcSkillSplit(Number(e.target.value))} style={{ width: '100%', padding: '8px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: '4px' }} />
+              </div>
+            </div>
+
+            {/* THE MATH */}
+            <div style={{ background: '#1a1a1a', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+              {(() => {
+                const gross = calcPlayers * (Number(entryFee) || 0);
+                const totalCosts = calcPlayers * (calcGreenFee + calcFnB);
+                const netRevenue = gross - totalCosts;
+                const orgTake = netRevenue > 0 ? netRevenue * (calcCut / 100) : 0;
+                const totalPrize = netRevenue > 0 ? netRevenue - orgTake : 0;
+                
+                const skillTotal = totalPrize * (calcSkillSplit / 100);
+                const raffleTotal = totalPrize - skillTotal;
+                
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff', marginBottom: '5px', fontSize: '13px' }}>
+                      <span>Gross Revenue:</span> <strong>{gross.toLocaleString()}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ff4444', marginBottom: '5px', fontSize: '13px' }}>
+                      <span>Minus Hard Costs (Course/Food):</span> <strong>-{totalCosts.toLocaleString()}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#aaa', marginBottom: '15px', fontSize: '13px' }}>
+                      <span>Minus Organizer Margin:</span> <strong>-{orgTake.toLocaleString()}</strong>
+                    </div>
+                    <hr style={{ borderColor: '#333' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#44ff44', marginTop: '10px', marginBottom: '10px', fontSize: '14px', fontWeight: 'bold' }}>
+                      <span>TRUE PRIZE POOL:</span> <span>{totalPrize.toLocaleString()}</span>
+                    </div>
+                    
+                    <div style={{ color: '#D4AF37', marginTop: '10px', fontSize: '13px' }}>1st Place (50%): <strong>{(skillTotal * 0.5).toLocaleString()}</strong></div>
+                    <div style={{ color: '#D4AF37', fontSize: '13px' }}>2nd Place (30%): <strong>{(skillTotal * 0.3).toLocaleString()}</strong></div>
+                    <div style={{ color: '#D4AF37', fontSize: '13px', marginBottom: '10px' }}>3rd Place (20%): <strong>{(skillTotal * 0.2).toLocaleString()}</strong></div>
+                    <div style={{ color: '#b67aef', fontSize: '13px' }}>Raffle Pool: <strong>{raffleTotal.toLocaleString()}</strong></div>
+                    
+                    <button 
+                      onClick={() => {
+                        setPrizePool([`1st Place: ${currency} ${(skillTotal * 0.5).toLocaleString()}`, `2nd Place: ${currency} ${(skillTotal * 0.3).toLocaleString()}`, `3rd Place: ${currency} ${(skillTotal * 0.2).toLocaleString()}`]);
+                        setRaffleItems([`Raffle Pool: ${currency} ${raffleTotal.toLocaleString()}`]);
+                        setIsCalcOpen(false);
+                      }}
+                      style={{ width: '100%', padding: '12px', marginTop: '20px', background: '#D4AF37', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      APPLY TO FORM
+                    </button>
+                  </>
+                );
+              })()}
+            </div>
+            
+            <button onClick={() => setIsCalcOpen(false)} style={{ width: '100%', padding: '10px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

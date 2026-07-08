@@ -1,5 +1,5 @@
 // ==========================================
-// FILE: src/pages/B2BPartners.tsx
+// FILE: src/pages/B2BPartners.tsx (or src/components/B2B/B2BPartners.tsx)
 // ==========================================
 import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, writeBatch, serverTimestamp, increment, orderBy, onSnapshot } from 'firebase/firestore';
@@ -55,7 +55,7 @@ export default function B2BPartners() {
         if (!emailSnap.empty) {
           setTargetUser({ id: emailSnap.docs[0].id, ...emailSnap.docs[0].data() });
         } else {
-          setMessage('UID not found in database. The partner must log into the app once to generate their profile.');
+          setMessage('UID or Email not found in database. The partner must log into the app once to generate their profile.');
         }
       }
     } catch (error) {
@@ -187,8 +187,9 @@ export default function B2BPartners() {
 
       {/* Target User Dashboard */}
       {targetUser && (
-        <div className="bg-[#111] border border-[#D4AF37] p-6 rounded-lg max-w-2xl">
-          <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div className="bg-[#111] border border-[#D4AF37] p-6 rounded-lg max-w-2xl relative">
+          
+          <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4 pr-4">
             <div>
               <h3 className="text-xl font-bold text-white">{targetUser.nickname || 'Unknown Account'}</h3>
               <p className="text-sm text-gray-500">{targetUser.email}</p>

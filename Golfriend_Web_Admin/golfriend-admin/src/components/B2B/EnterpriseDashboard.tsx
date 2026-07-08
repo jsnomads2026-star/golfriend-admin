@@ -553,7 +553,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
           onClick={() => isMasterHost && setActiveTab('crm')}
           disabled={!isMasterHost}
         >
-          👥 Buyer CRM {!isMasterHost && '🔒'}
+          👥 Unified Host Inbox {!isMasterHost && '🔒'}
         </button>
 
         <div style={styles.sectionHeader}>ACCOUNT</div>

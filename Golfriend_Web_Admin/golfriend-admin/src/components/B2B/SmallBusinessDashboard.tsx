@@ -524,7 +524,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
         </button>
 
         <button style={{...styles.navBtn, ...(activeTab === 'crm' ? styles.activeBtn : {})}} onClick={() => setActiveTab('crm')}>
-          👥 Ad Leads & Inbox
+          👥 Unified Host Inbox
         </button>
 
         {/* 500 VIP TOOLS COMPLETELY PURGED FROM 299 UI */}

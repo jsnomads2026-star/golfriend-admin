@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db, storage, auth } from '../../../firebaseConfig';
 import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp, query, where, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import AdLeadsInbox from '../../B2B/AdLeadsInbox'; // 🔥 UNIFIED HOST INBOX IMPORT
 
 export default function SponsorDashboard() {
   const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
@@ -13,6 +14,9 @@ export default function SponsorDashboard() {
 
   // Mobile Preview State
   const [previewCampaign, setPreviewCampaign] = useState<any | null>(null);
+
+  // 🔥 CONCIERGE INBOX MODAL STATE
+  const [activeInboxCampaign, setActiveInboxCampaign] = useState<any | null>(null);
 
   // 🔥 CONCIERGE BUILDER TOGGLE STATE
   const [showBuilder, setShowBuilder] = useState(false);
@@ -309,6 +313,8 @@ export default function SponsorDashboard() {
                     <span style={{ color: '#888', fontSize: '10px' }}>👁 {item.impressions || 0} | 🎯 {item.clicks || 0}</span>
                   </div>
                   <div style={{ flex: 1, textAlign: 'right' }}>
+                     {/* 🔥 OPENS THE CONCIERGE INBOX, PASSING THE DOCUMENT ID AS THE UID */}
+                     <button onClick={() => setActiveInboxCampaign(item)} style={{ background: 'transparent', border: 'none', color: '#D4AF37', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', marginRight: '10px' }}>[View Leads]</button>
                      {!isTournament && <button onClick={() => setPreviewCampaign(item)} style={{ background: 'transparent', border: 'none', color: '#2196F3', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>[Preview]</button>}
                      <button onClick={() => handleToggleStatus(item.id, item.status, item.itemType)} style={{ background: 'transparent', border: 'none', color: displayStatus === 'active' ? '#FFC107' : '#4CAF50', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', marginLeft: '10px' }}>
                        [{displayStatus === 'active' ? 'Pause' : 'Publish'}]
@@ -470,6 +476,29 @@ export default function SponsorDashboard() {
                 {previewCampaign.buttonText || (previewCampaign.campaignType === 'course_promo' ? 'BOOK A TEE TIME' : previewCampaign.itemType === 'tournament' ? 'JOIN TOURNAMENT' : 'CLAIM OFFER')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* SECTION 4: CONCIERGE INBOX MODAL */}
+      {/* ========================================== */}
+      {activeInboxCampaign && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-8 backdrop-blur-sm">
+          <div className="w-full max-w-6xl mb-4 flex justify-between items-center">
+            <h2 className="text-[#D4AF37] text-xl font-bold tracking-widest uppercase">
+              {activeInboxCampaign.adHeadline || activeInboxCampaign.name || 'Concierge Campaign'} - LEADS INBOX
+            </h2>
+            <button 
+              onClick={() => setActiveInboxCampaign(null)} 
+              className="bg-red-900/50 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-bold transition-colors border border-red-500"
+            >
+              CLOSE INBOX
+            </button>
+          </div>
+          <div className="w-full max-w-6xl shadow-2xl">
+            {/* 🔥 WE PASS THE ACTUAL UID THAT THE MOBILE APP WROTE TO FIREBASE (ADMIN UID) */}
+            <AdLeadsInbox partnerUid={activeInboxCampaign.partnerUid} />
           </div>
         </div>
       )}
