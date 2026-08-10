@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target v1
 import Stripe from "stripe";
 import vision from "@google-cloud/vision"; // 🔥 ADDED
+import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -373,6 +374,192 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
     throw new HttpsError('internal', error.message);
   }
 });
+
+// ==========================================
+// 🛰️ COURSE PROVIDER SYNC (Server-Authoritative, Credentialed)
+// ==========================================
+// Golf-API course coordinate sync moved fully server-side. The provider key is
+// read from Secret Manager and never reaches the client. Every course is matched
+// deterministically by provider id, coordinates are strictly validated, trusted
+// manual corrections are never silently overwritten, batches are bounded and
+// rate-limited with retry/backoff, last-known-good coordinates are preserved,
+// and each applied change is audited (source, provider id, fetch time, updater,
+// before/after). A "preview" mode returns the proposed diffs without writing.
+
+// Fetch with bounded exponential backoff on 429/5xx (and transport errors).
+async function fetchWithBackoff(url: string, headers: Record<string, string>, maxRetries = 3): Promise<Response | null> {
+  let attempt = 0;
+  let delayMs = 500;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+        if (attempt >= maxRetries) return res;
+        await new Promise((r) => setTimeout(r, delayMs));
+        delayMs *= 2;
+        attempt += 1;
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt >= maxRetries) throw err;
+      await new Promise((r) => setTimeout(r, delayMs));
+      delayMs *= 2;
+      attempt += 1;
+    }
+  }
+}
+
+interface CourseSyncResultRow {
+  courseId: string;
+  result: string;
+  message: string;
+  before?: { latitude: number | null; longitude: number | null };
+  after?: { latitude: number; longitude: number };
+}
+
+export const syncCoursesFromProvider = onCall(
+  { secrets: [GOLF_API_KEY], memory: "512MiB", timeoutSeconds: 300 },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError('unauthenticated', 'You must be logged in.');
+    }
+    const callerUid = request.auth.uid;
+    const callerEmail = (request.auth.token?.email || "").toLowerCase();
+
+    // AUTHORIZATION: platform staff or God-Mode only.
+    const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+    const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
+    if (!isStaff && callerEmail !== 'admin@golfriend.co') {
+      throw new HttpsError('permission-denied', 'Only platform staff can run the course sync.');
+    }
+
+    const { mode, courseIds } = request.data || {};
+    if (mode !== 'preview' && mode !== 'apply') {
+      throw new HttpsError('invalid-argument', 'mode must be "preview" or "apply".');
+    }
+    // Bounded batch: explicit ids (deduped, capped) or a small auto-selected set
+    // of courses with broken/missing coordinates.
+    const limit = Math.min(Math.max(Number(request.data?.limit) || 10, 1), 25);
+
+    interface Target { docId: string; courseID: string; data: FirebaseFirestore.DocumentData; }
+    const targets: Target[] = [];
+
+    if (Array.isArray(courseIds) && courseIds.length > 0) {
+      const ids = Array.from(new Set(courseIds.filter((x: unknown) => isValidProviderId(x)))).slice(0, 25) as string[];
+      for (const id of ids) {
+        const snap = await db.collection('courses').doc(id).get();
+        if (snap.exists) targets.push({ docId: snap.id, courseID: id, data: snap.data() || {} });
+        else targets.push({ docId: id, courseID: id, data: {} });
+      }
+    } else {
+      const snap = await db.collection('courses').get();
+      for (const d of snap.docs) {
+        const c = d.data() as any;
+        const cid = c.courseID || d.id;
+        if (!isValidProviderId(cid)) continue;
+        if (c.requiresManualGPS === true) continue; // leave quarantined for manual flow
+        const hasCoords = Number(c.latitude) || Number(c.lat);
+        if (!hasCoords) targets.push({ docId: d.id, courseID: cid, data: c });
+        if (targets.length >= limit) break;
+      }
+    }
+
+    const apiKey = GOLF_API_KEY.value();
+    const headers = { Authorization: `Bearer ${apiKey}` };
+    const results: CourseSyncResultRow[] = [];
+    const nowIso = new Date().toISOString();
+
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      let provider: ProviderCourse | null = null;
+      try {
+        const res = await fetchWithBackoff(`https://www.golfapi.io/api/v2.3/courses/${t.courseID}`, headers);
+        if (res && res.ok) {
+          const body: any = await res.json();
+          const shell = body.data || body;
+          if (shell && (shell.latitude !== undefined && shell.longitude !== undefined)) {
+            provider = { courseID: shell.courseID || shell.id || t.courseID, latitude: shell.latitude, longitude: shell.longitude };
+          } else {
+            provider = null; // missing coordinates
+          }
+        } else if (res && res.status === 404) {
+          provider = null;
+        } else {
+          results.push({ courseId: t.courseID, result: 'error', message: `Provider HTTP ${res ? res.status : 'no-response'} after retries.` });
+          continue;
+        }
+      } catch (err: any) {
+        results.push({ courseId: t.courseID, result: 'error', message: `Fetch failed: ${err?.message || 'unknown'}` });
+        continue;
+      }
+
+      const decision = classifyCourseSync(t.courseID, t.data, provider);
+      const row: CourseSyncResultRow = { courseId: t.courseID, result: decision.result, message: decision.message, before: decision.before };
+      if (decision.after) row.after = decision.after;
+
+      if (mode === 'apply' && decision.result === 'updated' && decision.after) {
+        try {
+          await db.runTransaction(async (tx) => {
+            const ref = db.collection('courses').doc(t.docId);
+            const fresh = await tx.get(ref);
+            const cur = fresh.data() || {};
+            // Last-known-good preservation.
+            const lastKnownGood = {
+              latitude: cur.latitude ?? cur.lat ?? null,
+              longitude: cur.longitude ?? cur.lng ?? null,
+              at: cur.providerFetchedAt || cur.cachedAt || null,
+            };
+            tx.set(ref, {
+              latitude: decision.after!.latitude,
+              longitude: decision.after!.longitude,
+              lat: decision.after!.latitude,
+              lng: decision.after!.longitude,
+              gpsSource: 'golfapi',
+              providerId: t.courseID,
+              providerFetchedAt: nowIso,
+              updatedByUid: callerUid,
+              lastKnownGood,
+              apiImported: true,
+              cachedAt: nowIso,
+            }, { merge: true });
+
+            // Audit record: source, provider id, fetch time, updater, before/after.
+            const auditRef = db.collection('course_sync_audit').doc();
+            tx.set(auditRef, {
+              courseId: t.courseID,
+              source: 'golfapi',
+              providerId: t.courseID,
+              fetchedAt: nowIso,
+              updatedByUid: callerUid,
+              before: decision.before,
+              after: decision.after,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          row.message = 'Coordinates updated from provider (audited).';
+        } catch (err: any) {
+          row.result = 'error';
+          row.message = `Write failed: ${err?.message || 'unknown'}`;
+        }
+      }
+
+      results.push(row);
+
+      // Rate limit between provider calls (backoff already handles 429 bursts).
+      if (i < targets.length - 1) await new Promise((r) => setTimeout(r, 400));
+    }
+
+    const summary = results.reduce((acc: Record<string, number>, r) => {
+      acc[r.result] = (acc[r.result] || 0) + 1;
+      return acc;
+    }, {});
+
+    logger.info(`🛰️ Course sync (${mode}) by ${callerUid}: ${JSON.stringify(summary)}`);
+    return { success: true, mode, processed: results.length, summary, results };
+  }
+);
 
 // ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
