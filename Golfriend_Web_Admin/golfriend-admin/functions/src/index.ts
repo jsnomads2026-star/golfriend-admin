@@ -481,6 +481,102 @@ export const cancelB2BContract = onCall({ memory: "256MiB" }, async (request) =>
 });
 
 // ==========================================
+// 🔒 ESCROW RESOLUTION (Server-Authoritative Settlement)
+// ==========================================
+// Resolving an escrow moves money (marks the hold + credits chips on refund).
+// Clients must not finalize settlement state or choose the amount/recipient.
+// This callable is the sole path: Director-only, derives uid/amount from the
+// authoritative ledger doc (never the client), and resolves atomically & once
+// (guards on status === 'escrow_locked') so a double-click or REFUND-then-PAYOUT
+// cannot double-settle. A refund credit is stamped as its own audited ledger tx.
+export const resolveEscrow = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { txId, resolution } = request.data || {};
+
+  if (!txId || typeof txId !== 'string') {
+    throw new HttpsError('invalid-argument', 'An escrow transaction id is required.');
+  }
+  if (resolution !== 'REFUND' && resolution !== 'PAYOUT') {
+    throw new HttpsError('invalid-argument', 'Resolution must be REFUND or PAYOUT.');
+  }
+
+  // AUTHORIZATION: Director only. Accept the admin_users Director role (see
+  // inviteEmployee) or the platform God-Mode identity used by the admin gate.
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  if (!isDirector && !isGodMode) {
+    throw new HttpsError('permission-denied', 'Only the Director can resolve escrow holds.');
+  }
+
+  const txRef = db.collection('transactions').doc(txId);
+  const refundTxRef = db.collection('transactions').doc(`escrow_refund_${txId}`);
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(txRef);
+      if (!snap.exists) {
+        throw new HttpsError('not-found', 'Escrow transaction not found.');
+      }
+      const data = snap.data() || {};
+      // Idempotency / once-only guard: only an actively locked hold can resolve.
+      if (data.status !== 'escrow_locked') {
+        throw new HttpsError('failed-precondition', `Escrow is not locked (current status: ${data.status || 'unknown'}); it may already be resolved.`);
+      }
+
+      // Server-truth uid/amount from the ledger — never from the client.
+      const uid = data.uid;
+      const amount = Math.abs(Number(data.amount || 0));
+      if (!uid) {
+        throw new HttpsError('failed-precondition', 'Escrow record is missing an owner uid.');
+      }
+
+      // 1. Resolve the hold in the ledger.
+      tx.update(txRef, {
+        status: resolution === 'REFUND' ? 'failed' : 'completed',
+        resolvedBy: 'DIRECTOR_OVERRIDE',
+        resolvedByUid: callerUid,
+        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // 2. On refund, return the held chips to the buyer + stamp an audited tx.
+      if (resolution === 'REFUND' && amount > 0) {
+        const userRef = db.collection('users').doc(uid);
+        tx.set(userRef, {
+          chips: admin.firestore.FieldValue.increment(amount),
+        }, { merge: true });
+
+        tx.set(refundTxRef, {
+          userId: uid,
+          title: `Escrow Refund (hold ${txId})`,
+          amount: amount,
+          type: 'ESCROW_REFUND',
+          status: 'completed',
+          enforcedBy: 'SYSTEM',
+          resolvedByUid: callerUid,
+          sourceEscrowId: txId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      return { uid, amount, resolution };
+    });
+
+    logger.info(`🔒 Escrow ${txId} resolved via ${resolution} by ${callerUid} (uid ${result.uid}, amount ${result.amount}).`);
+    return { success: true, ...result };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🔒 Escrow resolution failed:", error);
+    throw new HttpsError('internal', error.message || 'Escrow resolution failed.');
+  }
+});
+
+// ==========================================
 // 🚨 PLAYER INCIDENT REPORT (Server-Authoritative Moderation)
 // ==========================================
 // The Course GM "Report Damage" action adjusts another user's authoritative

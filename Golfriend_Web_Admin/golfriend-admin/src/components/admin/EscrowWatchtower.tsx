@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
 import ManualOverride from './ManualOverride'; // 🔥 Injecting the God-Mode HUD
-import { collection, query, where, onSnapshot, doc, writeBatch, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export default function EscrowWatchtower() {
   const [lockedEscrows, setLockedEscrows] = useState<any[]>([]);
@@ -26,29 +27,16 @@ export default function EscrowWatchtower() {
     return () => unsubscribe();
   }, []);
 
-  const resolveEscrow = async (txId: string, uid: string, amount: number, resolution: 'REFUND' | 'PAYOUT') => {
-    // 🛡️ Replaced native window.confirm with direct execution + UI notification
-    const batch = writeBatch(db);
-    const numericAmount = Math.abs(amount);
-
+  const resolveEscrow = async (txId: string, resolution: 'REFUND' | 'PAYOUT') => {
+    // 🔒 SERVER-AUTHORITATIVE: settlement (marking the hold + crediting chips on
+    // refund) is finalized by the resolveEscrow Cloud Function, which is
+    // Director-gated, derives the amount/owner from the ledger, and resolves
+    // atomically & once. The client only names the hold and the resolution.
     try {
-      // 1. Clear the Escrow status in the ledger
-      const txRef = doc(db, 'transactions', txId);
-      batch.update(txRef, {
-        status: resolution === 'REFUND' ? 'failed' : 'completed', 
-        resolvedBy: 'DIRECTOR_OVERRIDE',
-        resolvedAt: serverTimestamp()
-      });
-
-      // 2. Return funds to the original buyer only if refunded
-      if (resolution === 'REFUND') {
-        const userRef = doc(db, 'users', uid);
-        batch.update(userRef, {
-          chips: increment(numericAmount)
-        });
-      }
-
-      await batch.commit();
+      const functions = getFunctions();
+      const resolveEscrowFn = httpsCallable(functions, 'resolveEscrow');
+      const response: any = await resolveEscrowFn({ txId, resolution });
+      if (!response?.data?.success) throw new Error('Resolution was not accepted.');
       showNotification(`Escrow successfully resolved via ${resolution}.`, "success");
     } catch (error: any) {
       showNotification(`Error resolving escrow: ${error.message}`, "error");
@@ -103,12 +91,12 @@ export default function EscrowWatchtower() {
                   
                   <td style={{ padding: '16px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                     <button 
-                      onClick={() => resolveEscrow(escrow.id, escrow.uid, escrow.amount, 'REFUND')}
+                      onClick={() => resolveEscrow(escrow.id, 'REFUND')}
                       style={{ padding: '6px 12px', backgroundColor: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px' }}>
                       REFUND
                     </button>
                     <button 
-                      onClick={() => resolveEscrow(escrow.id, escrow.uid, escrow.amount, 'PAYOUT')}
+                      onClick={() => resolveEscrow(escrow.id, 'PAYOUT')}
                       style={{ padding: '6px 12px', backgroundColor: 'rgba(76, 175, 80, 0.1)', color: '#4CAF50', border: '1px solid #4CAF50', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px' }}>
                       PAYOUT
                     </button>
