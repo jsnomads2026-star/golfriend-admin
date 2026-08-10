@@ -481,6 +481,138 @@ export const cancelB2BContract = onCall({ memory: "256MiB" }, async (request) =>
 });
 
 // ==========================================
+// ⚖️ MODERATION STRIKE (Server-Authoritative Ban / Penalty)
+// ==========================================
+// A ToS strike bans users and finalizes their reputation/role state. Clients
+// must not write another user's moderation/role state, choose the penalty, or
+// compile PII into a blacklist. This callable is the sole path: Director-only,
+// fixed per-tier penalties, target derived from the ticket, applied atomically
+// and once (guarded on the ticket not already being struck) with a floored
+// reliability and a server-read blacklist entry on a permanent ban.
+const STRIKE_TIERS: Record<number, { delta: number; setZero: boolean; ban: boolean; badge: string }> = {
+  1: { delta: -15, setZero: false, ban: false, badge: 'Warning: Policy Violation' },
+  2: { delta: -25, setZero: false, ban: false, badge: 'Suspended: Unreliable' },
+  3: { delta: 0, setZero: true, ban: true, badge: 'Banned: Zero Tolerance' },
+};
+
+export const applyModerationStrike = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { ticketId, tier, reason } = request.data || {};
+
+  const tierNum = Number(tier);
+  if (!ticketId || typeof ticketId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A ticket id is required.');
+  }
+  if (![1, 2, 3].includes(tierNum)) {
+    throw new HttpsError('invalid-argument', 'Strike tier must be 1, 2, or 3.');
+  }
+  if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    throw new HttpsError('invalid-argument', 'An audit reason is required.');
+  }
+  const safeReason = reason.trim().slice(0, 500);
+
+  // AUTHORIZATION: Director only.
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  if (!isDirector && !isGodMode) {
+    throw new HttpsError('permission-denied', 'Only the Director can issue moderation strikes.');
+  }
+
+  const cfg = STRIKE_TIERS[tierNum];
+  const ticketRef = db.collection('supportTickets').doc(ticketId);
+  const strikeTxRef = db.collection('transactions').doc(`tos_strike_${ticketId}`);
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const ticketSnap = await tx.get(ticketRef);
+      if (!ticketSnap.exists) {
+        throw new HttpsError('not-found', 'Support ticket not found.');
+      }
+      const ticket = ticketSnap.data() || {};
+      // Idempotency: a ticket can be struck only once.
+      if (ticket.status === 'closed_with_strike') {
+        throw new HttpsError('failed-precondition', 'This ticket has already been resolved with a strike.');
+      }
+
+      // Target derived from the ticket (server truth), never the client.
+      const targetUserId = ticket.reportedUserId || ticket.senderId;
+      if (!targetUserId) {
+        throw new HttpsError('failed-precondition', 'No target user is associated with this ticket.');
+      }
+
+      const userRef = db.collection('users').doc(targetUserId);
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists) {
+        throw new HttpsError('not-found', 'Target player profile not found.');
+      }
+      const uData = userSnap.data() || {};
+      const current = Number(uData.reliability_score ?? 0);
+      const newReliability = cfg.setZero ? 0 : Math.max(0, current + cfg.delta);
+
+      const userUpdate: Record<string, unknown> = {
+        reliability_score: newReliability,
+        isVerified: false,
+        behavior_badge: cfg.badge,
+      };
+      if (cfg.ban) userUpdate.isBanned = true;
+      tx.set(userRef, userUpdate, { merge: true });
+
+      // Permanent ban → server-read blacklist entry (PII compiled server-side,
+      // never handed to or chosen by the client).
+      if (cfg.ban) {
+        const blacklistRef = db.collection('blacklist').doc(targetUserId);
+        tx.set(blacklistRef, {
+          uid: targetUserId,
+          email: uData.email || 'NOT_CAPTURED',
+          phone: uData.phone_number || 'NOT_CAPTURED',
+          deviceId: uData.fcm_token || 'NOT_CAPTURED',
+          reason: safeReason,
+          bannedByUid: callerUid,
+          bannedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+
+      // Close the ticket.
+      tx.update(ticketRef, {
+        status: 'closed_with_strike',
+        strikeTier: tierNum,
+        strikeReason: safeReason,
+        resolvedByUid: callerUid,
+        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // Immutable audit receipt (deterministic id → idempotent).
+      tx.set(strikeTxRef, {
+        userId: targetUserId,
+        title: `ToS STRIKE TIER ${tierNum}: ${safeReason}`,
+        amount: 0,
+        type: 'TOS_PENALTY',
+        status: 'completed',
+        enforcedBy: 'SYSTEM',
+        resolvedByUid: callerUid,
+        strikeTier: tierNum,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return { targetUserId, tier: tierNum, newReliability, banned: cfg.ban };
+    });
+
+    logger.info(`⚖️ Strike T${result.tier} applied to ${result.targetUserId} by ${callerUid} (ticket ${ticketId}).`);
+    return { success: true, ...result };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("⚖️ Moderation strike failed:", error);
+    throw new HttpsError('internal', error.message || 'Moderation strike failed.');
+  }
+});
+
+// ==========================================
 // 🔒 ESCROW RESOLUTION (Server-Authoritative Settlement)
 // ==========================================
 // Resolving an escrow moves money (marks the hold + credits chips on refund).

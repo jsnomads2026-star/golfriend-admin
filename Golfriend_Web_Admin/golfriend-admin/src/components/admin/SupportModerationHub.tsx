@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, doc, updateDoc, serverTimestamp, onSnapshot, writeBatch, increment, addDoc, query, where, getDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, serverTimestamp, onSnapshot, addDoc, query, where } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export default function SupportModerationHub() {
   // --- STATE: SCHEMA #18 TICKETS ---
@@ -56,78 +57,28 @@ export default function SupportModerationHub() {
 
   const executeStrike = async (tier: 1 | 2 | 3) => {
     if (!activeTicket || !strikeReason.trim()) return alert("Audit Reason is strictly required.");
-    
-    const targetUserId = activeTicket.reportedUserId || activeTicket.senderId; 
-    if (!targetUserId) return alert("Error: No target user ID found on this ticket.");
 
-    const batch = writeBatch(db);
-
-    // 1. 🔥 ENFORCE THE PENALTY ON THE USER PROFILE
-    const userRef = doc(db, 'users', targetUserId);
-    
-    if (tier === 1) {
-      batch.update(userRef, { 
-        reliability_score: increment(-15),
-        isVerified: false, 
-        behavior_badge: 'Warning: Policy Violation'
-      });
-    } else if (tier === 2) {
-      batch.update(userRef, { 
-        reliability_score: increment(-25),
-        isVerified: false,
-        behavior_badge: 'Suspended: Unreliable'
-      });
-    } else if (tier === 3) {
-      // 🔥 THE ZERO TOLERANCE HAMMER & ANTI-EVASION LOCK
-      batch.update(userRef, { 
-        reliability_score: 0,
-        isVerified: false,
-        isBanned: true, 
-        behavior_badge: 'Banned: Zero Tolerance'
+    // 🔒 SERVER-AUTHORITATIVE: banning/penalizing a user finalizes moderation &
+    // role state and compiles PII into the blacklist — the client may not do
+    // that. The applyModerationStrike Cloud Function is Director-gated, derives
+    // the target from the ticket, applies fixed per-tier penalties atomically
+    // and once, and writes the blacklist from a server-read profile.
+    try {
+      const functions = getFunctions();
+      const applyModerationStrike = httpsCallable(functions, 'applyModerationStrike');
+      const response: any = await applyModerationStrike({
+        ticketId: activeTicket.id,
+        tier,
+        reason: strikeReason,
       });
 
-      // Harvest identifiers for the Blacklist
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const uData = userSnap.data();
-        const blacklistRef = doc(db, 'blacklist', targetUserId);
-        batch.set(blacklistRef, {
-          uid: targetUserId,
-          email: uData.email || 'NOT_CAPTURED',
-          phone: uData.phone_number || 'NOT_CAPTURED',
-          deviceId: uData.fcm_token || 'NOT_CAPTURED',
-          reason: strikeReason,
-          bannedAt: serverTimestamp()
-        });
-      }
+      if (!response?.data?.success) throw new Error('Strike was not accepted.');
+      setStrikeReason("");
+      setActiveTicket(null);
+      alert(`Tier ${tier} Strike successfully executed against user.`);
+    } catch (error: any) {
+      alert(`Failed to execute strike: ${error?.message || 'Unknown error'}`);
     }
-
-    // 2. Log the strike to the ticket & close it
-    const ticketRef = doc(db, 'supportTickets', activeTicket.id);
-    batch.update(ticketRef, {
-      status: 'closed_with_strike',
-      strikeTier: tier,
-      strikeReason,
-      resolvedAt: serverTimestamp()
-    });
-
-    // 3. Fire the Central Bank Audit Receipt
-    const txRef = doc(collection(db, 'transactions'));
-    batch.set(txRef, {
-      userId: targetUserId,
-      title: `ToS STRIKE TIER ${tier}: ${strikeReason.trim()}`,
-      amount: 0, 
-      type: 'TOS_PENALTY',
-      status: 'completed',
-      enforcedBy: 'DIRECTOR_CONSOLE',
-      createdAt: serverTimestamp()
-    });
-
-    await batch.commit();
-
-    setStrikeReason("");
-    setActiveTicket(null);
-    alert(`Tier ${tier} Strike successfully executed against user.`);
   };
 
   // 🧠 AI PRE-READ SCANNER
