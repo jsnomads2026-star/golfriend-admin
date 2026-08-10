@@ -11,6 +11,7 @@ import { db, storage } from '../../firebaseConfig';
 import TournamentManager from '../admin/TournamentManager';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
+import BookingRequests from './BookingRequests';
 import GolfText from '../common/GolfText';
 
 const MasterInventory = ({ onLaunchClick, onEditClick, isLimitReached, partnerUid }: { onLaunchClick: () => void, onEditClick: (item: any) => void, isLimitReached: boolean, partnerUid: string }) => {
@@ -449,7 +450,7 @@ interface PartnerDashboardProps {
 }
 
 export default function SmallBusinessDashboard({ partnerData }: PartnerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability'>('adhub');
+  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability' | 'bookings'>('adhub');
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -517,6 +518,9 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
         <button style={{...styles.navBtn, ...(activeTab === 'availability' ? styles.activeBtn : {})}} onClick={() => setActiveTab('availability')}>
           ⛳ Course & Availability
         </button>
+        <button style={{...styles.navBtn, ...(activeTab === 'bookings' ? styles.activeBtn : {})}} onClick={() => setActiveTab('bookings')}>
+          📅 Booking Requests
+        </button>
         <button style={{...styles.navBtn, ...(activeTab === 'genesis' ? styles.activeBtn : {})}} onClick={() => setActiveTab('genesis')}>
           🏗️ Event Genesis
         </button>
@@ -545,6 +549,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
 
       <div style={styles.content}>
         {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
+        {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
         {activeTab === 'tournaments' && <TournamentManager isMasterHost={isMasterHost} />}
