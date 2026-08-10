@@ -375,6 +375,126 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// ⛳ TEE-TIME INVENTORY (Server-Authoritative Supply)
+// ==========================================
+// Admin course/tee-time inventory management. Tee-time slots are the bookable
+// supply that the portal booking flow consumes, so capacity and the booked
+// counter are settlement-adjacent and must be server-owned: the client may not
+// write slots directly, invent capacity/price, or attach a slot to a course
+// that does not exist. This callable is the sole authoring path — staff-gated,
+// validated against the real `courses` vault, deduped per (course,date,time),
+// and it initializes bookedCount server-side so later booking transactions have
+// an authoritative counter to increment.
+export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+
+  // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode.
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  if (!isStaff && !isGodMode) {
+    throw new HttpsError('permission-denied', 'Only platform staff can manage tee-time inventory.');
+  }
+
+  const { action } = request.data || {};
+
+  // ---- ACTION: create a bookable tee-time slot ----
+  if (action === 'create') {
+    const { courseId, date, time, capacity, priceChips } = request.data || {};
+
+    if (!courseId || typeof courseId !== 'string') {
+      throw new HttpsError('invalid-argument', 'A courseId is required.');
+    }
+    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new HttpsError('invalid-argument', 'date must be YYYY-MM-DD.');
+    }
+    if (typeof time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      throw new HttpsError('invalid-argument', 'time must be HH:mm (24h).');
+    }
+    // Reject slots in the past (date-only granularity, UTC day).
+    const today = new Date().toISOString().slice(0, 10);
+    if (date < today) {
+      throw new HttpsError('failed-precondition', 'Cannot create a tee-time in the past.');
+    }
+    const cap = Number(capacity);
+    if (!Number.isInteger(cap) || cap < 1 || cap > 8) {
+      throw new HttpsError('invalid-argument', 'capacity must be an integer from 1 to 8.');
+    }
+    const price = Number(priceChips);
+    if (!Number.isInteger(price) || price < 0) {
+      throw new HttpsError('invalid-argument', 'priceChips must be a non-negative integer.');
+    }
+
+    // The slot must reference a real course in the vault (no invented inventory).
+    const courseSnap = await db.collection('courses').doc(courseId).get();
+    if (!courseSnap.exists) {
+      throw new HttpsError('not-found', 'Referenced course is not in the vault.');
+    }
+    const cData = courseSnap.data() || {};
+    const courseName = cData.clubName || cData.name || courseId;
+
+    // Deterministic id → dedupe identical (course,date,time) slots.
+    const slotId = `${courseId}_${date}_${time.replace(':', '')}`;
+    const slotRef = db.collection('tee_time_slots').doc(slotId);
+
+    const created = await db.runTransaction(async (tx) => {
+      const existing = await tx.get(slotRef);
+      if (existing.exists) {
+        throw new HttpsError('already-exists', 'A tee-time slot for this course, date and time already exists.');
+      }
+      tx.set(slotRef, {
+        courseId,
+        courseName,
+        date,
+        time,
+        capacity: cap,
+        bookedCount: 0,          // server-owned; booking transactions increment this
+        priceChips: price,
+        status: 'open',
+        createdByUid: callerUid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { slotId };
+    });
+
+    logger.info(`⛳ Tee-time slot ${created.slotId} created by ${callerUid}.`);
+    return { success: true, slotId: created.slotId };
+  }
+
+  // ---- ACTION: open/close an existing slot ----
+  if (action === 'setStatus') {
+    const { slotId, status } = request.data || {};
+    if (!slotId || typeof slotId !== 'string') {
+      throw new HttpsError('invalid-argument', 'A slotId is required.');
+    }
+    if (status !== 'open' && status !== 'closed') {
+      throw new HttpsError('invalid-argument', 'status must be open or closed.');
+    }
+    const slotRef = db.collection('tee_time_slots').doc(slotId);
+    const snap = await slotRef.get();
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'Tee-time slot not found.');
+    }
+    await slotRef.set({
+      status,
+      updatedByUid: callerUid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    logger.info(`⛳ Tee-time slot ${slotId} set to ${status} by ${callerUid}.`);
+    return { success: true, slotId, status };
+  }
+
+  throw new HttpsError('invalid-argument', 'Unknown action. Use "create" or "setStatus".');
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1
