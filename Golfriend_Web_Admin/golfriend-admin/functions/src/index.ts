@@ -481,6 +481,129 @@ export const cancelB2BContract = onCall({ memory: "256MiB" }, async (request) =>
 });
 
 // ==========================================
+// 🚨 PLAYER INCIDENT REPORT (Server-Authoritative Moderation)
+// ==========================================
+// The Course GM "Report Damage" action adjusts another user's authoritative
+// reliability/reputation and stamps a moderation badge. Clients must not write
+// another user's moderation/reputation state directly, choose the penalty
+// amount, or bypass audit. This callable is the sole path: it authorizes the
+// reporter, fixes the penalty server-side, verifies the target actually played
+// in the referenced game, applies the change atomically (floored), and is
+// idempotent per (game, target, reporter) so a double-click cannot double-dock.
+const INCIDENT_PENALTY = 25; // Server-fixed; the client cannot influence this.
+
+export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request) => {
+  // 1. SECURITY GATE: Must be authenticated.
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const reporterUid = request.auth.uid;
+  const reporterEmail = (request.auth.token?.email || "").toLowerCase();
+  const { targetUid, gameId, reason } = request.data || {};
+
+  if (!targetUid || typeof targetUid !== 'string') {
+    throw new HttpsError('invalid-argument', 'A target player is required.');
+  }
+  if (!gameId || typeof gameId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A game/flight reference is required.');
+  }
+  if (targetUid === reporterUid) {
+    throw new HttpsError('failed-precondition', 'You cannot report yourself.');
+  }
+  const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : 'Course GM incident report';
+
+  // 2. AUTHORIZATION: reporter must be platform staff (admin_users) OR an active
+  //    commercial partner/course operator (b2b_partners keyed by uid/email).
+  const candidateIds = [reporterUid];
+  if (reporterEmail) {
+    candidateIds.push(reporterEmail);
+    candidateIds.push(reporterEmail.charAt(0).toUpperCase() + reporterEmail.slice(1));
+  }
+
+  let authorized = false;
+  const adminSnap = await db.collection('admin_users').doc(reporterUid).get();
+  if (adminSnap.exists && adminSnap.data()?.status !== 'Suspended') {
+    authorized = true;
+  }
+  if (!authorized) {
+    for (const id of candidateIds) {
+      const pSnap = await db.collection('b2b_partners').doc(id).get();
+      if (pSnap.exists && pSnap.data()?.status === 'active_partner') {
+        authorized = true;
+        break;
+      }
+    }
+  }
+  if (!authorized) {
+    throw new HttpsError('permission-denied', 'Only course operators or platform staff can report an incident.');
+  }
+
+  // 3. IDEMPOTENCY: deterministic incident id prevents accidental double penalty.
+  const incidentId = `${gameId}__${targetUid}__${reporterUid}`;
+  const incidentRef = db.collection('moderation_incidents').doc(incidentId);
+  const userRef = db.collection('users').doc(targetUid);
+  const gameRef = db.collection('games').doc(gameId);
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const existing = await tx.get(incidentRef);
+      if (existing.exists) {
+        // Already recorded — return prior outcome without re-penalizing.
+        return { alreadyReported: true, newReliability: existing.data()?.resultingReliability ?? null };
+      }
+
+      const gameSnap = await tx.get(gameRef);
+      if (!gameSnap.exists) {
+        throw new HttpsError('not-found', 'Referenced game/flight does not exist.');
+      }
+      const players = (gameSnap.data()?.players || []) as Array<{ uid?: string }>;
+      const isParticipant = players.some((p) => p && p.uid === targetUid);
+      if (!isParticipant) {
+        throw new HttpsError('failed-precondition', 'That player is not part of the referenced flight.');
+      }
+
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists) {
+        throw new HttpsError('not-found', 'Target player profile not found.');
+      }
+      const current = Number(userSnap.data()?.reliability_score ?? 0);
+      const newReliability = Math.max(0, current - INCIDENT_PENALTY);
+
+      // Authoritative reputation/moderation write (floored, server-fixed penalty).
+      tx.set(userRef, {
+        reliability_score: newReliability,
+        behavior_badge: 'Flagged by Course GM',
+        requiresManualReview: true,
+      }, { merge: true });
+
+      // Immutable moderation ledger + idempotency marker in one record.
+      tx.set(incidentRef, {
+        gameId,
+        targetUid,
+        reporterUid,
+        reporterEmail: reporterEmail || null,
+        reason: safeReason,
+        penalty: INCIDENT_PENALTY,
+        previousReliability: current,
+        resultingReliability: newReliability,
+        enforcedBy: 'SYSTEM',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return { alreadyReported: false, newReliability };
+    });
+
+    logger.info(`🚨 Incident recorded for ${targetUid} by ${reporterUid} (game ${gameId}). Already=${result.alreadyReported}.`);
+    return { success: true, ...result };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🚨 Incident report failed:", error);
+    throw new HttpsError('internal', error.message || 'Incident report failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1
