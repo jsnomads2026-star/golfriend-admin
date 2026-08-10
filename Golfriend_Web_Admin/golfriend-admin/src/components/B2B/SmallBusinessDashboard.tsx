@@ -9,8 +9,9 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { db, storage } from '../../firebaseConfig';
 
 import TournamentManager from '../admin/TournamentManager';
-import EventGenesisConsole from '../admin/EventGenesisConsole'; 
-import GolfText from '../common/GolfText'; 
+import EventGenesisConsole from '../admin/EventGenesisConsole';
+import CourseAvailability from './CourseAvailability';
+import GolfText from '../common/GolfText';
 
 const MasterInventory = ({ onLaunchClick, onEditClick, isLimitReached, partnerUid }: { onLaunchClick: () => void, onEditClick: (item: any) => void, isLimitReached: boolean, partnerUid: string }) => {
   const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
@@ -448,7 +449,7 @@ interface PartnerDashboardProps {
 }
 
 export default function SmallBusinessDashboard({ partnerData }: PartnerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm'>('adhub');
+  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability'>('adhub');
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -513,6 +514,9 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
         </div>
         
         <div style={styles.sectionHeader}>CORE OPERATIONS</div>
+        <button style={{...styles.navBtn, ...(activeTab === 'availability' ? styles.activeBtn : {})}} onClick={() => setActiveTab('availability')}>
+          ⛳ Course & Availability
+        </button>
         <button style={{...styles.navBtn, ...(activeTab === 'genesis' ? styles.activeBtn : {})}} onClick={() => setActiveTab('genesis')}>
           🏗️ Event Genesis
         </button>
@@ -540,6 +544,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
       </div>
 
       <div style={styles.content}>
+        {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
         {activeTab === 'tournaments' && <TournamentManager isMasterHost={isMasterHost} />}

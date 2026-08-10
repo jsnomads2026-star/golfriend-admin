@@ -375,6 +375,85 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// 🏳️ COURSE OPERATOR ONBOARDING (Server-Authoritative Claim)
+// ==========================================
+// Small-business portal onboarding: an active commercial partner claims the
+// course they operate, which authorizes them to author that course's tee-time
+// availability/pricing (see manageTeeTimeSlot). Operator assignment is a role
+// grant, so it is server-owned: the client cannot self-assign, claim a course
+// that does not exist, or seize a course already operated by someone else.
+export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { courseId } = request.data || {};
+
+  if (!courseId || typeof courseId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A courseId is required.');
+  }
+
+  // Caller must be an active commercial partner (b2b_partners keyed by uid/email).
+  const candidateIds = [callerUid];
+  if (callerEmail) {
+    candidateIds.push(callerEmail);
+    candidateIds.push(callerEmail.charAt(0).toUpperCase() + callerEmail.slice(1));
+  }
+  let partnerId: string | null = null;
+  for (const id of candidateIds) {
+    const pSnap = await db.collection('b2b_partners').doc(id).get();
+    if (pSnap.exists && pSnap.data()?.status === 'active_partner') {
+      partnerId = id;
+      break;
+    }
+  }
+  if (!partnerId) {
+    throw new HttpsError('permission-denied', 'Only an active commercial partner can onboard a course.');
+  }
+
+  // Course must exist in the vault.
+  const courseSnap = await db.collection('courses').doc(courseId).get();
+  if (!courseSnap.exists) {
+    throw new HttpsError('not-found', 'Referenced course is not in the vault.');
+  }
+  const cData = courseSnap.data() || {};
+  const courseName = cData.clubName || cData.name || courseId;
+
+  const opRef = db.collection('course_operators').doc(courseId);
+  const partnerRef = db.collection('b2b_partners').doc(partnerId);
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const opSnap = await tx.get(opRef);
+      if (opSnap.exists && opSnap.data()?.operatorUid !== callerUid) {
+        throw new HttpsError('already-exists', 'This course is already operated by another partner. Contact platform staff to reassign.');
+      }
+      tx.set(opRef, {
+        courseId,
+        courseName,
+        operatorUid: callerUid,
+        operatorPartnerId: partnerId,
+        claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      // Denormalize onto the partner doc for quick portal listing.
+      tx.set(partnerRef, {
+        operatedCourseIds: admin.firestore.FieldValue.arrayUnion(courseId),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+
+    logger.info(`🏳️ Course ${courseId} claimed by operator ${callerUid} (partner ${partnerId}).`);
+    return { success: true, courseId, courseName };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🏳️ Course claim failed:", error);
+    throw new HttpsError('internal', error.message || 'Course claim failed.');
+  }
+});
+
+// ==========================================
 // ⛳ TEE-TIME INVENTORY (Server-Authoritative Supply)
 // ==========================================
 // Admin course/tee-time inventory management. Tee-time slots are the bookable
@@ -393,13 +472,20 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
   const callerUid = request.auth.uid;
   const callerEmail = (request.auth.token?.email || "").toLowerCase();
 
-  // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode.
+  // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode
+  // may manage any course; otherwise the caller must be the claimed operator of
+  // the specific course being touched (partner-scoped self-service authoring).
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
   const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
   const isGodMode = callerEmail === 'admin@golfriend.co';
-  if (!isStaff && !isGodMode) {
-    throw new HttpsError('permission-denied', 'Only platform staff can manage tee-time inventory.');
-  }
+  const isPrivileged = isStaff || isGodMode;
+
+  const assertCourseOperator = async (cid: string) => {
+    const opSnap = await db.collection('course_operators').doc(cid).get();
+    if (!opSnap.exists || opSnap.data()?.operatorUid !== callerUid) {
+      throw new HttpsError('permission-denied', 'You do not operate this course.');
+    }
+  };
 
   const { action } = request.data || {};
 
@@ -437,6 +523,9 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
     }
     const cData = courseSnap.data() || {};
     const courseName = cData.clubName || cData.name || courseId;
+
+    // Non-staff callers may only author for a course they operate.
+    if (!isPrivileged) await assertCourseOperator(courseId);
 
     // Deterministic id → dedupe identical (course,date,time) slots.
     const slotId = `${courseId}_${date}_${time.replace(':', '')}`;
@@ -481,6 +570,8 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Tee-time slot not found.');
     }
+    // Non-staff callers may only toggle slots for a course they operate.
+    if (!isPrivileged) await assertCourseOperator(snap.data()?.courseId);
     await slotRef.set({
       status,
       updatedByUid: callerUid,
