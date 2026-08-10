@@ -375,6 +375,112 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// 💳 B2B CONTRACT CANCELLATION (Server-Authoritative Downgrade)
+// ==========================================
+// Clients MUST NOT write authoritative tier/badge/contract/settlement state.
+// This callable is the sole path for the "Break Contract" / cancellation flow
+// in WalletSettings. It mirrors the settlement authority of stripeB2BWebhook,
+// but is self-scoped: a caller can only cancel their OWN contract, resolved
+// from their authenticated identity (never a client-supplied id).
+export const cancelB2BContract = onCall({ memory: "256MiB" }, async (request) => {
+  // 1. SECURITY GATE: Must be authenticated.
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+
+  try {
+    // 2. RESOLVE the caller's own contract document. b2b_partners is keyed by
+    //    uid OR email (see the onboarding webhook + auth listener), so we probe
+    //    the same identities — but ONLY identities that belong to the caller.
+    const candidateIds = [callerUid];
+    if (callerEmail) {
+      candidateIds.push(callerEmail);
+      const capitalized = callerEmail.charAt(0).toUpperCase() + callerEmail.slice(1);
+      candidateIds.push(capitalized);
+    }
+
+    let partnerRef: admin.firestore.DocumentReference | null = null;
+    let partnerData: admin.firestore.DocumentData | null = null;
+    for (const id of candidateIds) {
+      const ref = db.collection('b2b_partners').doc(id);
+      const snap = await ref.get();
+      if (snap.exists) {
+        partnerRef = ref;
+        partnerData = snap.data() || {};
+        break;
+      }
+    }
+
+    if (!partnerRef || !partnerData) {
+      throw new HttpsError('not-found', 'No active commercial contract found for this account.');
+    }
+
+    // 3. GUARD: Only locked-in (non-monthly) contracts can be "broken". A
+    //    standard monthly account has nothing to cancel — reject rather than
+    //    silently no-op, so the UI never misrepresents state.
+    const currentDuration = partnerData.contractDuration || 'monthly';
+    if (currentDuration === 'monthly') {
+      throw new HttpsError('failed-precondition', 'This account is already on a standard monthly cycle; there is no locked-in contract to cancel.');
+    }
+
+    const previousTier = partnerData.tier || 'small_business';
+
+    // 4. SETTLEMENT: Revoke tier/badge/contract and record the penalty. Written
+    //    with the Admin SDK so it is authoritative and audit-stamped by SYSTEM.
+    const batch = db.batch();
+
+    batch.set(partnerRef, {
+      tier: 'small_business',
+      partnerBadge: null,
+      contractDuration: 'monthly',
+      contractStartDate: null,
+      contractEndDate: null,
+      penaltyApplied: true,
+      status: 'active_partner',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    // Downgrade the linked player profile out of the commercial role. Keyed by
+    // uid (the users collection is uid-keyed in the onboarding webhook).
+    const userRef = db.collection('users').doc(callerUid);
+    batch.set(userRef, {
+      tier: 'standard',
+    }, { merge: true });
+
+    // Stamp the immutable audit ledger, mirroring the onboarding transaction.
+    const txRef = db.collection('transactions').doc();
+    batch.set(txRef, {
+      userId: partnerRef.id,
+      title: `B2B Contract Cancellation: ${previousTier.toUpperCase()} (${currentDuration}) → SMALL_BUSINESS (monthly)`,
+      amount: 0,
+      type: 'B2B_CONTRACT_CANCELLATION',
+      status: 'completed',
+      enforcedBy: 'SYSTEM',
+      penaltyApplied: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    logger.info(`✅ B2B contract cancelled & downgraded for ${partnerRef.id} (was ${previousTier}/${currentDuration}).`);
+
+    return {
+      success: true,
+      tier: 'small_business',
+      contractDuration: 'monthly',
+      partnerBadge: null,
+    };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🚨 B2B contract cancellation failed:", error);
+    throw new HttpsError('internal', error.message || 'Cancellation failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import GolfText from '../common/GolfText';
 
@@ -155,22 +156,23 @@ export default function WalletSettings({ partnerUid }: { partnerUid: string }) {
     setModalConfig({ ...modalConfig, visible: false });
 
     try {
-      const docRef = doc(db, 'b2b_partners', partnerUid);
-      await updateDoc(docRef, {
-        tier: 'small_business',
-        partnerBadge: null, 
-        contractDuration: 'monthly',
-        contractStartDate: null,
-        contractEndDate: null,
-        penaltyApplied: true,
-        updatedAt: serverTimestamp()
-      });
-      
-      setTier('small_business');
-      setContractType('monthly');
+      // 🔒 SERVER-AUTHORITATIVE: the client is not permitted to write tier/badge/
+      // contract/settlement state. The cancellation & penalty are settled by the
+      // cancelB2BContract Cloud Function, which is self-scoped to the caller.
+      const functions = getFunctions();
+      const cancelB2BContract = httpsCallable(functions, 'cancelB2BContract');
+      const response: any = await cancelB2BContract({});
+
+      if (!response?.data?.success) {
+        throw new Error('Cancellation did not complete.');
+      }
+
+      // Reflect the authoritative result returned by the server.
+      setTier(response.data.tier || 'small_business');
+      setContractType(response.data.contractDuration || 'monthly');
       setStartDate(null);
       setEndDate(null);
-      
+
       setModalConfig({
         visible: true,
         title: 'CONTRACT REVOKED',
@@ -180,8 +182,17 @@ export default function WalletSettings({ partnerUid }: { partnerUid: string }) {
         showCancel: false,
         action: () => setModalConfig({ ...modalConfig, visible: false })
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Downgrade failure:", error);
+      setModalConfig({
+        visible: true,
+        title: 'CANCELLATION FAILED',
+        message: error?.message || 'We could not process your cancellation. Please try again or contact support.',
+        isDestructive: true,
+        confirmText: "CLOSE",
+        showCancel: false,
+        action: () => setModalConfig({ ...modalConfig, visible: false })
+      });
     } finally {
       setIsProcessing(false);
     }
