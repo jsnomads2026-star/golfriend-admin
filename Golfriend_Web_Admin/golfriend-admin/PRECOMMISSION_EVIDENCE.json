@@ -1,8 +1,8 @@
 {
   "lane": "C",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "25bba8f",
-  "generated_at": "2026-08-11T02:58:25.715Z",
+  "candidate_head": "da8c751",
+  "generated_at": "2026-08-11T03:21:19.709Z",
   "automated_controls": [
     {
       "control": "gate:authority",
@@ -73,6 +73,13 @@
       "status": "pass",
       "proves": "course-ops commissioning journey under synthetic V2",
       "detail": "✅ course-ops commissioning journey passed under synthetic v2-preview: sync(dry-run/validation/manual-lock/audit) → inventory/availability → operator assignment "
+    },
+    {
+      "control": "verify:seed",
+      "type": "automated",
+      "status": "pass",
+      "proves": "clean-V2 course/role/portal seed & journey conformance; zero-V1; non-financial",
+      "detail": "✅ Lane C seed/journey conformance PASSED under synthetic v2-preview: authority + projections + journeys + media + invariants; zero V1. Evidence: SEED_CONFORMANC"
     }
   ],
   "externally_run_automated": [
@@ -152,8 +159,8 @@
   "manifest_hashes_ref": "MANIFEST_HASHES.json",
   "ledger_ref": "LANEC_LEDGER.json",
   "summary": {
-    "automated_total": 10,
-    "automated_pass": 10,
+    "automated_total": 11,
+    "automated_pass": 11,
     "automated_fail": 0,
     "manual_blocked": 6
   }

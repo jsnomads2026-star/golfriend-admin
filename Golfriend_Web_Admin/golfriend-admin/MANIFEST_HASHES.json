@@ -1,12 +1,12 @@
 {
-  "candidate_head": "25bba8f",
-  "generated_at": "2026-08-11T02:58:24.744Z",
+  "candidate_head": "da8c751",
+  "generated_at": "2026-08-11T03:20:59.753Z",
   "algorithm": "sha256",
   "files": [
     {
       "file": "package.json",
-      "sha256": "c54bf5b132c3c1c8c1df9d1864dc6876ce45a78f01a0ab2df77c5e357b7f29ac",
-      "bytes": 2110
+      "sha256": "b54db53560389b83b0be8befe1586bbb7d043e572e050f05f0a9aec5af261de5",
+      "bytes": 2203
     },
     {
       "file": ".firebaserc",
@@ -69,22 +69,22 @@
       "bytes": 4329
     },
     {
-      "file": "LANEB_RULES_HANDOFF.md",
+      "file": "docs/LANEB_RULES_HANDOFF.md",
       "sha256": "4f592ff91927d7cba35d309abe8901a1d41745a8563eeb784b47219a95c2d57a",
       "bytes": 18293
     },
     {
-      "file": "BLANK_PROJECT_MANIFEST.md",
+      "file": "docs/BLANK_PROJECT_MANIFEST.md",
       "sha256": "028571e680d7fefc4eda15adda1c847979445abf82bd755b5b037724536ceb99",
       "bytes": 6244
     },
     {
-      "file": "FIREBASE_V1V2_INVENTORY.md",
+      "file": "docs/FIREBASE_V1V2_INVENTORY.md",
       "sha256": "0b4c1b1a026579aee27aedcf7a6049140b18f56c2e1ba71989874cbcbbcc4694",
       "bytes": 9373
     },
     {
-      "file": "V2_MIGRATION_CHECKLIST.md",
+      "file": "docs/V2_MIGRATION_CHECKLIST.md",
       "sha256": "0465ebcb9512032da5d92440d73a032a1d21a49e0045cc681499deb1a2017cb2",
       "bytes": 2892
     },
@@ -112,6 +112,21 @@
       "file": "LANEB_DEPENDENCY_PIN.json",
       "sha256": "48b7858b59d0900af27305404d3cfdfe9775c119a48d2ff6a9043a1339fb46ba",
       "bytes": 1772
+    },
+    {
+      "file": "fixtures/lanec-clean-v2-seed.json",
+      "sha256": "6bcef41d78196d69a27744306c377d7a15211ada9860a94d4e375cb6e72e6369",
+      "bytes": 7889
+    },
+    {
+      "file": "scripts/lanec-seed-conformance-verify.mjs",
+      "sha256": "7b9107caf6905bd4ac5c29ec2483bcef7a9f70b70e1e67fe80d6657fd63c3067",
+      "bytes": 19109
+    },
+    {
+      "file": "scripts/precommission-evidence.mjs",
+      "sha256": "fb66ba367580cb0cda7c9baa8208bf2694fee2ed6e05f902ebb8ae08e62511d8",
+      "bytes": 6058
     }
   ]
 }

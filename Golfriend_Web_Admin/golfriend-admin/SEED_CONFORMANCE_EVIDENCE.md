@@ -2,7 +2,7 @@
 
 - **Fixture:** `fixtures/lanec-clean-v2-seed.json` (manifest v1.0.0)
 - **Synthetic target:** `golfriend-v2-preview` — V1 leaks: 0
-- **Generated:** 2026-08-11T03:16:09.713Z
+- **Generated:** 2026-08-11T03:21:19.702Z
 - **Status:** ✅ CONFORMANT (0 Lane C-owned failure(s))
 
 ## Seeded counts

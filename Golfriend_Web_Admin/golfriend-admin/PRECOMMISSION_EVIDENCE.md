@@ -1,8 +1,8 @@
 # Precommission Evidence — Lane C
 
-- **Candidate:** `feat/laneC-consolidated` @ `25bba8f`
-- **Generated:** 2026-08-11T02:58:25.715Z
-- **Automated controls:** 10/10 pass, 0 fail
+- **Candidate:** `feat/laneC-consolidated` @ `da8c751`
+- **Generated:** 2026-08-11T03:21:19.709Z
+- **Automated controls:** 11/11 pass, 0 fail
 - **Manual/provider controls:** 6 BLOCKED (autoApproval:false)
 
 ## Automated controls (run by this tool)
@@ -18,6 +18,7 @@
 | `verify:roles` | ✅ pass | cross-role journey matrix; server-owned derivation |
 | `verify:guards` | ✅ pass | every privileged route behind the resolver |
 | `verify:courseops` | ✅ pass | course-ops commissioning journey under synthetic V2 |
+| `verify:seed` | ✅ pass | clean-V2 course/role/portal seed & journey conformance; zero-V1; non-financial |
 
 ## Externally-run automated (this commit)
 | control | command | proves |

@@ -2,11 +2,19 @@
   "lane": "C",
   "repo": "jsnomads2026-star/golfriend-admin",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "25bba8f",
-  "candidate_head_full": "25bba8fe22b002779eff0ea00f133458f4713e0d",
+  "candidate_head": "da8c751",
+  "candidate_head_full": "da8c75136321b091b7faa7a2618b511c705068dd",
   "accepted_gate_sha": "ca2d6db",
-  "generated_at": "2026-08-11T02:58:24.740Z",
+  "generated_at": "2026-08-11T03:21:12.652Z",
   "included_commits": [
+    {
+      "hash": "da8c751",
+      "subject": "feat(laneC-seed): clean-V2 course/role/portal seed fixture + journey conformance verifier"
+    },
+    {
+      "hash": "2578759",
+      "subject": "chore(laneC): refreeze evidence after break-glass removal (10 automated controls)"
+    },
     {
       "hash": "25bba8f",
       "subject": "feat(laneC-security): remove admin@golfriend.co break-glass from syncCoursesFromProvider"
@@ -98,6 +106,22 @@
     {
       "hash": "1e1cfdd",
       "subject": "feat(admin): tee-time inventory management (roadmap slice 1)"
+    },
+    {
+      "hash": "d2f1d31",
+      "subject": "Chore: End of day sync to align with mobile Phase 4 economy updates."
+    },
+    {
+      "hash": "66d80e1",
+      "subject": "End of day backup: CourseTeeSheet injected and B2B partner routing secured"
+    },
+    {
+      "hash": "e3b59df",
+      "subject": "refactor(ui): complete B2B Admin dashboard transition and partner vault"
+    },
+    {
+      "hash": "9b89cc5",
+      "subject": "init: spin up Vite/React admin dashboard, clear JSX strict errors, and wire Event Genesis Console to Firestore"
     }
   ],
   "superseded_branches": [
