@@ -1,0 +1,15 @@
+{
+  "lane_c_candidate": "8c3d510",
+  "lane_b": {
+    "repo": "jsnomads2026-star/golfriend-app",
+    "branch": "codex/v2-fun-loop-policy-foundation",
+    "pinned_tip": "442afaa3eb7e",
+    "consumes": "Lane C read contract at ca2d6db..8c3d510 (LANEB_RULES_HANDOFF.md + issue #19 published contract)",
+    "expects": "clean firestore.v2-preview.rules implementing the published booking/operator read predicates; active firestore.rules + firebase.json unchanged"
+  },
+  "drift_check": {
+    "how": "re-run git ls-remote for the Lane B branch tip and compare to pinned_tip; if changed, re-verify firestore.v2-preview.rules against LANEB_RULES_HANDOFF.md",
+    "pinned_tip": "442afaa3eb7e"
+  },
+  "generated_at": "2026-08-11T02:24:02.479Z"
+}

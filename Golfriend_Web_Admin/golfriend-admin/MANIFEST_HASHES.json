@@ -1,0 +1,92 @@
+{
+  "candidate_head": "8c3d510",
+  "generated_at": "2026-08-11T02:24:02.478Z",
+  "algorithm": "sha256",
+  "files": [
+    {
+      "file": "package.json",
+      "sha256": "62d8a6657e83f2b7ae5f5c9b9fa2df5bac9ed6d49badd7e34f754b65ddcdd599",
+      "bytes": 1890
+    },
+    {
+      "file": ".firebaserc",
+      "sha256": "db3104c9ef39435da97743bbfdfb67f5fc71feefa4239dd77ef7a3e1d9bc8028",
+      "bytes": 59
+    },
+    {
+      "file": "functions/src/index.ts",
+      "sha256": "588fa76dcd35bbe687d3fa4b6bec3746634b7ee6118a14d940ad4d799f1712f1",
+      "bytes": 109409
+    },
+    {
+      "file": "functions/src/courseSync.ts",
+      "sha256": "5e05798bfa09f361b531b798385823f14eaac7b4035ddb41fbbeefae760cf951",
+      "bytes": 4663
+    },
+    {
+      "file": "functions/src/bookingLogic.ts",
+      "sha256": "07837f4a3bb14c117bec1018dad1114bae54a4688731eb96f537fada1e55702f",
+      "bytes": 3208
+    },
+    {
+      "file": "src/App.tsx",
+      "sha256": "fd4fdbf25e7b66e1b2b10d7c01ec35a22d7acd0b4bad78bf3db01bb36f778561",
+      "bytes": 19116
+    },
+    {
+      "file": "src/firebaseConfig.ts",
+      "sha256": "225966bf1fa6a159822cd689f9f3aea35fb190db6525007537970a65c4cc07e1",
+      "bytes": 1429
+    },
+    {
+      "file": "src/firebaseTarget.js",
+      "sha256": "736bd6698e5a1ab68b321f0a54ff465f19a41d3ec023e07eef9ac8c8550cfeb5",
+      "bytes": 3720
+    },
+    {
+      "file": "src/auth/roleJourney.js",
+      "sha256": "46eecf4c26398625a4285d2ea0a859d3d5f8eb21de9f4a1e20e0d174bce00591",
+      "bytes": 3552
+    },
+    {
+      "file": "AUTHORITY_MANIFEST.md",
+      "sha256": "044fb85e3832153d4eee50f6ad7d06f3a3597434998f8e4ebea7214a78bf5a6c",
+      "bytes": 4329
+    },
+    {
+      "file": "LANEB_RULES_HANDOFF.md",
+      "sha256": "577e6ea1729c4c9ec33c4aa1aa21d4622cdf93a677298db495d3591b14d91870",
+      "bytes": 17868
+    },
+    {
+      "file": "BLANK_PROJECT_MANIFEST.md",
+      "sha256": "028571e680d7fefc4eda15adda1c847979445abf82bd755b5b037724536ceb99",
+      "bytes": 6244
+    },
+    {
+      "file": "FIREBASE_V1V2_INVENTORY.md",
+      "sha256": "0b4c1b1a026579aee27aedcf7a6049140b18f56c2e1ba71989874cbcbbcc4694",
+      "bytes": 9373
+    },
+    {
+      "file": "V2_MIGRATION_CHECKLIST.md",
+      "sha256": "0465ebcb9512032da5d92440d73a032a1d21a49e0045cc681499deb1a2017cb2",
+      "bytes": 2892
+    },
+    {
+      "file": "docs/PORTAL_AUTH_JOURNEY.md",
+      "sha256": "c85b0e9c88acace73a2ce37c1419ded33a6dfd61f265cd345088de34bf0b28ac",
+      "bytes": 4911
+    },
+    {
+      "file": "docs/COURSE_OPS_COMMISSIONING.md",
+      "sha256": "bcbc71df1713f8f8e99d9effea5107e73ea55b0ef6b848c42f67269bb64a8be4",
+      "bytes": 2699
+    },
+    {
+      "file": "LANEC_LEDGER.json",
+      "sha256": "a20c8c13e8452327debfb9e8a641a4d981399d1fcea5c61a92f912835d0a7103",
+      "bytes": 5438
+    }
+  ]
+}
