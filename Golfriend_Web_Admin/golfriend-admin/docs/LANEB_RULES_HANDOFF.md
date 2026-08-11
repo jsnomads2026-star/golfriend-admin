@@ -11,6 +11,22 @@ The Admin web + partner portals + public web perform **reads only** on authorita
 
 Rules only need to encode **read** predicates. The `booking` block is strictly **non-financial**: no `priceChips`, `amount`, `hold`, escrow, settlement, payout or refund field is written or permitted anywhere (`AUTHORITY_MANIFEST.md:18,23-24`; confirmed by the callables — no such field appears in any booking write).
 
+## Read-access safety model (GET vs LIST) — the key to safely opening reads
+
+Firestore evaluates `allow read` for both single-doc GET and multi-doc LIST; for a **LIST** every returned doc must satisfy the predicate **and** the query must be constrained so it cannot return docs the caller may not read. The actual client access per role (from the real query shapes below) is:
+
+| Collection | Player (public) | Operator (SB portal) | Staff / Admin | Enterprise |
+|---|---|---|---|---|
+| `bookings` | **GET only**, own doc `bookings/{slotId__uid}` — id encodes their uid; rule `resource.data.playerUid == request.auth.uid`. **No player LIST exists.** | **LIST** `where('courseId','in', operatedIds)` — rule permits per-doc read where caller operates `resource.data.courseId` | **LIST all** (unfiltered) — staff/God-Mode predicate | **LIST** `where('courseId','in', operatedIds)` (same as operator) |
+| `bookings/{id}/messages` | GET/LIST own booking's thread (participant) | LIST operated booking's thread | LIST | — |
+| `tee_time_slots` | GET/LIST (public supply) | LIST `where('courseId','in', ids)` | LIST all | LIST `where('courseId','in', ids)` |
+| `course_operators` | — | LIST `where('operatorUid','==', uid)` (own only) | LIST | LIST `where('operatorUid','==', uid)` |
+| `booking_audit` | — | — | staff only (no client reader) | — |
+| `admin_users` | — | — | LIST (signed-in admin) | — |
+| `enterprise_staff/{eUid}/members` | — | — | (optional) | LIST where path `eUid == request.auth.uid` |
+
+**Safety consequence for rules:** players must be granted **GET on their own booking** but **never LIST `bookings`** (there is no player LIST query — do not open one). Operator/enterprise LIST is safe only because it is constrained by `courseId in operatedIds` and the per-doc rule re-checks operator ownership. Staff unfiltered LIST is the only broad read and must be staff/God-Mode gated. This is exactly the boundary needed to "open booking/operator reads" without leaking cross-tenant data.
+
 ---
 
 ## 1. `tee_time_slots`
