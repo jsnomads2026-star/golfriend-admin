@@ -45,7 +45,7 @@ Statuses are exactly `pending|confirmed|rejected|cancelled`. No refunded/dispute
 | `tournaments` (status/displayState), `tournaments/{id}/registrations` (flight) | `manageTournamentOps`, `drawRaffleWinner` | write: functions only (staff/host) |
 | `games.status` (flight check-in) | `checkInFlight` | write: functions only (staff/operator) |
 | `fulfillment_orders.status` | `updateFulfillmentOrder` | write: functions only (staff) |
-| `courses` (coordinates) | `syncCoursesFromProvider` (server, Secret-Manager key) | write: functions only; manual surgical-override in CourseSeeder writes only GPS coords on `courses` (content, non-authoritative) |
+| `courses` (coordinates) | `syncCoursesFromProvider` (server, Secret-Manager key), `setManualCourseCoordinates` (active staff) | write: functions only; clients have no direct write path; manual GPS corrections are server-stamped trusted/locked and audited |
 
 ## Quarantined dead code (no reachable client authoritative write)
 - `SponsorOnboardingWizard` — unrouted; checkout decommissioned (early return).

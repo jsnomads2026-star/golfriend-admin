@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 
 const seeder = readFileSync(new URL('../src/components/CourseSeeder.tsx', import.meta.url), 'utf8');
 const functions = readFileSync(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
+const precommission = readFileSync(new URL('../docs/PRECOMMISSION_SEED_AND_SMOKE.md', import.meta.url), 'utf8');
+const manifest = readFileSync(new URL('../AUTHORITY_MANIFEST.md', import.meta.url), 'utf8');
 
 function must(condition, message) {
   if (!condition) { console.error(`  ✗ ${message}`); process.exitCode = 1; }
@@ -20,6 +22,12 @@ must(/isActiveStaff\(/.test(manualBody) && /admin_users/.test(manualBody),
 must(/gpsSource: 'manual'/.test(manualBody) && /manualLock: true/.test(manualBody) && /trusted: true/.test(manualBody),
   'manual correction locks and identifies trusted GPS provenance');
 must(/course_sync_audit/.test(manualBody), 'manual correction writes an audit record');
+must(!/syncCoursesFromProvider[^\n]*legacy|callerEmail\s*===\s*['"]admin@golfriend\.co['"]/i.test(precommission),
+  'precommission guidance contains no legacy email bypass');
+must(/setManualCourseCoordinates/.test(precommission) && /server-owned `admin_users\/\{uid\}`/.test(precommission),
+  'precommission guidance names the current server-owned staff authority');
+must(/setManualCourseCoordinates/.test(manifest) && /clients have no direct write path/.test(manifest),
+  'authority manifest assigns manual course correction to the trusted callable');
 for (const handler of ['healBrokenVault', 'executeMassRescue', 'fetchLiveCourse']) {
   const body = seeder.split(`const ${handler} = async () => {`)[1]?.split('\n  };')[0] || '';
   const stop = body.indexOf('return;');

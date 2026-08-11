@@ -24,7 +24,7 @@ collection** and the **role required**. No data values are given here — only t
 |---|------|-----------------------|---------------|-------|
 | 0 | **Bootstrap the first Director** — write the initial `admin_users/{uid}` doc with `role: Director`, `status: Active` | `admin_users/{uid}` (direct write) | **Out-of-band** (Admin SDK / Firebase console) | See bootstrap caveat below. This is the *only* step not performed through a callable. |
 | 1 | Director invites platform staff (Manager / Support) | `inviteEmployee` → writes `admin_users/{uid}` | **Director** | Creates the Auth account + role doc for each further admin. |
-| 2 | Seed course inventory | Admin **Course Sync / Core Seeder** (`CourseSeeder`, `CourseSyncConsole`) → `courses` | Platform staff (admin session) | Course docs are content; GPS coords are non-authoritative. |
+| 2 | Seed course inventory | `syncCoursesFromProvider` (preview first; apply only when separately commissioned) and `setManualCourseCoordinates` for surgical GPS correction | Active platform staff from server-owned `admin_users/{uid}` | Clients do not write `courses`; manual corrections are marked trusted and locked against provider/janitor replacement. |
 | 3 | Partner onboards their course | `claimCourseOperator` → writes `course_operators` | Active `b2b_partners` (`status: active_partner`) claiming their own course | Establishes `course_operators.operatorUid` authority. |
 | 4 | Operator publishes tee-time availability | `manageTeeTimeSlot` → writes `tee_time_slots` | Platform staff **or** the claimed course operator | **Non-financial** — slots carry capacity/`bookedCount`/status, **no price**. |
 | 5 | Players request bookings; operators respond | `requestBooking`, `respondBooking`, `cancelBooking`, `adminResolveBooking` → `bookings` (+ `booking_audit`) | Player requests; operator/staff confirm/reject/cancel; Director-tier resolves disputes | Statuses exactly `pending\|confirmed\|rejected\|cancelled`. No refund/hold/price fields. |
@@ -44,10 +44,10 @@ written **out-of-band** — via the Firebase Admin SDK or the Firestore console 
 `uid`. This is a deliberate one-time privileged action; there is intentionally no email
 God-Mode fallback in the client. Every subsequent admin is created through `inviteEmployee`.
 
-> Sync-console note: `syncCoursesFromProvider` still contains a legacy
-> `callerEmail === 'admin@golfriend.co'` God-Mode branch alongside its platform-staff gate.
-> Once step 0/1 seed real staff, that branch is dead for normal operation; flagged for
-> follow-up, not changed here.
+> Sync-console authority: `syncCoursesFromProvider` and `setManualCourseCoordinates`
+> authorize only from the caller UID's active server-owned `admin_users/{uid}` record.
+> Missing, inactive, or suspended staff records are denied. There is no caller-email
+> bypass or client-supplied role override.
 
 ---
 
