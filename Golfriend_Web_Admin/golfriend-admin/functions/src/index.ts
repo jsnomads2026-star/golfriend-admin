@@ -375,6 +375,141 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// ⚡ ADMIN USER OVERRIDE (Server-Authoritative Wallet + Reliability)
+// ==========================================
+// The God-Mode "Tactical Override" console mints/burns chips and rewrites a
+// user's reliability/verification. That is wallet + reputation settlement state
+// and must never be written from the client. This callable is the sole path:
+// Director/God-Mode-gated, amounts/enums validated, chips floored at 0 on burn,
+// and every change stamped to the immutable ledger with the audit reason.
+export const adminOverrideUser = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { action, targetUid, reason } = request.data || {};
+
+  if (!targetUid || typeof targetUid !== 'string') {
+    throw new HttpsError('invalid-argument', 'A targetUid is required.');
+  }
+  if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    throw new HttpsError('invalid-argument', 'An audit reason is required.');
+  }
+  const safeReason = reason.trim().slice(0, 500);
+
+  // AUTHORIZATION: Director (admin_users) or God-Mode identity only.
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  if (!isDirector && !isGodMode) {
+    throw new HttpsError('permission-denied', 'Only the Director can run manual overrides.');
+  }
+
+  const userRef = db.collection('users').doc(targetUid);
+
+  // ---- ECONOMY: mint/burn chips ----
+  if (action === 'economy') {
+    const { operation } = request.data || {};
+    if (operation !== 'MINT' && operation !== 'BURN') {
+      throw new HttpsError('invalid-argument', 'operation must be MINT or BURN.');
+    }
+    const magnitude = Math.abs(parseInt(String(request.data?.amount), 10));
+    if (!Number.isInteger(magnitude) || magnitude <= 0) {
+      throw new HttpsError('invalid-argument', 'amount must be a positive integer.');
+    }
+
+    try {
+      const out = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(userRef);
+        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
+        const current = Number(snap.data()?.chips || 0);
+        const delta = operation === 'BURN' ? -magnitude : magnitude;
+        const newChips = Math.max(0, current + delta);
+        const appliedDelta = newChips - current; // floored burn may apply less
+
+        tx.set(userRef, { chips: newChips }, { merge: true });
+
+        const txRef = db.collection('transactions').doc();
+        tx.set(txRef, {
+          uid: targetUid,
+          userId: targetUid,
+          type: 'ADMIN_OVERRIDE',
+          amount: appliedDelta,
+          status: 'completed',
+          enforcedBy: 'SYSTEM',
+          resolvedByUid: callerUid,
+          auditReason: safeReason,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { newChips, appliedDelta };
+      });
+      logger.info(`⚡ Economy override ${operation} ${magnitude} on ${targetUid} by ${callerUid} (applied ${out.appliedDelta}).`);
+      return { success: true, ...out };
+    } catch (error: any) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("⚡ Economy override failed:", error);
+      throw new HttpsError('internal', error.message || 'Economy override failed.');
+    }
+  }
+
+  // ---- RELIABILITY: reputation / verification metrics ----
+  if (action === 'reliability') {
+    const { reliabilityScore, behaviorBadge, starRating, verificationStatus } = request.data || {};
+    const score = Number(reliabilityScore);
+    if (!Number.isFinite(score) || score < 0 || score > 100) {
+      throw new HttpsError('invalid-argument', 'reliability_score must be between 0 and 100.');
+    }
+    const allowedVerification = ['verified', 'pending', 'unverified', 'suspended'];
+    if (!allowedVerification.includes(verificationStatus)) {
+      throw new HttpsError('invalid-argument', 'Invalid verification status.');
+    }
+    if (typeof behaviorBadge !== 'string' || typeof starRating !== 'string') {
+      throw new HttpsError('invalid-argument', 'Badge and star rating are required.');
+    }
+
+    try {
+      const snap = await userRef.get();
+      if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
+      const before = {
+        reliability_score: snap.data()?.reliability_score ?? null,
+        verification_status: snap.data()?.verification_status ?? null,
+      };
+      const batch = db.batch();
+      batch.set(userRef, {
+        reliability_score: Math.round(score),
+        behavior_badge: behaviorBadge.slice(0, 80),
+        star_rating_display: starRating.slice(0, 40),
+        verification_status: verificationStatus,
+      }, { merge: true });
+      const txRef = db.collection('transactions').doc();
+      batch.set(txRef, {
+        uid: targetUid,
+        userId: targetUid,
+        type: 'ADMIN_RELIABILITY_OVERRIDE',
+        amount: 0,
+        status: 'completed',
+        enforcedBy: 'SYSTEM',
+        resolvedByUid: callerUid,
+        auditReason: safeReason,
+        before,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+      logger.info(`⚡ Reliability override on ${targetUid} by ${callerUid}.`);
+      return { success: true, reliability_score: Math.round(score) };
+    } catch (error: any) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("⚡ Reliability override failed:", error);
+      throw new HttpsError('internal', error.message || 'Reliability override failed.');
+    }
+  }
+
+  throw new HttpsError('invalid-argument', 'Unknown action. Use "economy" or "reliability".');
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1
