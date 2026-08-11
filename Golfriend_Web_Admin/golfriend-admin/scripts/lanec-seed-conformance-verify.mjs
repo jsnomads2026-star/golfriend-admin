@@ -178,15 +178,137 @@ for (const s of SEED.tee_time_slots) {
   assert(s.bookedCount === live, `slot ${s.id}: bookedCount(${s.bookedCount}) === live bookings(${live})`, { slotId: s.id });
 }
 
-// ---- Stage 4: portal-visible media references (test-safe; no provider) ----
-console.log('\n[stage 4] portal-visible media references');
+// ---- Stage 4b: member/profile parents + explicit visibility ----
+console.log('\n[stage 4b] member/profile parents & visibility');
+const memberByUid = new Map(SEED.members.map((m) => [m.uid, m]));
+const profileByUid = new Map(SEED.profiles.map((p) => [p.uid, p]));
+const ACTORS = [...new Set([
+  ...SEED.personas.admin_users.map((a) => a.uid),
+  ...SEED.personas.b2b_partners.map((p) => p.id),
+  ...SEED.personas.players.map((p) => p.uid),
+  ...SEED.enterprise_staff.map((s) => s.staffUid),
+])];
+for (const uid of ACTORS) {
+  assert(memberByUid.has(uid), `member parent exists for actor ${uid}`, { uid });
+  assert(profileByUid.has(uid), `profile parent exists for actor ${uid}`, { uid });
+}
+assert(SEED.members.length === ACTORS.length, `members (${SEED.members.length}) == distinct actors (${ACTORS.length})`);
+for (const p of SEED.profiles) {
+  assert(p.visibility === 'public' || p.visibility === 'private', `profile ${p.uid}: explicit visibility`, { uid: p.uid });
+  if (p.visibility === 'private') assert(p.publiclyReadable === false && p.minimalProjection === true, `private profile ${p.uid}: not publicly readable + minimal projection`, { uid: p.uid });
+  else assert(p.publiclyReadable === true, `public profile ${p.uid}: publicly readable`, { uid: p.uid });
+}
+
+// ---- Stage 4c: distinct authority relationships + exact counts/parents ----
+console.log('\n[stage 4c] distinct authority relationships');
+const AR = SEED.authority_relationships;
+const actualByType = {
+  member: SEED.members.length, profile: SEED.profiles.length,
+  admin_users: SEED.personas.admin_users.length, b2b_partners: SEED.personas.b2b_partners.length,
+  course_operators: SEED.course_operators.length, enterprise_staff: SEED.enterprise_staff.length,
+};
+for (const [t, n] of Object.entries(AR.byType)) assert(actualByType[t] === n, `authority byType ${t}: declared ${n} == actual ${actualByType[t]}`, { type: t });
+const holds = (uid, type) => {
+  switch (type) {
+    case 'member': return memberByUid.has(uid);
+    case 'profile': return profileByUid.has(uid);
+    case 'admin_users': return SEED.personas.admin_users.some((a) => a.uid === uid);
+    case 'b2b_partners': return SEED.personas.b2b_partners.some((p) => p.id === uid);
+    case 'course_operators': return SEED.course_operators.some((o) => o.operatorUid === uid);
+    case 'enterprise_staff': return SEED.enterprise_staff.some((s) => s.enterpriseUid === uid || s.staffUid === uid);
+    default: return false;
+  }
+};
+for (const [uid, rels] of Object.entries(AR.byUid)) {
+  for (const type of rels) assert(holds(uid, type), `authority ${uid}: actually holds '${type}'`, { uid, type });
+  for (const type of ['admin_users', 'b2b_partners', 'course_operators', 'enterprise_staff'])
+    if (holds(uid, type)) assert(rels.includes(type), `authority ${uid}: '${type}' membership is declared (distinct, not aliased)`, { uid, type });
+}
+for (const [uid, n] of Object.entries(AR.multiAuthorityUids)) assert((AR.byUid[uid] || []).length === n, `multi-authority ${uid}: ${n} distinct relationships`, { uid });
+
+// ---- Stage 4d: deterministic booking message/audit IDs + bodyKey catalogue ----
+console.log('\n[stage 4d] deterministic message/audit IDs + bodyKey catalogue');
+const pad4 = (n) => String(n).padStart(4, '0');
+const msgSeq = {}, auditSeq = {};
+for (const m of SEED.booking_messages) {
+  assert(m.id === `${m.bookingId}__message__${pad4(m.seq)}`, `message id deterministic: ${m.id}`, { id: m.id });
+  assert(m.bodyKey in SEED.bodyKey_catalogue, `message ${m.id}: bodyKey '${m.bodyKey}' in catalogue`, { id: m.id });
+  assert(!('text' in m) && !('body' in m), `message ${m.id}: no free-text body`, { id: m.id });
+  (msgSeq[m.bookingId] ||= []).push(m.seq);
+}
+for (const a of SEED.booking_audit) {
+  assert(a.id === `${a.bookingId}__audit__${pad4(a.seq)}`, `audit id deterministic: ${a.id}`, { id: a.id });
+  (auditSeq[a.bookingId] ||= []).push(a.seq);
+}
+const contiguous = (seqs) => { const s = [...seqs].sort((x, y) => x - y); return s[0] === 0 && s.every((v, i) => v === i); };
+for (const [bid, seqs] of Object.entries(msgSeq)) assert(contiguous(seqs), `messages for ${bid}: zero-based contiguous sequence`, { id: bid });
+for (const [bid, seqs] of Object.entries(auditSeq)) assert(contiguous(seqs), `audit for ${bid}: zero-based contiguous sequence`, { id: bid });
+
+// ---- Stage 4e: negative authority fixtures are retained and fail authorization ----
+console.log('\n[stage 4e] negative authority fixtures');
+const negAdmins = SEED.personas.admin_users.filter((a) => a.authorityNegative);
+const negPartners = SEED.personas.b2b_partners.filter((p) => p.authorityNegative);
+for (const a of negAdmins) {
+  assert(!!a.negativeReason, `negative admin ${a.uid}: reason marker present`, { uid: a.uid });
+  assert(isActiveStaff({ role: a.role, status: a.status }) === false, `negative admin ${a.uid}: fails isActiveStaff`, { uid: a.uid });
+  assert(resolvePortalAccess({ mode: 'admin', user: { uid: a.uid }, adminDoc: { role: a.role, status: a.status } }).state !== 'authorized',
+    `negative admin ${a.uid}: portal NOT authorized`, { uid: a.uid });
+}
+for (const p of negPartners) {
+  assert(!!p.negativeReason, `negative partner ${p.id}: reason marker present`, { uid: p.id });
+  assert(resolvePortalAccess({ mode: 'partner', user: { uid: p.id }, partnerDoc: { tier: p.tier, status: p.status } }).state !== 'authorized',
+    `negative partner ${p.id}: portal NOT authorized`, { uid: p.id });
+}
+
+// ---- Stage 4f: closed availability cannot become bookable ----
+console.log('\n[stage 4f] closed availability');
+const closedSlots = SEED.tee_time_slots.filter((s) => s.availabilityState === 'closed');
+for (const s of closedSlots) {
+  assert(s.status === 'closed' && s.bookable === false, `closed slot ${s.id}: status closed + bookable false`, { slotId: s.id });
+  assert(isSlotBookable(s.status, s.bookedCount, s.capacity) === false, `closed slot ${s.id}: pure core says NOT bookable`, { slotId: s.id });
+  assert(isSlotBookable('closed', 0, s.capacity) === false, `closed slot ${s.id}: remains unbookable even at zero occupancy`, { slotId: s.id });
+}
+
+// ---- Stage 4g: course aliases resolve to canonical; unmapped/ambiguous rejected ----
+console.log('\n[stage 4g] course alias resolution (consume Lane A)');
+const aliasMap = new Map();
+let aliasAmbiguous = false;
+for (const a of SEED.course_aliases.accepted) {
+  if (aliasMap.has(a.laneAAlias) && aliasMap.get(a.laneAAlias) !== a.canonicalCourseId) aliasAmbiguous = true;
+  aliasMap.set(a.laneAAlias, a.canonicalCourseId);
+}
+assert(!aliasAmbiguous, 'course aliases: no alias maps to two canonical ids (unambiguous)');
+const resolveAlias = (alias) => (typeof alias === 'string' && aliasMap.has(alias)) ? aliasMap.get(alias) : null;
+for (const a of SEED.course_aliases.accepted) {
+  assert(courseById.has(a.canonicalCourseId), `alias '${a.laneAAlias}' → canonical ${a.canonicalCourseId} exists`, { alias: a.laneAAlias });
+  assert(resolveAlias(a.laneAAlias) === a.canonicalCourseId, `alias '${a.laneAAlias}' resolves to canonical`, { alias: a.laneAAlias });
+}
+for (const r of SEED.course_aliases.rejected_examples) assert(resolveAlias(r.laneAAlias) === null, `unmapped/ambiguous alias '${r.laneAAlias}' rejected (${r.reason})`, { alias: r.laneAAlias });
+assert(SEED.course_aliases.consumesLaneA?.commit === '53f7238c684adb6d8ba948033caaefa9891c487b', 'course aliases: consumes pinned Lane A projection commit');
+assert(SEED.course_aliases.consumesLaneA?.manifestSha256 === '6ce4bb62406b3f4d9e7be248bf98122eb49930b42a5a811bbf817c8f3a74408f', 'course aliases: consumes pinned Lane A manifest SHA');
+
+// ---- Stage 4: portal-media authority (owner/version/paths/hash/type/visibility/consent/moderation) ----
+console.log('\n[stage 4] portal-media authority');
 const SUPPORTED_MEDIA = new Set(['image/jpeg', 'image/png', 'image/webp', 'video/mp4']);
+const uidHasAuthority = (uid, type) => (AR.byUid[uid] || []).includes(type);
 for (const m of SEED.portal_media) {
   assert(SUPPORTED_MEDIA.has(m.type), `media ${m.assetId}: supported type (${m.type})`, { assetId: m.assetId });
-  assert(courseById.has(m.ownerCourseId), `media ${m.assetId}: resolves to a declared owner course`, { assetId: m.assetId });
-  assert(!/^https?:\/\//i.test(m.ref) && m.ref.startsWith('test-assets/'),
-    `media ${m.assetId}: test-safe local reference, no production URL`, { assetId: m.assetId });
+  assert(!!m.versionId, `media ${m.assetId}: has versionId`, { assetId: m.assetId });
+  assert(!!m.ownerAuthority && courseById.has(m.ownerAuthority.courseId) && uidHasAuthority(m.ownerAuthority.uid, m.ownerAuthority.type),
+    `media ${m.assetId}: owner authority resolves (${m.ownerAuthority?.uid} holds ${m.ownerAuthority?.type} over ${m.ownerAuthority?.courseId})`, { assetId: m.assetId });
+  assert(typeof m.sourcePath === 'string' && m.sourcePath.startsWith('assets/'), `media ${m.assetId}: verified source path under assets/`, { assetId: m.assetId });
+  assert(typeof m.targetPath === 'string' && m.targetPath.startsWith('fixtures/'), `media ${m.assetId}: emulator target path under fixtures/`, { assetId: m.assetId });
+  assert(/^[0-9a-f]{64}$/.test(m.sha256 || ''), `media ${m.assetId}: 64-hex sha256 present`, { assetId: m.assetId });
   assert(typeof m.sizeBytes === 'number' && m.sizeBytes > 0, `media ${m.assetId}: size metadata present`, { assetId: m.assetId });
+  assert(m.visibility === 'public' || m.visibility === 'private', `media ${m.assetId}: explicit visibility`, { assetId: m.assetId });
+  assert(m.consent === 'synthetic_fixture_consent', `media ${m.assetId}: synthetic consent provenance`, { assetId: m.assetId });
+  assert(m.moderation?.provenance === 'fixture', `media ${m.assetId}: fixture moderation provenance`, { assetId: m.assetId });
+  assert(m.bytesPresent === true, `media ${m.assetId}: bytes present + verifiable`, { assetId: m.assetId });
+  assert(!/^https?:\/\//i.test(m.sourcePath) && !/^https?:\/\//i.test(m.targetPath), `media ${m.assetId}: no production URL`, { assetId: m.assetId });
+}
+for (const e of (SEED.excluded_media || [])) {
+  assert(e.bytesPresent === false, `excluded media ${e.assetId}: marked bytes-not-present`, { assetId: e.assetId });
+  assert(!mediaById.has(e.assetId), `excluded media ${e.assetId}: NOT present in seeded portal_media`, { assetId: e.assetId });
 }
 for (const c of SEED.courses) {
   assert(mediaById.has(c.heroAsset), `course ${c.courseId}: declared heroAsset resolves to a media record`, { courseId: c.courseId });
@@ -195,17 +317,25 @@ for (const c of SEED.courses) {
 // ---- Stage 5: counts / invariants / financial + God-Mode + zero-V1 scans ----
 console.log('\n[stage 5] counts, invariants, and forbidden-content scans');
 const actualCounts = {
+  members: SEED.members.length,
+  profiles: SEED.profiles.length,
+  profiles_public: SEED.profiles.filter((p) => p.visibility === 'public').length,
+  profiles_private: SEED.profiles.filter((p) => p.visibility === 'private').length,
   admin_users: SEED.personas.admin_users.length,
   b2b_partners: SEED.personas.b2b_partners.length,
   players: SEED.personas.players.length,
   courses: SEED.courses.length,
+  course_aliases_accepted: SEED.course_aliases.accepted.length,
   course_operators: SEED.course_operators.length,
   tee_time_slots: SEED.tee_time_slots.length,
+  tee_time_slots_closed: SEED.tee_time_slots.filter((s) => s.availabilityState === 'closed').length,
   bookings: SEED.bookings.length,
   booking_messages: SEED.booking_messages.length,
   booking_audit: SEED.booking_audit.length,
   enterprise_staff: SEED.enterprise_staff.length,
   portal_media: SEED.portal_media.length,
+  excluded_media: (SEED.excluded_media || []).length,
+  negative_authority: SEED.personas.admin_users.filter((a) => a.authorityNegative).length + SEED.personas.b2b_partners.filter((p) => p.authorityNegative).length,
 };
 for (const [k, v] of Object.entries(SEED.expected.counts)) {
   assert(actualCounts[k] === v, `count ${k}: expected ${v}, actual ${actualCounts[k]}`, { collection: k });
@@ -218,11 +348,13 @@ const STATUS = new Set(['pending', 'confirmed', 'rejected', 'cancelled']);
 assert(SEED.bookings.every((b) => STATUS.has(b.status)), 'invariant: every booking.status ∈ pending|confirmed|rejected|cancelled');
 assert(SEED.booking_messages.every((m) => bookingById.has(m.bookingId)), 'invariant: every booking message resolves to a booking');
 assert(SEED.booking_audit.every((a) => bookingById.has(a.bookingId)), 'invariant: every audit row resolves to a booking');
-assert(SEED.portal_media.every((m) => courseById.has(m.ownerCourseId)), 'invariant: every media owner resolves to a course');
+assert(SEED.portal_media.every((m) => courseById.has(m.ownerAuthority.courseId)), 'invariant: every media owner authority resolves to a course');
 
 // Forbidden-content scans over the seeded DATA only (not the manifest's self-describing
 // documentation fields, which legitimately name the tokens they promise are absent).
 const blob = JSON.stringify({
+  members: SEED.members,
+  profiles: SEED.profiles,
   personas: SEED.personas,
   courses: SEED.courses,
   course_operators: SEED.course_operators,
@@ -232,6 +364,7 @@ const blob = JSON.stringify({
   booking_audit: SEED.booking_audit,
   enterprise_staff: SEED.enterprise_staff,
   portal_media: SEED.portal_media,
+  excluded_media: SEED.excluded_media,
 });
 const FINANCIAL = /"(priceChips|price|amount|hold|escrow|settlement|payout|refund|balance)"\s*:/;
 assert(!FINANCIAL.test(blob), 'scan: no financial field anywhere (strictly non-financial booking)');

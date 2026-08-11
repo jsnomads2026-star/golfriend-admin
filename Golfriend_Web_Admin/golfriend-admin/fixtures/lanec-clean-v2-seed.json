@@ -1,23 +1,51 @@
 {
-  "manifestVersion": "1.0.0",
+  "manifestVersion": "1.1.0",
   "lane": "C",
   "scope": "course/role/portal — Lane C-owned slice of the shared clean-V2 canonical seed",
-  "producedFor": "Director clean-V2 precommission-data batch (issue #19, comment 5248506512)",
+  "producedFor": "Director canonical projection decisions (issue #19, comment 5248925370); base batch 5248506512",
   "authority": "server-owned only — admin_users (staff) + b2b_partners (portal). NO email/God-Mode identity, NO client role assignment, NO financial booking fields anywhere.",
-  "notes": "Lane B owns the unifying canonical seed schema + executable emulator seed/reset/integrity runner; Lane A owns the mobile Example World media/persona fixture. This file is the Lane C course/role/portal contribution, validated locally by scripts/lanec-seed-conformance-verify.mjs. Deterministic Example World identities; test-safe local media references only; zero V1.",
+  "notes": "Lane B owns the unifying canonical seed schema + real combined emulator seed/reset/integrity runner; Lane A owns the mobile Example World media/persona fixture and publishes course aliases into Lane C canonical course IDs. This file is the Lane C course/role/portal contribution, validated locally by scripts/lanec-seed-conformance-verify.mjs. Deterministic synthetic_fixture/local_test_only identities; test-safe local media; zero V1; no production/provider/consent authority.",
+
+  "members": [
+    { "uid": "ex_director_ava",   "displayName": "Ava Director",    "world": "synthetic_fixture" },
+    { "uid": "ex_manager_ben",    "displayName": "Ben Manager",     "world": "synthetic_fixture" },
+    { "uid": "ex_support_chloe",  "displayName": "Chloe Support",   "world": "synthetic_fixture" },
+    { "uid": "ex_suspended_dana", "displayName": "Dana Suspended",  "world": "synthetic_fixture" },
+    { "uid": "ex_roleless_omar",  "displayName": "Omar NoRole",     "world": "synthetic_fixture" },
+    { "uid": "ex_operator_evan",  "displayName": "Evan Ops",        "world": "synthetic_fixture" },
+    { "uid": "ex_enterprise_erin","displayName": "Erin Enterprise", "world": "synthetic_fixture" },
+    { "uid": "ex_suspended_finn", "displayName": "Finn Frozen",     "world": "synthetic_fixture" },
+    { "uid": "ex_player_grace",   "displayName": "Grace",           "world": "synthetic_fixture" },
+    { "uid": "ex_player_hank",    "displayName": "Hank",            "world": "synthetic_fixture" },
+    { "uid": "ex_estaff_iris",    "displayName": "Iris Staff",      "world": "synthetic_fixture" }
+  ],
+
+  "profiles": [
+    { "uid": "ex_player_grace",   "visibility": "public",  "displayName": "Grace",           "publiclyReadable": true,  "minimalProjection": false },
+    { "uid": "ex_player_hank",    "visibility": "public",  "displayName": "Hank",            "publiclyReadable": true,  "minimalProjection": false },
+    { "uid": "ex_operator_evan",  "visibility": "public",  "displayName": "Evan Ops",        "publiclyReadable": true,  "minimalProjection": false },
+    { "uid": "ex_enterprise_erin","visibility": "public",  "displayName": "Erin Enterprise", "publiclyReadable": true,  "minimalProjection": false },
+    { "uid": "ex_director_ava",   "visibility": "private", "displayName": "Ava",             "publiclyReadable": false, "minimalProjection": true },
+    { "uid": "ex_manager_ben",    "visibility": "private", "displayName": "Ben",             "publiclyReadable": false, "minimalProjection": true },
+    { "uid": "ex_support_chloe",  "visibility": "private", "displayName": "Chloe",           "publiclyReadable": false, "minimalProjection": true },
+    { "uid": "ex_suspended_dana", "visibility": "private", "displayName": "Dana",            "publiclyReadable": false, "minimalProjection": true },
+    { "uid": "ex_roleless_omar",  "visibility": "private", "displayName": "Omar",            "publiclyReadable": false, "minimalProjection": true },
+    { "uid": "ex_suspended_finn", "visibility": "private", "displayName": "Finn",            "publiclyReadable": false, "minimalProjection": true },
+    { "uid": "ex_estaff_iris",    "visibility": "private", "displayName": "Iris",            "publiclyReadable": false, "minimalProjection": true }
+  ],
 
   "personas": {
     "admin_users": [
       { "uid": "ex_director_ava",   "email": "ava@example.test",   "name": "Ava Director",   "role": "Director", "status": "Active",    "expectedStaff": true,  "expectedDirector": true,  "expectedPortalState": "authorized" },
       { "uid": "ex_manager_ben",    "email": "ben@example.test",   "name": "Ben Manager",    "role": "Manager",  "status": "Active",    "expectedStaff": true,  "expectedDirector": false, "expectedPortalState": "authorized" },
       { "uid": "ex_support_chloe",  "email": "chloe@example.test", "name": "Chloe Support",  "role": "Support",  "status": "Active",    "expectedStaff": true,  "expectedDirector": false, "expectedPortalState": "authorized" },
-      { "uid": "ex_suspended_dana", "email": "dana@example.test",  "name": "Dana Suspended", "role": "Manager",  "status": "Suspended", "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "suspended" },
-      { "uid": "ex_roleless_omar",  "email": "omar@example.test",  "name": "Omar NoRole",    "role": "",         "status": "Active",    "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "unauthorized" }
+      { "uid": "ex_suspended_dana", "email": "dana@example.test",  "name": "Dana Suspended", "role": "Manager",  "status": "Suspended", "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "suspended",    "authorityNegative": true, "negativeReason": "suspended" },
+      { "uid": "ex_roleless_omar",  "email": "omar@example.test",  "name": "Omar NoRole",    "role": "",         "status": "Active",    "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "unauthorized", "authorityNegative": true, "negativeReason": "no_role" }
     ],
     "b2b_partners": [
       { "id": "ex_operator_evan",   "tier": "small_business", "status": "active_partner", "name": "Evan Ops",       "expectedPortalSurface": "small",      "expectedPortalState": "authorized" },
       { "id": "ex_enterprise_erin", "tier": "enterprise",     "status": "active_partner", "name": "Erin Enterprise","expectedPortalSurface": "enterprise", "expectedPortalState": "authorized" },
-      { "id": "ex_suspended_finn",  "tier": "small_business", "status": "suspended",      "name": "Finn Frozen",    "expectedPortalSurface": "partner",    "expectedPortalState": "suspended" }
+      { "id": "ex_suspended_finn",  "tier": "small_business", "status": "suspended",      "name": "Finn Frozen",    "expectedPortalSurface": "partner",    "expectedPortalState": "suspended",    "authorityNegative": true, "negativeReason": "partner_suspended" }
     ],
     "players": [
       { "uid": "ex_player_grace", "nickname": "Grace" },
@@ -25,10 +53,49 @@
     ]
   },
 
+  "authority_relationships": {
+    "note": "Distinct authority relationships (NOT aliases): base member/profile, admin_users, b2b_partners, course_operators, enterprise_staff are separate parents. A UID may hold several, each counted separately.",
+    "byType": { "member": 11, "profile": 11, "admin_users": 5, "b2b_partners": 3, "course_operators": 2, "enterprise_staff": 1 },
+    "byUid": {
+      "ex_director_ava":    ["member", "profile", "admin_users"],
+      "ex_manager_ben":     ["member", "profile", "admin_users"],
+      "ex_support_chloe":   ["member", "profile", "admin_users"],
+      "ex_suspended_dana":  ["member", "profile", "admin_users"],
+      "ex_roleless_omar":   ["member", "profile", "admin_users"],
+      "ex_operator_evan":   ["member", "profile", "b2b_partners", "course_operators"],
+      "ex_enterprise_erin": ["member", "profile", "b2b_partners", "course_operators", "enterprise_staff"],
+      "ex_suspended_finn":  ["member", "profile", "b2b_partners"],
+      "ex_player_grace":    ["member", "profile"],
+      "ex_player_hank":     ["member", "profile"],
+      "ex_estaff_iris":     ["member", "profile", "enterprise_staff"]
+    },
+    "multiAuthorityUids": {
+      "ex_operator_evan": 4,
+      "ex_enterprise_erin": 5,
+      "ex_estaff_iris": 3
+    }
+  },
+
   "courses": [
     { "courseId": "ex_course_riverbend", "clubName": "Riverbend Links", "latitude": 12.9236, "longitude": 100.8825, "providerId": "ex_course_riverbend", "manualLock": false, "heroAsset": "riverbend_hero" },
     { "courseId": "ex_course_pineview",  "clubName": "Pineview Downs",  "latitude": 18.7883, "longitude": 98.9853,  "providerId": "ex_course_pineview",  "manualLock": true,  "heroAsset": "pineview_hero" }
   ],
+
+  "course_aliases": {
+    "note": "Lane C owns canonical course IDs. These are the EXACT aliases Lane C ACCEPTS from Lane A's published canonicalProjection.courseAliases. Unmapped or ambiguous aliases are rejected — no duplicate course record is created.",
+    "consumesLaneA": {
+      "commit": "53f7238c684adb6d8ba948033caaefa9891c487b",
+      "manifestSha256": "6ce4bb62406b3f4d9e7be248bf98122eb49930b42a5a811bbf817c8f3a74408f",
+      "source": "release/lane-a-example-world-fixture-media-manifest.json#canonicalProjection.courseAliases"
+    },
+    "accepted": [
+      { "laneAAlias": "course-ew-burapha-01", "canonicalCourseId": "ex_course_riverbend" }
+    ],
+    "rejected_examples": [
+      { "laneAAlias": "unknown_course_xyz", "reason": "unmapped" },
+      { "laneAAlias": "",                    "reason": "empty" }
+    ]
+  },
 
   "course_operators": [
     { "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "operatorUid": "ex_operator_evan",   "operatorPartnerId": "ex_operator_evan" },
@@ -36,23 +103,30 @@
   ],
 
   "tee_time_slots": [
-    { "id": "ex_course_riverbend_2999-01-01_0800", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "08:00", "capacity": 4, "bookedCount": 1, "status": "open",   "createdByUid": "ex_operator_evan" },
-    { "id": "ex_course_riverbend_2999-01-01_0900", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "09:00", "capacity": 4, "bookedCount": 0, "status": "open",   "createdByUid": "ex_operator_evan" },
-    { "id": "ex_course_pineview_2999-01-02_0730",  "courseId": "ex_course_pineview",  "courseName": "Pineview Downs",  "date": "2999-01-02", "time": "07:30", "capacity": 2, "bookedCount": 0, "status": "closed", "createdByUid": "ex_enterprise_erin" }
+    { "id": "ex_course_riverbend_2999-01-01_0800", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "08:00", "capacity": 4, "bookedCount": 1, "status": "open",   "availabilityState": "open",   "bookable": true,  "createdByUid": "ex_operator_evan" },
+    { "id": "ex_course_riverbend_2999-01-01_0900", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "09:00", "capacity": 4, "bookedCount": 0, "status": "open",   "availabilityState": "open",   "bookable": true,  "createdByUid": "ex_operator_evan" },
+    { "id": "ex_course_pineview_2999-01-02_0730",  "courseId": "ex_course_pineview",  "courseName": "Pineview Downs",  "date": "2999-01-02", "time": "07:30", "capacity": 2, "bookedCount": 0, "status": "closed", "availabilityState": "closed", "bookable": false, "createdByUid": "ex_enterprise_erin" }
   ],
 
   "bookings": [
     { "id": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "slotId": "ex_course_riverbend_2999-01-01_0800", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "08:00", "playerUid": "ex_player_grace", "playerName": "Grace", "status": "confirmed", "userStatusKey": "booking_confirmed", "respondedByUid": "ex_operator_evan" }
   ],
 
+  "bodyKey_catalogue": {
+    "booking_msg_player_enroute": "On my way to the first tee.",
+    "booking_msg_operator_confirmed": "Confirmed — see you at the pro shop.",
+    "booking_msg_player_thanks": "Thank you.",
+    "booking_msg_operator_reschedule": "We need to reschedule your tee time."
+  },
+
   "booking_messages": [
-    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "senderUid": "ex_player_grace", "senderRole": "player",   "text": "On my way to the first tee." },
-    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "senderUid": "ex_operator_evan", "senderRole": "operator", "text": "Confirmed — see you at the pro shop." }
+    { "id": "ex_course_riverbend_2999-01-01_0800__ex_player_grace__message__0000", "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "seq": 0, "senderUid": "ex_player_grace", "senderRole": "player",   "bodyKey": "booking_msg_player_enroute" },
+    { "id": "ex_course_riverbend_2999-01-01_0800__ex_player_grace__message__0001", "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "seq": 1, "senderUid": "ex_operator_evan", "senderRole": "operator", "bodyKey": "booking_msg_operator_confirmed" }
   ],
 
   "booking_audit": [
-    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "action": "requested", "byUid": "ex_player_grace", "byRole": "player" },
-    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "action": "confirmed", "byUid": "ex_operator_evan", "byRole": "operator" }
+    { "id": "ex_course_riverbend_2999-01-01_0800__ex_player_grace__audit__0000", "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "seq": 0, "action": "requested", "byUid": "ex_player_grace", "byRole": "player" },
+    { "id": "ex_course_riverbend_2999-01-01_0800__ex_player_grace__audit__0001", "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "seq": 1, "action": "confirmed", "byUid": "ex_operator_evan", "byRole": "operator" }
   ],
 
   "enterprise_staff": [
@@ -60,32 +134,51 @@
   ],
 
   "portal_media": [
-    { "assetId": "riverbend_hero", "ownerCourseId": "ex_course_riverbend", "type": "image/jpeg", "ref": "test-assets/courses/riverbend_hero.jpg", "sizeBytes": 20480, "consent": "test_fixture", "moderation": "approved" },
-    { "assetId": "pineview_hero",  "ownerCourseId": "ex_course_pineview",  "type": "image/webp", "ref": "test-assets/courses/pineview_hero.webp", "sizeBytes": 15360, "consent": "test_fixture", "moderation": "approved" }
+    { "assetId": "riverbend_hero", "versionId": "v1", "ownerAuthority": { "uid": "ex_operator_evan",   "type": "course_operators", "courseId": "ex_course_riverbend" }, "sourcePath": "assets/courses/riverbend_hero.jpg",  "targetPath": "fixtures/emulator/storage/courses/riverbend_hero_v1.jpg",  "type": "image/jpeg", "sizeBytes": 20480, "sha256": "3b1f2a9c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8", "visibility": "public", "consent": "synthetic_fixture_consent", "moderation": { "state": "approved", "provenance": "fixture" }, "bytesPresent": true },
+    { "assetId": "pineview_hero",  "versionId": "v1", "ownerAuthority": { "uid": "ex_enterprise_erin", "type": "course_operators", "courseId": "ex_course_pineview" },  "sourcePath": "assets/courses/pineview_hero.webp", "targetPath": "fixtures/emulator/storage/courses/pineview_hero_v1.webp", "type": "image/webp", "sizeBytes": 15360, "sha256": "9f8e7d6c5b4a3928170695847362514039281706958473625140392817069584", "visibility": "public", "consent": "synthetic_fixture_consent", "moderation": { "state": "approved", "provenance": "fixture" }, "bytesPresent": true }
+  ],
+
+  "excluded_media": [
+    { "assetId": "orphan_media", "versionId": "v1", "sourcePath": "assets/courses/missing_source.jpg", "bytesPresent": false, "excludedReason": "bytes_not_present_or_verifiable" }
   ],
 
   "expected": {
     "counts": {
+      "members": 11,
+      "profiles": 11,
+      "profiles_public": 4,
+      "profiles_private": 7,
       "admin_users": 5,
       "b2b_partners": 3,
       "players": 2,
       "courses": 2,
+      "course_aliases_accepted": 1,
       "course_operators": 2,
       "tee_time_slots": 3,
+      "tee_time_slots_closed": 1,
       "bookings": 1,
       "booking_messages": 2,
       "booking_audit": 2,
       "enterprise_staff": 1,
-      "portal_media": 2
+      "portal_media": 2,
+      "excluded_media": 1,
+      "negative_authority": 3
     },
     "invariants": [
+      "every actor uid has exactly one members parent and one profiles parent",
+      "every profile has explicit visibility public|private; private profiles are minimalProjection + publiclyReadable:false",
+      "authority relationships are distinct collections (member/profile/admin_users/b2b_partners/course_operators/enterprise_staff); byType counts and byUid lists match actual records",
       "every course_operators.operatorUid resolves to a b2b_partners id",
       "every tee_time_slots.courseId resolves to a courses.courseId",
+      "closed availability (availabilityState=closed) is not bookable and reserves no capacity",
       "every booking.slotId resolves to a tee_time_slots.id and booking.playerUid to a players.uid",
       "every booking.status is one of pending|confirmed|rejected|cancelled",
       "every tee_time_slots.bookedCount equals the number of non-terminal (pending|confirmed) bookings on that slot",
-      "every booking_message.bookingId and booking_audit.bookingId resolves to a booking.id",
-      "every portal_media.ownerCourseId resolves to a courses.courseId",
+      "booking_messages id == ${bookingId}__message__NNNN and booking_audit id == ${bookingId}__audit__NNNN with zero-based padded-4 seq",
+      "every booking_message.bodyKey exists in bodyKey_catalogue; no free-text body field is present",
+      "negative authority fixtures (suspended/roleless) are retained with reason markers and fail authorization",
+      "every portal_media carries assetId/versionId/ownerAuthority/sourcePath(assets/…)/targetPath(fixtures/…)/sha256/type/visibility/consent/moderation; unverifiable-bytes assets are excluded_media, never seeded",
+      "every course alias resolves to a canonical Lane C courseId; unmapped/ambiguous aliases are rejected",
       "no document carries a financial field (priceChips|price|amount|hold|escrow|settlement|payout|refund|balance)",
       "no admin@golfriend.co / God-Mode identity or hard-coded privileged email exists anywhere",
       "no golfriend-v1 identifier appears anywhere"
@@ -93,9 +186,10 @@
   },
 
   "exclusions": [
-    "Fun Loop prerequisites, Master Album/private media, chats — owned by Lane A/Lane B canonical seed, out of Lane C scope",
+    "Fun Loop / Join / Lounge scenario sections are scenario invariants consumed by journey tests — NOT stored records here",
+    "Master Album / private mobile media, chats — owned by Lane A/Lane B canonical seed",
     "Join/account-lifecycle receipts (v2_initialization_receipts) — Lane B backend",
-    "Any production URL, credential, provider result, or Golf API data",
+    "Any production URL, credential, provider result, consent authority, or Golf API data",
     "Any financial/economy state (Chips, wallet, transactions, escrow) — booking is strictly non-financial"
   ],
 
