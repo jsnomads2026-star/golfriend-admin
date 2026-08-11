@@ -85,7 +85,10 @@ export default function CourseSeeder() {
   const [apiSearchId, setApiSearchId] = useState("");
   const [scanRadius, setScanRadius] = useState("50"); // 🔥 DEFAULT 50KM REGIONAL SCAN
   const [isMassRescuing, setIsMassRescuing] = useState(false);
-  const GOLF_API_KEY = "442abb61-136f-4fd0-b812-e38aac503266"; // 🔥 FIX: Restored the missing '61'
+  // 🔒 Golf-API credentials no longer live in the browser. Provider fetches run
+  // server-side via the "Course Sync" console (syncCoursesFromProvider). The
+  // client Golf-API paths below are disabled and redirect there.
+  const SERVER_SYNC_NOTICE = "Golf-API sync now runs server-side. Use the '🛰️ Course Sync' tab (credentials stay on the server).";
 
   const addLog = (message: string) => {
     setLogs((prev) => [...prev, message]);
@@ -93,7 +96,12 @@ export default function CourseSeeder() {
 
   // 🔥 THE TRUE AUTO-HEALER (Option A)
   const healBrokenVault = async () => {
-    const brokenCourses = securedCourses.filter((c: any) => 
+    // 🔒 Disabled: healing now runs server-side (Course Sync). No client key.
+    addLog(`\n🔒 ${SERVER_SYNC_NOTICE}`);
+    alert(SERVER_SYNC_NOTICE);
+    return;
+    // eslint-disable-next-line no-unreachable
+    const brokenCourses = securedCourses.filter((c: any) =>
       c.requiresManualGPS !== true && // 🔥 Skip quarantined courses
       (!c.latitude || c.latitude === 0 || !c.lat || c.lat === 0)
     );
@@ -105,7 +113,7 @@ export default function CourseSeeder() {
     setIsHealing(true);
     addLog(`\n🛠️ INITIATING MASS AUTO-HEAL: Targeting ${brokenCourses.length} broken courses...`);
 
-    const headers = { 'Authorization': 'Bearer ' + GOLF_API_KEY };
+    const headers = { 'Authorization': 'Bearer disabled' };
     let fixedCount = 0;
 
     for (let i = 0; i < brokenCourses.length; i++) {
@@ -201,9 +209,15 @@ export default function CourseSeeder() {
 
   // 🔥 THE GOOGLE MAPS MASS AUTO-RESCUE ENGINE
   const executeMassRescue = async () => {
+    // 🔒 Disabled: geocoding ran client-side with an exposed Google Maps key.
+    // Provider/geocode rescue must run server-side; use the Course Sync console.
+    addLog(`\n🔒 ${SERVER_SYNC_NOTICE}`);
+    alert(SERVER_SYNC_NOTICE);
+    return;
+    // eslint-disable-next-line no-unreachable
     const quarantined = securedCourses.filter((c: any) => c.requiresManualGPS === true);
     if (quarantined.length === 0) return addLog("✅ Quarantine Ward is empty.");
-    
+
     setIsMassRescuing(true);
     addLog(`\n🚁 INITIATING MASS AUTO-RESCUE: Targeting ${quarantined.length} quarantined courses...`);
 
@@ -216,7 +230,7 @@ export default function CourseSeeder() {
       try {
         addLog(`   🚑 Rescuing [${i + 1}/${quarantined.length}]: ${c.clubName || c.name}...`);
         
-        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}&key=AIzaSyAl9S1rKMJXm5m-7L4zFlztcZWjGhINBgM`);
+        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}`);
         const data = await res.json();
 
         if (data.status === "OK" && data.results.length > 0) {
@@ -254,6 +268,11 @@ export default function CourseSeeder() {
   // 🔥 THE MASS REGIONAL FETCH ENGINE (RADIUS SCANNER)
   // 🔥 THE MASS REGIONAL FETCH ENGINE (RADIUS SCANNER)
   const fetchLiveCourse = async () => {
+    // 🔒 Disabled: provider fetches run server-side (Course Sync). No client key.
+    addLog(`\n🔒 ${SERVER_SYNC_NOTICE}`);
+    alert(SERVER_SYNC_NOTICE);
+    return;
+    // eslint-disable-next-line no-unreachable
     if (!apiSearchId || !apiSearchId.includes(',')) {
       return addLog("❌ Please enter valid GPS coordinates (e.g., 12.9236, 100.8825 for Pattaya).");
     }
@@ -264,7 +283,7 @@ export default function CourseSeeder() {
     addLog(`\n🎯 REGIONAL RADAR LOCKED: Sweeping ${radius}km radius around [Lat: ${lat}, Lng: ${lng}]`);
     
     try {
-      const headers = { 'Authorization': 'Bearer ' + GOLF_API_KEY };
+      const headers = { 'Authorization': 'Bearer disabled' };
 
       // --- PING 1: The Regional Club Extraction ---
       addLog(`📡 PING: Executing Mass Regional Fetch...`);

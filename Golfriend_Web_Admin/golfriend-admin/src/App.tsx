@@ -17,6 +17,7 @@ import ManualOverride from './components/admin/ManualOverride';
 import FiatLedger from './components/admin/FiatLedger';
 import CourseSeeder from './components/CourseSeeder';
 import TeeTimeInventory from './components/admin/TeeTimeInventory'; // ⛳ Tee-time inventory management
+import CourseSyncConsole from './components/admin/CourseSyncConsole'; // 🛰️ Server-side Golf-API sync
 import CourseTeeSheet from './components/B2B/CourseTeeSheet'; // 🔥 New B2B Liability Engine
 import TournamentManager from './components/admin/TournamentManager'; 
 import TournamentTV from './components/admin/TournamentTV'; 
@@ -77,7 +78,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [authError, setAuthError] = useState('');
 
   // 🔥 Added 'teesheet' to the allowed state literal
-  const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
+  const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
 
   // 🔥 CORE AUTHENTICATION LISTENER
   useEffect(() => {
@@ -265,6 +266,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         <div style={styles.navGrid}>
           <button style={{...styles.navBtn, ...(activeTab === 'courses' ? styles.activeBtn : {})}} onClick={() => setActiveTab('courses')}>⛳ Core Seeder</button>
           <button style={{...styles.navBtn, ...(activeTab === 'teetimes' ? styles.activeBtn : {})}} onClick={() => setActiveTab('teetimes')}>🕐 Tee-Time Inventory</button>
+          <button style={{...styles.navBtn, ...(activeTab === 'coursesync' ? styles.activeBtn : {})}} onClick={() => setActiveTab('coursesync')}>🛰️ Course Sync</button>
           <button style={{...styles.navBtn, ...(activeTab === 'teesheet' ? styles.activeBtn : {})}} onClick={() => setActiveTab('teesheet')}>📋 Tee Sheet</button>
           <button style={{...styles.navBtn, ...(activeTab === 'tournaments' ? styles.activeBtn : {})}} onClick={() => setActiveTab('tournaments')}>🏆 Tournaments</button>
           <button style={{...styles.navBtn, ...(activeTab === 'genesis' ? styles.activeBtn : {})}} onClick={() => setActiveTab('genesis')}>📅 Event Genesis</button>
@@ -308,6 +310,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         {/* 🔥 RENDER THE ENGINE */}
         {activeTab === 'courses' && <CourseSeeder />}
         {activeTab === 'teetimes' && <TeeTimeInventory />}
+        {activeTab === 'coursesync' && <CourseSyncConsole />}
         {activeTab === 'teesheet' && <CourseTeeSheet />}
         {activeTab === 'tournaments' && <TournamentManager />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
