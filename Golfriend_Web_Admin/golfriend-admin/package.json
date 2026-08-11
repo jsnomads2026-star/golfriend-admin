@@ -10,6 +10,7 @@
     "gate:dead-route": "node scripts/dead-route-gate.mjs",
     "gate:v2": "node scripts/v2-mode-gate.mjs",
     "gate:a11y": "node scripts/portal-a11y-gate.mjs",
+    "gate:fnauth": "node scripts/functions-authority-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
@@ -18,7 +19,7 @@
     "verify:courseops": "node scripts/course-ops-journey-verify.mjs",
     "check:laneb": "node scripts/laneb-rules-contract-check.mjs",
     "precommission": "node scripts/precommission-evidence.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run gate:fnauth && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops",
     "lint": "eslint .",
     "preview": "vite preview"
   },

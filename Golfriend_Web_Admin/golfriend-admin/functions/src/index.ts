@@ -8,6 +8,7 @@ import Stripe from "stripe";
 import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
+import { isActiveStaff } from "./authority.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -1105,13 +1106,14 @@ export const syncCoursesFromProvider = onCall(
       throw new HttpsError('unauthenticated', 'You must be logged in.');
     }
     const callerUid = request.auth.uid;
-    const callerEmail = (request.auth.token?.email || "").toLowerCase();
 
-    // AUTHORIZATION: platform staff or God-Mode only.
+    // AUTHORIZATION: server-owned active platform staff ONLY, derived from the
+    // admin_users/{uid} document — the same authority as the approved portal
+    // role journey. No email break-glass / God-Mode / client role / env bypass.
+    // Fail-closed for missing, inactive, suspended or unauthorized staff records.
     const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-    const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
-    if (!isStaff && callerEmail !== 'admin@golfriend.co') {
-      throw new HttpsError('permission-denied', 'Only platform staff can run the course sync.');
+    if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
+      throw new HttpsError('permission-denied', 'Only active platform staff can run the course sync.');
     }
 
     const { mode, courseIds } = request.data || {};
