@@ -1,6 +1,6 @@
 {
-  "candidate_head": "1df39a9",
-  "generated_at": "2026-08-11T04:33:32.874Z",
+  "candidate_head": "967e3c8",
+  "generated_at": "2026-08-11T05:29:36.390Z",
   "algorithm": "sha256",
   "files": [
     {
@@ -105,8 +105,8 @@
     },
     {
       "file": "LANEC_LEDGER.json",
-      "sha256": "1dfa1955662d06b8a045b30efc77801fc43e61a37c4db5c2349c94f1123049f1",
-      "bytes": 8031
+      "sha256": "39308e68686dfafb883797bf5f8b6fff08ea5ee4857f3621ccd45ff460e87ccd",
+      "bytes": 8323
     },
     {
       "file": "LANEB_DEPENDENCY_PIN.json",
@@ -115,13 +115,13 @@
     },
     {
       "file": "fixtures/lanec-clean-v2-seed.json",
-      "sha256": "6099309ce9af882e3f4c5394be36ea63ae96f81a83677f69c186dc03d5269406",
-      "bytes": 16151
+      "sha256": "f0ef422b4aae1e6bd867362314ef95db436f58382e0228fdeadf816b35e237e5",
+      "bytes": 16288
     },
     {
       "file": "scripts/lanec-seed-conformance-verify.mjs",
-      "sha256": "cee44cf1d6d01d57c1efa5b27b6895e844ded1dfe4cc204ad6ece700d86c687f",
-      "bytes": 29014
+      "sha256": "a759d6106aebd8a9304dec60dd3c3ed6e0674c46d602c8a8aa1560d333c55c0f",
+      "bytes": 29941
     },
     {
       "file": "scripts/precommission-evidence.mjs",

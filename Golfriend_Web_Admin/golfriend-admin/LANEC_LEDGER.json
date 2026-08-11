@@ -2,11 +2,19 @@
   "lane": "C",
   "repo": "jsnomads2026-star/golfriend-admin",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "1df39a9",
-  "candidate_head_full": "1df39a958dc82244b879ac50f3d616db2fe66ae1",
+  "candidate_head": "967e3c8",
+  "candidate_head_full": "967e3c8181e1f5df8ebbf4345d6c3d9dc7af7a75",
   "accepted_gate_sha": "ca2d6db",
-  "generated_at": "2026-08-11T04:33:32.874Z",
+  "generated_at": "2026-08-11T05:29:36.390Z",
   "included_commits": [
+    {
+      "hash": "967e3c8",
+      "subject": "fix(laneC-media): exclude unverifiable portal-media bytes (Lane B BLOCKED_MEDIA_BYTES 5249119891)"
+    },
+    {
+      "hash": "6df4fb4",
+      "subject": "chore(laneC): refreeze after canonical projection extension (v1.1.0)"
+    },
     {
       "hash": "1df39a9",
       "subject": "feat(laneC-projection): lossless canonical projection extension (Director 5248925370)"
