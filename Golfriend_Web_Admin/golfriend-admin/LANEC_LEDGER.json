@@ -2,11 +2,27 @@
   "lane": "C",
   "repo": "jsnomads2026-star/golfriend-admin",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "8c3d510",
-  "candidate_head_full": "8c3d5102fb1f8a4d32004ce3caed6947716b4e69",
+  "candidate_head": "386182b",
+  "candidate_head_full": "386182bbf5f7860a18539571b0e8469b7b4dc24d",
   "accepted_gate_sha": "ca2d6db",
-  "generated_at": "2026-08-11T02:24:02.475Z",
+  "generated_at": "2026-08-11T02:50:26.419Z",
   "included_commits": [
+    {
+      "hash": "386182b",
+      "subject": "chore(laneC): drift re-verify Lane B pin c259a1c→db478ba (PASS 13/13)"
+    },
+    {
+      "hash": "67e9ea4",
+      "subject": "feat(laneC): Booking Audit viewer — completes the approved \"audit\" capability"
+    },
+    {
+      "hash": "2ee1bfe",
+      "subject": "chore(laneC): drift re-verify Lane B dependency pin 442afaa→c259a1c (PASS 13/13)"
+    },
+    {
+      "hash": "f24ed0d",
+      "subject": "chore(laneC): C Phase 2 candidate freeze + Phase 3 automated precommission"
+    },
     {
       "hash": "8c3d510",
       "subject": "feat(laneC): LUNCH SPRINT — course-ops commissioning journey + route-guard verify"

@@ -1,12 +1,12 @@
 {
-  "candidate_head": "8c3d510",
-  "generated_at": "2026-08-11T02:24:02.478Z",
+  "candidate_head": "386182b",
+  "generated_at": "2026-08-11T02:50:26.422Z",
   "algorithm": "sha256",
   "files": [
     {
       "file": "package.json",
-      "sha256": "62d8a6657e83f2b7ae5f5c9b9fa2df5bac9ed6d49badd7e34f754b65ddcdd599",
-      "bytes": 1890
+      "sha256": "40264cd39d04c2e7e1923ed1ddc2a13e227296c957b0eaae715fde6a4d15f223",
+      "bytes": 2022
     },
     {
       "file": ".firebaserc",
@@ -30,8 +30,8 @@
     },
     {
       "file": "src/App.tsx",
-      "sha256": "fd4fdbf25e7b66e1b2b10d7c01ec35a22d7acd0b4bad78bf3db01bb36f778561",
-      "bytes": 19116
+      "sha256": "e96a48095d5e498d3c2bc5f839f88e7c6afa3bd231e61e62855111ad3b7244b8",
+      "bytes": 19469
     },
     {
       "file": "src/firebaseConfig.ts",
@@ -49,14 +49,19 @@
       "bytes": 3552
     },
     {
+      "file": "src/components/admin/BookingAudit.tsx",
+      "sha256": "f08d5fed8ec9c36cdf7f6e2fd99fccf9f710ac54ce95234f8b2da0696715b5b3",
+      "bytes": 6426
+    },
+    {
       "file": "AUTHORITY_MANIFEST.md",
       "sha256": "044fb85e3832153d4eee50f6ad7d06f3a3597434998f8e4ebea7214a78bf5a6c",
       "bytes": 4329
     },
     {
       "file": "LANEB_RULES_HANDOFF.md",
-      "sha256": "577e6ea1729c4c9ec33c4aa1aa21d4622cdf93a677298db495d3591b14d91870",
-      "bytes": 17868
+      "sha256": "4f592ff91927d7cba35d309abe8901a1d41745a8563eeb784b47219a95c2d57a",
+      "bytes": 18293
     },
     {
       "file": "BLANK_PROJECT_MANIFEST.md",
@@ -85,8 +90,13 @@
     },
     {
       "file": "LANEC_LEDGER.json",
-      "sha256": "a20c8c13e8452327debfb9e8a641a4d981399d1fcea5c61a92f912835d0a7103",
-      "bytes": 5438
+      "sha256": "9b8fd6485d71cdc2fb60f6d9a6786eb46661c337a32d0f3c1a2b2f72d233824f",
+      "bytes": 5978
+    },
+    {
+      "file": "LANEB_DEPENDENCY_PIN.json",
+      "sha256": "48b7858b59d0900af27305404d3cfdfe9775c119a48d2ff6a9043a1339fb46ba",
+      "bytes": 1772
     }
   ]
 }

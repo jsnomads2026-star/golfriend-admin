@@ -1,7 +1,7 @@
 # Precommission Evidence — Lane C
 
-- **Candidate:** `feat/laneC-consolidated` @ `8c3d510`
-- **Generated:** 2026-08-11T02:32:41.718Z
+- **Candidate:** `feat/laneC-consolidated` @ `386182b`
+- **Generated:** 2026-08-11T02:50:27.303Z
 - **Automated controls:** 9/9 pass, 0 fail
 - **Manual/provider controls:** 6 BLOCKED (autoApproval:false)
 
