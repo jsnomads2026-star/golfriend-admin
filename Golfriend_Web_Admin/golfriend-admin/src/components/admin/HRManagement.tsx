@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export default function HRManagement() {
@@ -63,7 +63,15 @@ export default function HRManagement() {
       : "Restore this employee's access?";
       
     if (window.confirm(confirmMsg)) {
-      await updateDoc(doc(db, 'admin_users', uid), { status: newStatus });
+      // 🔒 SERVER-AUTHORITATIVE: staff access changes go through the
+      // Director-gated setEmployeeStatus Cloud Function, not a client write.
+      try {
+        const setEmployeeStatus = httpsCallable(getFunctions(), 'setEmployeeStatus');
+        const res: any = await setEmployeeStatus({ uid, status: newStatus });
+        if (!res?.data?.success) throw new Error('Status change was not accepted.');
+      } catch (error: any) {
+        alert('Failed to update access: ' + (error?.message || 'Unknown error'));
+      }
     }
   };
 

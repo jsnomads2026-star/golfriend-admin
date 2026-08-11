@@ -482,6 +482,57 @@ export const adminManagePartner = onCall({ memory: "256MiB" }, async (request) =
 });
 
 // ==========================================
+// 👔 HR STATUS (Server-Authoritative Staff Access Control)
+// ==========================================
+// Suspending/restoring a staff member changes their dashboard access — a role/
+// access grant that must not be client-written. Director-only; cannot suspend
+// self; target must be an existing staff record. Mirrors inviteEmployee's gate.
+export const setEmployeeStatus = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const { uid, status } = request.data || {};
+
+  if (!uid || typeof uid !== 'string') {
+    throw new HttpsError('invalid-argument', 'A target uid is required.');
+  }
+  if (status !== 'Active' && status !== 'Suspended') {
+    throw new HttpsError('invalid-argument', 'status must be Active or Suspended.');
+  }
+  if (uid === callerUid) {
+    throw new HttpsError('failed-precondition', 'You cannot change your own access status.');
+  }
+
+  try {
+    // MASTER GATE: only the Director may change staff access.
+    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
+    if (!callerDoc.exists || callerDoc.data()?.role !== 'Director') {
+      throw new HttpsError('permission-denied', 'Only the Director can change staff access.');
+    }
+
+    const targetRef = db.collection('admin_users').doc(uid);
+    const targetSnap = await targetRef.get();
+    if (!targetSnap.exists) {
+      throw new HttpsError('not-found', 'Staff member not found.');
+    }
+
+    await targetRef.set({
+      status,
+      statusChangedByUid: callerUid,
+      statusChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    logger.info(`👔 Staff ${uid} set to ${status} by ${callerUid}.`);
+    return { success: true, uid, status };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("👔 Staff status change failed:", error);
+    throw new HttpsError('internal', error.message || 'Staff status change failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1
