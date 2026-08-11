@@ -2,7 +2,8 @@
 // FILE: src/pages/B2BPartners.tsx (or src/components/B2B/B2BPartners.tsx)
 // ==========================================
 import React, { useState } from 'react';
-import { collection, query, where, getDocs, doc, getDoc, writeBatch, serverTimestamp, increment, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, orderBy, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 
 export default function B2BPartners() {
@@ -65,29 +66,20 @@ export default function B2BPartners() {
     setLoading(false);
   };
 
+  // 🔒 SERVER-AUTHORITATIVE: tier/wallet grants are settled by adminManagePartner
+  // (Director-gated, transactional, audited). The client never writes tier/chips.
+  const callPartner = (payload: any) => httpsCallable(getFunctions(), 'adminManagePartner')(payload);
+
   const handleUpgradeTier = async () => {
     if (!targetUser) return;
     setLoading(true);
     try {
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', targetUser.id);
-      const txRef = doc(collection(db, 'transactions'));
-
-      batch.update(userRef, { tier: 'commercial' });
-      batch.set(txRef, {
-        userId: targetUser.id,
-        title: 'Account Tier Upgrade: COMMERCIAL',
-        type: 'B2B_UPGRADE',
-        status: 'completed',
-        enforcedBy: 'ADMIN_WATCHTOWER',
-        createdAt: serverTimestamp()
-      });
-
-      await batch.commit();
+      const res: any = await callPartner({ action: 'upgradeTier', targetUid: targetUser.id });
+      if (!res?.data?.success) throw new Error('Upgrade was not accepted.');
       setMessage(`Success! Account upgraded to Commercial.`);
       setTargetUser({ ...targetUser, tier: 'commercial' });
-    } catch (error) {
-      setMessage('Failed to upgrade account tier.');
+    } catch (error: any) {
+      setMessage(error?.message || 'Failed to upgrade account tier.');
       console.error(error);
     }
     setLoading(false);
@@ -100,28 +92,14 @@ export default function B2BPartners() {
     if (!adjustmentMemo.trim()) return setMessage('A memo is required for CPA audit compliance.');
     setLoading(true);
     try {
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', targetUser.id);
-      const txRef = doc(collection(db, 'transactions'));
-
-      batch.update(userRef, { chips: increment(amount) });
-      batch.set(txRef, {
-        userId: targetUser.id,
-        title: `Admin Override: ${adjustmentMemo}`,
-        amount: amount,
-        type: amount > 0 ? 'ADMIN_REFUND' : 'ADMIN_DEDUCTION',
-        status: 'completed',
-        enforcedBy: 'ADMIN_WATCHTOWER',
-        createdAt: serverTimestamp()
-      });
-
-      await batch.commit();
-      setMessage(`Ledger adjusted by ${amount} chips.`);
-      setTargetUser({ ...targetUser, chips: (targetUser.chips || 0) + amount });
+      const res: any = await callPartner({ action: 'adjust', targetUid: targetUser.id, amount, memo: adjustmentMemo });
+      if (!res?.data?.success) throw new Error('Adjustment was not accepted.');
+      setMessage(`Ledger adjusted. New balance: ${res.data.chips} chips.`);
+      setTargetUser({ ...targetUser, chips: res.data.chips });
       setAdjustmentAmount('');
       setAdjustmentMemo('');
-    } catch (error) {
-      setMessage('Failed to adjust ledger.');
+    } catch (error: any) {
+      setMessage(error?.message || 'Failed to adjust ledger.');
       console.error(error);
     }
     setLoading(false);
@@ -133,26 +111,12 @@ export default function B2BPartners() {
     if (isNaN(amount) || amount <= 0) return setMessage('Enter a valid chip amount.');
     setLoading(true);
     try {
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', targetUser.id);
-      const txRef = doc(collection(db, 'transactions'));
-
-      batch.update(userRef, { chips: increment(amount) });
-      batch.set(txRef, {
-        userId: targetUser.id,
-        title: `Admin Mint: +${amount} Chips`,
-        amount: amount,
-        type: 'ADMIN_MINT',
-        status: 'completed',
-        enforcedBy: 'ADMIN_WATCHTOWER',
-        createdAt: serverTimestamp()
-      });
-
-      await batch.commit();
+      const res: any = await callPartner({ action: 'mint', targetUid: targetUser.id, amount });
+      if (!res?.data?.success) throw new Error('Mint was not accepted.');
       setMessage(`Successfully minted ${amount} chips.`);
-      setTargetUser({ ...targetUser, chips: (targetUser.chips || 0) + amount });
-    } catch (error) {
-      setMessage('Failed to mint chips.');
+      setTargetUser({ ...targetUser, chips: res.data.chips });
+    } catch (error: any) {
+      setMessage(error?.message || 'Failed to mint chips.');
       console.error(error);
     }
     setLoading(false);

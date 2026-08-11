@@ -375,6 +375,113 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// 🤝 B2B PARTNER COMMAND (Server-Authoritative Tier + Wallet)
+// ==========================================
+// The B2B Partner Command Center grants commercial tier (role) and mints/adjusts
+// chips (wallet) — settlement/role state that must never be client-written.
+// Director/God-Mode only; transactional; adjustments floored at 0; audited.
+export const adminManagePartner = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || '').toLowerCase();
+  const { action, targetUid, amount, memo } = request.data || {};
+
+  if (!targetUid || typeof targetUid !== 'string') {
+    throw new HttpsError('invalid-argument', 'A targetUid is required.');
+  }
+
+  // AUTHORIZATION: Director or God-Mode only.
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
+  if (!isDirector && callerEmail !== 'admin@golfriend.co') {
+    throw new HttpsError('permission-denied', 'Only the Director can manage B2B partners.');
+  }
+
+  const userRef = db.collection('users').doc(targetUid);
+
+  try {
+    // ---- UPGRADE TIER → commercial ----
+    if (action === 'upgradeTier') {
+      const out = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(userRef);
+        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
+        tx.set(userRef, { tier: 'commercial' }, { merge: true });
+        const txRef = db.collection('transactions').doc();
+        tx.set(txRef, {
+          userId: targetUid, title: 'Account Tier Upgrade: COMMERCIAL', type: 'B2B_UPGRADE',
+          amount: 0, status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { tier: 'commercial' };
+      });
+      logger.info(`🤝 Partner ${targetUid} upgraded to commercial by ${callerUid}.`);
+      return { success: true, ...out };
+    }
+
+    // ---- MINT chips (positive only) ----
+    if (action === 'mint') {
+      const mint = parseInt(String(amount), 10);
+      if (!Number.isInteger(mint) || mint <= 0) {
+        throw new HttpsError('invalid-argument', 'Mint amount must be a positive integer.');
+      }
+      const out = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(userRef);
+        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
+        const newChips = Number(snap.data()?.chips || 0) + mint;
+        tx.set(userRef, { chips: newChips }, { merge: true });
+        const txRef = db.collection('transactions').doc();
+        tx.set(txRef, {
+          userId: targetUid, title: `Admin Mint: +${mint} Chips`, type: 'ADMIN_MINT',
+          amount: mint, status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { chips: newChips };
+      });
+      logger.info(`🤝 Minted ${mint} chips to ${targetUid} by ${callerUid}.`);
+      return { success: true, ...out };
+    }
+
+    // ---- LEDGER ADJUST (+/-, memo required) ----
+    if (action === 'adjust') {
+      const adj = parseInt(String(amount), 10);
+      if (!Number.isInteger(adj) || adj === 0) {
+        throw new HttpsError('invalid-argument', 'Adjustment must be a non-zero integer.');
+      }
+      if (typeof memo !== 'string' || !memo.trim()) {
+        throw new HttpsError('invalid-argument', 'A memo is required for audit compliance.');
+      }
+      const cleanMemo = memo.trim().slice(0, 200);
+      const out = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(userRef);
+        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
+        const current = Number(snap.data()?.chips || 0);
+        const newChips = Math.max(0, current + adj);
+        const applied = newChips - current;
+        tx.set(userRef, { chips: newChips }, { merge: true });
+        const txRef = db.collection('transactions').doc();
+        tx.set(txRef, {
+          userId: targetUid, title: `Admin Override: ${cleanMemo}`,
+          amount: applied, type: applied > 0 ? 'ADMIN_REFUND' : 'ADMIN_DEDUCTION',
+          status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { chips: newChips, applied };
+      });
+      logger.info(`🤝 Ledger adjust ${adj} on ${targetUid} by ${callerUid} (applied ${out.applied}).`);
+      return { success: true, ...out };
+    }
+
+    throw new HttpsError('invalid-argument', 'Unknown action. Use upgradeTier, mint or adjust.');
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🤝 B2B partner management failed:", error);
+    throw new HttpsError('internal', error.message || 'Partner management failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1
