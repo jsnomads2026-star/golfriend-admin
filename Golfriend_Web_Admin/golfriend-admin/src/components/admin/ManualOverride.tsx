@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, doc, getDoc, updateDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export default function ManualOverride({ injectedUid = "", onClose }: { injectedUid?: string, onClose?: () => void }) {
   // 🔥 Core State
@@ -70,25 +71,18 @@ export default function ManualOverride({ injectedUid = "", onClose }: { injected
     if (isNaN(numericAmount) || numericAmount === 0) return showNotification("Amount must be greater than zero.", "error");
 
     setIsProcessing(true);
-    const finalAmount = operationType === 'BURN' ? -numericAmount : numericAmount;
-    const batch = writeBatch(db);
-
     try {
-      const userRef = doc(db, 'users', targetUid.trim());
-      batch.update(userRef, { chips: increment(finalAmount) });
-
-      const txRef = doc(collection(db, 'transactions'));
-      batch.set(txRef, {
-        uid: targetUid.trim(),
-        type: 'ADMIN_OVERRIDE',
-        amount: finalAmount,
-        status: 'completed',
-        enforcedBy: 'DIRECTOR_CONSOLE',
-        auditReason: reason.trim(),
-        timestamp: serverTimestamp()
+      // 🔒 SERVER-AUTHORITATIVE: chip mint/burn + ledger are settled by the
+      // adminOverrideUser Cloud Function (Director-gated, floored, audited).
+      const fn = httpsCallable(getFunctions(), 'adminOverrideUser');
+      const res: any = await fn({
+        action: 'economy',
+        targetUid: targetUid.trim(),
+        operation: operationType,
+        amount: numericAmount,
+        reason: reason.trim(),
       });
-
-      await batch.commit();
+      if (!res?.data?.success) throw new Error('Override was not accepted.');
       showNotification(`Successfully executed ${operationType} for ${numericAmount} chips.`, "success");
       setAmount("");
       fetchUser(targetUid); // Refresh HUD
@@ -105,14 +99,19 @@ export default function ManualOverride({ injectedUid = "", onClose }: { injected
     
     setIsProcessing(true);
     try {
-      const userRef = doc(db, 'users', targetUid.trim());
-      await updateDoc(userRef, {
-        reliability_score: Number(relScore),
-        behavior_badge: badge,
-        star_rating_display: starRating,
-        verification_status: verification
+      // 🔒 SERVER-AUTHORITATIVE: reputation/verification metrics are validated
+      // and written by adminOverrideUser (Director-gated, audited).
+      const fn = httpsCallable(getFunctions(), 'adminOverrideUser');
+      const res: any = await fn({
+        action: 'reliability',
+        targetUid: targetUid.trim(),
+        reliabilityScore: Number(relScore),
+        behaviorBadge: badge,
+        starRating,
+        verificationStatus: verification,
+        reason: reason.trim(),
       });
-      
+      if (!res?.data?.success) throw new Error('Override was not accepted.');
       showNotification("Reliability metrics permanently updated.", "success");
       fetchUser(targetUid); // Refresh HUD
     } catch (error: any) {

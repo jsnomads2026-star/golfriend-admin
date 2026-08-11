@@ -3,7 +3,8 @@
 // ==========================================
 import { useState, useEffect } from 'react';
 import { db } from '../../../firebaseConfig';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface FulfillmentOrder {
   id: string;
@@ -45,33 +46,14 @@ export default function OrderFulfillmentHub() {
     return () => unsubscribe();
   }, []);
 
-  const handleDispatch = async (orderId: string, vendorId: string) => {
+  const handleDispatch = async (orderId: string) => {
     setIsProcessing(orderId);
     try {
-      // 1. Check the Vendor CRM to see how they want to receive orders
-      const vendorRef = doc(db, 'vendors', vendorId);
-      const vendorSnap = await getDoc(vendorRef);
-      
-      let newStatus = 'shipped'; // Default if Golfriend is shipping it ourselves
-      
-      if (vendorSnap.exists()) {
-        const protocol = vendorSnap.data().fulfillmentProtocol;
-        
-        if (protocol === 'email_manifest') {
-          // Trigger a cloud function to email the vendor, then update status
-          console.log(`Sending automated email manifest to vendor for order ${orderId}...`);
-          newStatus = 'awaiting_vendor';
-        } else if (protocol === 'daily_csv') {
-          console.log(`Order ${orderId} queued for midnight CSV export...`);
-          newStatus = 'awaiting_vendor';
-        }
-      }
-
-      // 2. Update the ledger status
-      await updateDoc(doc(db, 'fulfillment_orders', orderId), {
-        status: newStatus
-      });
-      
+      // Order/settlement state is finalized server-side. The vendor-protocol
+      // lookup + status decision now live in the updateFulfillmentOrder function.
+      const fn = httpsCallable(getFunctions(), 'updateFulfillmentOrder');
+      const res: any = await fn({ orderId, action: 'dispatch' });
+      if (!res?.data?.success) throw new Error('Dispatch failed.');
     } catch (error: any) {
       alert(`Dispatch Error: ${error.message}`);
     } finally {
@@ -85,11 +67,9 @@ export default function OrderFulfillmentHub() {
 
     setIsProcessing(orderId);
     try {
-      await updateDoc(doc(db, 'fulfillment_orders', orderId), {
-        status: 'shipped',
-        courier: data.courier,
-        trackingNumber: data.tracking
-      });
+      const fn = httpsCallable(getFunctions(), 'updateFulfillmentOrder');
+      const res: any = await fn({ orderId, action: 'confirmShipment', courier: data.courier, tracking: data.tracking });
+      if (!res?.data?.success) throw new Error('Shipment update failed.');
       // Clear the local input state after success
       setTrackingInputs(prev => { const next = {...prev}; delete next[orderId]; return next; });
     } catch (error: any) {
@@ -144,7 +124,7 @@ export default function OrderFulfillmentHub() {
                   <td style={styles.td}>
                     {order.status === 'pending_dispatch' && (
                       <button 
-                        onClick={() => handleDispatch(order.id, order.vendorId)}
+                        onClick={() => handleDispatch(order.id)}
                         disabled={isProcessing === order.id}
                         style={styles.actionBtn}
                       >

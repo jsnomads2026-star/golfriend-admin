@@ -2,7 +2,8 @@
 // FILE: src/components/B2B/CourseTeeSheet.tsx
 // ==========================================
 import { useState, useEffect } from 'react';
-import { doc, updateDoc, collection, query, where, onSnapshot, writeBatch, increment } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 
 interface Player {
@@ -71,12 +72,13 @@ export default function CourseTeeSheet() {
       const unassigned = selectedFlight.players.some(p => !cartInputs[p.uid]);
       if (unassigned) throw new Error("All players must be assigned a cart to establish liability.");
 
-      const flightRef = doc(db, 'games', selectedFlight.id);
-      await updateDoc(flightRef, {
-        status: 'checked_in',
+      const checkInFlight = httpsCallable(getFunctions(), 'checkInFlight');
+      const res: any = await checkInFlight({
+        gameId: selectedFlight.id,
         cartAssignments: cartInputs
       });
-      
+      if (!res?.data?.success) throw new Error("Check-in failed.");
+
       setNotification({ msg: `Flight ${selectedFlight.time} checked in successfully. Liability locked.`, type: 'success' });
       setSelectedFlight(null);
     } catch (error: any) {
@@ -88,22 +90,26 @@ export default function CourseTeeSheet() {
   };
 
   const triggerNuclearButton = async (uid: string, nickname: string) => {
+    if (!selectedFlight) return;
     if (!window.confirm(`⚠️ DANGER: Are you sure you want to report ${nickname}? This permanently deducts 25 Reliability points.`)) return;
-    
+
     setIsProcessing(true);
     try {
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', uid);
-      
-      batch.update(userRef, { 
-        reliability_score: increment(-25), 
-        behavior_badge: 'Flagged by Course GM' 
+      // 🔒 SERVER-AUTHORITATIVE: reputation/moderation writes go through the
+      // reportPlayerIncident Cloud Function (authorized, fixed penalty, audited).
+      const reportPlayerIncident = httpsCallable(getFunctions(), 'reportPlayerIncident');
+      const res: any = await reportPlayerIncident({
+        targetUid: uid,
+        gameId: selectedFlight.id,
+        reason: 'Course GM incident report',
       });
-      
-      await batch.commit();
-      setNotification({ msg: `Incident reported for ${nickname}.`, type: 'success' });
-    } catch (error) {
-      setNotification({ msg: "Failed to process report.", type: 'error' });
+      if (!res?.data?.success) throw new Error('Report was not accepted.');
+      const msg = res.data.alreadyReported
+        ? `${nickname} was already reported for this flight.`
+        : `Incident reported for ${nickname}.`;
+      setNotification({ msg, type: 'success' });
+    } catch (error: any) {
+      setNotification({ msg: error?.message || "Failed to process report.", type: 'error' });
     } finally {
       setIsProcessing(false);
       setTimeout(() => setNotification(null), 4000);

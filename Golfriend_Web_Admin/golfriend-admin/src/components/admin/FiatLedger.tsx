@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface FiatTransaction {
   id: string;
@@ -91,23 +92,20 @@ export default function FiatLedger() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'transactions'), {
-        uid: 'PLATFORM_TREASURY',
-        type: 'PLATFORM_EXPENSE',
-        status: 'completed',
-        paymentProvider: 'MANUAL_OUTFLOW',
-        fiatAmountUsd: parseFloat(expenseAmount),
-        productName: `OPEX: ${finalVendor.trim()}`,
-        timestamp: serverTimestamp()
+      const logPlatformExpense = httpsCallable(getFunctions(), 'logPlatformExpense');
+      const res: any = await logPlatformExpense({
+        amount: parseFloat(expenseAmount),
+        vendor: finalVendor.trim()
       });
+      if (!res?.data?.success) throw new Error('Expense was not committed to the master ledger.');
       showNotification("Business expense successfully logged.", "success");
       setShowExpenseModal(false);
       setExpenseAmount("");
       setExpenseVendor("");
       setCustomVendor("");
       setActiveTab('EXPENSE');
-    } catch (error) {
-      showNotification("Failed to log expense to master ledger.", "error");
+    } catch (error: any) {
+      showNotification(error?.message || "Failed to log expense to master ledger.", "error");
     } finally {
       setIsSubmitting(false);
     }
