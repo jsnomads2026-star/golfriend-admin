@@ -2,11 +2,19 @@
   "lane": "C",
   "repo": "jsnomads2026-star/golfriend-admin",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "704f3ed",
-  "candidate_head_full": "704f3ed7f844a8d2c80a1305cd4604fe4f99cb59",
+  "candidate_head": "1df39a9",
+  "candidate_head_full": "1df39a958dc82244b879ac50f3d616db2fe66ae1",
   "accepted_gate_sha": "ca2d6db",
-  "generated_at": "2026-08-11T04:22:18.742Z",
+  "generated_at": "2026-08-11T04:33:32.874Z",
   "included_commits": [
+    {
+      "hash": "1df39a9",
+      "subject": "feat(laneC-projection): lossless canonical projection extension (Director 5248925370)"
+    },
+    {
+      "hash": "7b0005c",
+      "subject": "chore(laneC): refreeze evidence after scheduled-job authority slice (15 automated controls)"
+    },
     {
       "hash": "704f3ed",
       "subject": "feat(laneC-jobs): harden weeklyVaultJanitor; quarantine hourlyTreasurySweep + stripeB2BWebhook from the V2 bundle"
