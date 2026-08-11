@@ -5,6 +5,8 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "test:core": "tsc && node lib/courseSync.test.js",
+    "test:booking": "tsc && node lib/bookingLogic.test.js",
+    "test": "tsc && node lib/courseSync.test.js && node lib/bookingLogic.test.js",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",

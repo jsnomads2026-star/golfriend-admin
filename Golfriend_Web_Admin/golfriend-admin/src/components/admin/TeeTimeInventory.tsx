@@ -23,7 +23,6 @@ interface TeeSlot {
   time: string;
   capacity: number;
   bookedCount: number;
-  priceChips: number;
   status: 'open' | 'closed';
 }
 
@@ -40,7 +39,6 @@ export default function TeeTimeInventory() {
   const [date, setDate] = useState(todayStr());
   const [time, setTime] = useState('08:00');
   const [capacity, setCapacity] = useState('4');
-  const [priceChips, setPriceChips] = useState('500');
   const [filterDate, setFilterDate] = useState('');
 
   const notify = (msg: string, type: 'success' | 'error') => {
@@ -88,7 +86,6 @@ export default function TeeTimeInventory() {
               time: s.time || '',
               capacity: Number(s.capacity || 0),
               bookedCount: Number(s.bookedCount || 0),
-              priceChips: Number(s.priceChips || 0),
               status: s.status === 'closed' ? 'closed' : 'open',
             } as TeeSlot;
           })
@@ -115,7 +112,6 @@ export default function TeeTimeInventory() {
         date,
         time,
         capacity: parseInt(capacity, 10),
-        priceChips: parseInt(priceChips, 10),
       });
       if (!res?.data?.success) throw new Error('Slot was not created.');
       notify(`Published tee-time ${date} ${time}.`, 'success');
@@ -161,7 +157,7 @@ export default function TeeTimeInventory() {
       {/* PUBLISH FORM */}
       <div style={{ backgroundColor: '#111', border: '1px solid #d4af37', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
         <h3 style={{ marginTop: 0, color: '#d4af37', fontSize: '15px' }}>Publish Bookable Tee-Time</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
           <div>
             <label style={labelStyle}>Course (from vault)</label>
             <select value={courseId} onChange={(e) => setCourseId(e.target.value)} style={inputStyle}>
@@ -182,10 +178,6 @@ export default function TeeTimeInventory() {
           <div>
             <label style={labelStyle}>Capacity</label>
             <input type="number" min={1} max={8} value={capacity} onChange={(e) => setCapacity(e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Price (chips)</label>
-            <input type="number" min={0} value={priceChips} onChange={(e) => setPriceChips(e.target.value)} style={inputStyle} />
           </div>
           <button
             onClick={publishSlot}
@@ -223,7 +215,6 @@ export default function TeeTimeInventory() {
                   <th style={thStyle}>Date</th>
                   <th style={thStyle}>Time</th>
                   <th style={thStyle}>Booked / Cap</th>
-                  <th style={thStyle}>Price</th>
                   <th style={thStyle}>Status</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
                 </tr>
@@ -237,7 +228,6 @@ export default function TeeTimeInventory() {
                       <td style={tdStyle}>{s.date}</td>
                       <td style={{ ...tdStyle, fontWeight: 'bold', color: '#fff' }}>{s.time}</td>
                       <td style={{ ...tdStyle, color: full ? '#ff4444' : '#4CAF50', fontWeight: 'bold' }}>{s.bookedCount} / {s.capacity}</td>
-                      <td style={tdStyle}>{s.priceChips.toLocaleString()} 🪙</td>
                       <td style={tdStyle}>
                         <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: s.status === 'open' ? 'rgba(76,175,80,0.12)' : 'rgba(255,193,7,0.12)', color: s.status === 'open' ? '#4CAF50' : '#FFC107' }}>
                           {s.status}

@@ -7,6 +7,7 @@ import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target 
 import Stripe from "stripe";
 import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
+import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -629,9 +630,8 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
       if (!slotSnap.exists) throw new HttpsError('not-found', 'Tee-time slot not found.');
       const slot = slotSnap.data() || {};
       if (slot.status !== 'open') throw new HttpsError('failed-precondition', 'This tee-time is not open for booking.');
-      const capacity = Number(slot.capacity || 0);
       const bookedCount = Number(slot.bookedCount || 0);
-      if (bookedCount >= capacity) throw new HttpsError('failed-precondition', 'This tee-time is fully booked.');
+      if (!isSlotBookable(slot.status, bookedCount, slot.capacity)) throw new HttpsError('failed-precondition', 'This tee-time is fully booked.');
 
       const existing = await tx.get(bookingRef);
       if (existing.exists && ['pending', 'confirmed'].includes(existing.data()?.status)) {
@@ -642,7 +642,7 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
       const uData = userSnap.exists ? (userSnap.data() || {}) : {};
 
       // Reserve the seat (capacity only — no wallet involvement).
-      tx.set(slotRef, { bookedCount: bookedCount + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      tx.set(slotRef, { bookedCount: applySeatDelta(bookedCount, +1), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
 
       // Create the booking in a pending state (non-financial).
       tx.set(bookingRef, {
@@ -653,8 +653,8 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
         time: slot.time || '',
         playerUid,
         playerName: uData.nickname || uData.name || 'Player',
-        status: 'pending',
-        userStatusKey: 'booking_pending',
+        status: statusAfter('request'),
+        userStatusKey: userStatusKeyFor(statusAfter('request')),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -729,7 +729,7 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
       const slotSnap = await tx.get(slotRef);
       if (slotSnap.exists) {
         const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
-        tx.set(slotRef, { bookedCount: Math.max(0, bookedCount - 1), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        tx.set(slotRef, { bookedCount: applySeatDelta(bookedCount, -1), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       }
       tx.set(bookingRef, {
         status: 'rejected',
@@ -792,7 +792,7 @@ export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
       if (slotSnap.exists) {
         const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
         tx.set(db.collection('tee_time_slots').doc(booking.slotId), {
-          bookedCount: Math.max(0, bookedCount - 1),
+          bookedCount: applySeatDelta(bookedCount, -1),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
       }
@@ -904,7 +904,7 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
         if (slotSnap.exists) {
           const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
           tx.set(slotRef, {
-            bookedCount: Math.max(0, bookedCount - 1),
+            bookedCount: applySeatDelta(bookedCount, -1),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
         }

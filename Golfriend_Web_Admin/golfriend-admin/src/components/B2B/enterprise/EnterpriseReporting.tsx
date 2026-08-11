@@ -2,15 +2,15 @@
 // FILE: src/components/B2B/enterprise/EnterpriseReporting.tsx
 // Enterprise portal — Reporting. READ-ONLY aggregates computed client-side from
 // Firestore reads scoped to the enterprise's operated courses. Nothing is
-// written back. Metrics: bookings by status, total tee-times, capacity
-// utilization, and revenue-in-chips (SUM of confirmed bookings' priceChips).
+// written back. NON-FINANCIAL: metrics are bookings by status, total tee-times
+// and capacity utilization only — no revenue/price (booking has no money).
 // ==========================================
 import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
 
 interface Slot { courseId: string; courseName: string; capacity: number; bookedCount: number; status: string; }
-interface Booking { courseId: string; priceChips: number; status: string; }
+interface Booking { courseId: string; status: string; }
 
 export default function EnterpriseReporting({ partnerUid }: { partnerUid: string }) {
   const [operated, setOperated] = useState<{ courseId: string; courseName: string }[]>([]);
@@ -51,7 +51,7 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
     const q = query(collection(db, 'bookings'), where('courseId', 'in', ids));
     const unsub = onSnapshot(q, (snap) => setBookings(snap.docs.map((d) => {
       const b = d.data() as any;
-      return { courseId: b.courseId || '', priceChips: Number(b.priceChips || 0), status: b.status || 'pending' } as Booking;
+      return { courseId: b.courseId || '', status: b.status || 'pending' } as Booking;
     })), (err) => console.error('Reporting bookings sync error:', err));
     return () => unsub();
   }, [ids]);
@@ -62,24 +62,20 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
   const totalBooked = slots.reduce((sum, s) => sum + s.bookedCount, 0);
   const utilization = totalCapacity > 0 ? Math.round((totalBooked / totalCapacity) * 100) : 0;
 
-  const byStatus = { pending: 0, confirmed: 0, rejected: 0 } as Record<string, number>;
+  const byStatus = { pending: 0, confirmed: 0, rejected: 0, cancelled: 0 } as Record<string, number>;
   bookings.forEach((b) => { byStatus[b.status] = (byStatus[b.status] || 0) + 1; });
 
-  const revenueChips = bookings.filter((b) => b.status === 'confirmed').reduce((sum, b) => sum + b.priceChips, 0);
-
-  // Per-venue breakdown.
+  // Per-venue breakdown (non-financial).
   const perVenue = operated.map((o) => {
     const vSlots = slots.filter((s) => s.courseId === o.courseId);
     const vBookings = bookings.filter((b) => b.courseId === o.courseId);
     const cap = vSlots.reduce((s, x) => s + x.capacity, 0);
     const booked = vSlots.reduce((s, x) => s + x.bookedCount, 0);
-    const rev = vBookings.filter((b) => b.status === 'confirmed').reduce((s, b) => s + b.priceChips, 0);
     return {
       courseName: o.courseName,
       teeTimes: vSlots.length,
       util: cap > 0 ? Math.round((booked / cap) * 100) : 0,
       confirmed: vBookings.filter((b) => b.status === 'confirmed').length,
-      revenue: rev,
     };
   });
 
@@ -98,7 +94,7 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
         <>
           {/* HEADLINE STATS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-            <StatCard label="Revenue (Confirmed)" value={`${revenueChips.toLocaleString()} 🪙`} accent="#4CAF50" />
+            <StatCard label="Total Bookings" value={String(bookings.length)} accent="#4CAF50" />
             <StatCard label="Total Tee-Times" value={String(totalTeeTimes)} accent="#d4af37" />
             <StatCard label="Capacity Utilization" value={`${utilization}%`} accent={utilization >= 70 ? '#4CAF50' : '#FFC107'} />
             <StatCard label="Seats Booked / Cap" value={`${totalBooked} / ${totalCapacity}`} accent="#fff" />
@@ -109,6 +105,7 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
             <StatCard label="Pending Bookings" value={String(byStatus.pending || 0)} accent="#FFC107" />
             <StatCard label="Confirmed Bookings" value={String(byStatus.confirmed || 0)} accent="#4CAF50" />
             <StatCard label="Rejected Bookings" value={String(byStatus.rejected || 0)} accent="#ff4444" />
+            <StatCard label="Cancelled Bookings" value={String(byStatus.cancelled || 0)} accent="#1E88E5" />
           </div>
 
           {/* PER-VENUE TABLE */}
@@ -119,7 +116,7 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
                 <thead>
                   <tr style={{ color: '#888', borderBottom: '1px solid #333' }}>
                     <th style={th}>Venue</th><th style={th}>Tee-Times</th><th style={th}>Utilization</th>
-                    <th style={th}>Confirmed</th><th style={{ ...th, textAlign: 'right' }}>Revenue (chips)</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Confirmed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -128,8 +125,7 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
                       <td style={{ ...td, color: '#fff', fontWeight: 'bold' }}>{v.courseName}</td>
                       <td style={td}>{v.teeTimes}</td>
                       <td style={{ ...td, color: v.util >= 70 ? '#4CAF50' : '#FFC107', fontWeight: 'bold' }}>{v.util}%</td>
-                      <td style={td}>{v.confirmed}</td>
-                      <td style={{ ...td, textAlign: 'right', color: '#d4af37', fontWeight: 'bold' }}>{v.revenue.toLocaleString()} 🪙</td>
+                      <td style={{ ...td, textAlign: 'right' }}>{v.confirmed}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -138,7 +134,7 @@ export default function EnterpriseReporting({ partnerUid }: { partnerUid: string
           </div>
 
           <div style={{ marginTop: '16px', color: '#666', fontSize: '11px' }}>
-            Revenue reflects the SUM of confirmed bookings' priceChips. Reporting scope is limited to the first 10 operated venues (Firestore query constraint).
+            Booking is non-financial — reporting shows operational counts and capacity utilization only. Reporting scope is limited to the first 10 operated venues (Firestore query constraint).
           </div>
         </>
       )}

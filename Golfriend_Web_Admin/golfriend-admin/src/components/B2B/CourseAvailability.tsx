@@ -1,6 +1,6 @@
 // ==========================================
 // FILE: src/components/B2B/CourseAvailability.tsx
-// Small-business portal: course onboarding + tee-time availability & pricing.
+// Small-business portal: course onboarding + tee-time availability.
 // A partner claims the course they operate (claimCourseOperator) and then
 // authors that course's bookable tee-times (manageTeeTimeSlot). All authoritative
 // writes go through Cloud Functions; the client only reads its own scope.
@@ -14,7 +14,7 @@ interface CourseOption { courseID: string; label: string; }
 interface OperatedCourse { courseId: string; courseName: string; }
 interface TeeSlot {
   id: string; courseId: string; courseName: string; date: string; time: string;
-  capacity: number; bookedCount: number; priceChips: number; status: 'open' | 'closed';
+  capacity: number; bookedCount: number; status: 'open' | 'closed';
 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -31,7 +31,6 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
   const [date, setDate] = useState(todayStr());
   const [time, setTime] = useState('08:00');
   const [capacity, setCapacity] = useState('4');
-  const [priceChips, setPriceChips] = useState('500');
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNote({ msg, type });
@@ -85,7 +84,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
         return {
           id: d.id, courseId: s.courseId || '', courseName: s.courseName || s.courseId || 'Unknown',
           date: s.date || '', time: s.time || '', capacity: Number(s.capacity || 0),
-          bookedCount: Number(s.bookedCount || 0), priceChips: Number(s.priceChips || 0),
+          bookedCount: Number(s.bookedCount || 0),
           status: s.status === 'closed' ? 'closed' : 'open',
         } as TeeSlot;
       });
@@ -121,7 +120,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
       const fn = httpsCallable(getFunctions(), 'manageTeeTimeSlot');
       const res: any = await fn({
         action: 'create', courseId, date, time,
-        capacity: parseInt(capacity, 10), priceChips: parseInt(priceChips, 10),
+        capacity: parseInt(capacity, 10),
       });
       if (!res?.data?.success) throw new Error('Slot was not created.');
       notify(`Published tee-time ${date} ${time}.`, 'success');
@@ -156,7 +155,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
 
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ color: '#d4af37', margin: 0, letterSpacing: '1px' }}>Course & Availability</h2>
-        <p style={{ color: '#888', fontSize: '14px', marginTop: '5px' }}>Onboard the course you operate, then publish bookable tee-times with your own pricing.</p>
+        <p style={{ color: '#888', fontSize: '14px', marginTop: '5px' }}>Onboard the course you operate, then publish bookable tee-times.</p>
       </div>
 
       {/* ONBOARDING */}
@@ -182,13 +181,13 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
         </div>
       </div>
 
-      {/* AVAILABILITY / PRICING */}
+      {/* AVAILABILITY */}
       <div style={{ backgroundColor: '#111', border: '1px solid #d4af37', borderRadius: '8px', padding: '20px', marginBottom: '20px', opacity: operated.length ? 1 : 0.5 }}>
-        <h3 style={{ marginTop: 0, color: '#d4af37', fontSize: '15px' }}>2 · Publish Availability & Pricing</h3>
+        <h3 style={{ marginTop: 0, color: '#d4af37', fontSize: '15px' }}>2 · Publish Availability</h3>
         {operated.length === 0 ? (
           <p style={{ color: '#888', fontSize: '13px' }}>Onboard a course above to unlock availability publishing.</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
             <div>
               <label style={labelStyle}>Your course</label>
               <select value={courseId} onChange={(e) => setCourseId(e.target.value)} style={inputStyle}>
@@ -198,7 +197,6 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
             <div><label style={labelStyle}>Date</label><input type="date" min={todayStr()} value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} /></div>
             <div><label style={labelStyle}>Time</label><input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={inputStyle} /></div>
             <div><label style={labelStyle}>Capacity</label><input type="number" min={1} max={8} value={capacity} onChange={(e) => setCapacity(e.target.value)} style={inputStyle} /></div>
-            <div><label style={labelStyle}>Price (chips)</label><input type="number" min={0} value={priceChips} onChange={(e) => setPriceChips(e.target.value)} style={inputStyle} /></div>
             <button onClick={publishSlot} disabled={isBusy} style={{ padding: '10px 18px', backgroundColor: isBusy ? '#555' : '#d4af37', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 900, cursor: isBusy ? 'not-allowed' : 'pointer', height: '40px' }}>
               {isBusy ? '…' : 'PUBLISH'}
             </button>
@@ -217,7 +215,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
               <thead>
                 <tr style={{ color: '#888', borderBottom: '1px solid #333' }}>
                   <th style={thStyle}>Course</th><th style={thStyle}>Date</th><th style={thStyle}>Time</th>
-                  <th style={thStyle}>Booked / Cap</th><th style={thStyle}>Price</th><th style={thStyle}>Status</th>
+                  <th style={thStyle}>Booked / Cap</th><th style={thStyle}>Status</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
@@ -230,7 +228,6 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
                       <td style={tdStyle}>{s.date}</td>
                       <td style={{ ...tdStyle, fontWeight: 'bold', color: '#fff' }}>{s.time}</td>
                       <td style={{ ...tdStyle, color: full ? '#ff4444' : '#4CAF50', fontWeight: 'bold' }}>{s.bookedCount} / {s.capacity}</td>
-                      <td style={tdStyle}>{s.priceChips.toLocaleString()} 🪙</td>
                       <td style={tdStyle}>
                         <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: s.status === 'open' ? 'rgba(76,175,80,0.12)' : 'rgba(255,193,7,0.12)', color: s.status === 'open' ? '#4CAF50' : '#FFC107' }}>{s.status}</span>
                       </td>

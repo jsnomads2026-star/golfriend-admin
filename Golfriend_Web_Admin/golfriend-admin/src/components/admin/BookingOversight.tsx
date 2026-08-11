@@ -1,18 +1,17 @@
 // ==========================================
 // FILE: src/components/admin/BookingOversight.tsx
-// Admin booking oversight + refund / escalation console.
+// Admin booking oversight console (strictly NON-FINANCIAL).
 // Streams the real `bookings` collection and resolves any booking through the
 // server-authoritative `adminResolveBooking` Cloud Function. Clients NEVER write
-// wallet / seat / settlement state directly — every action is a callable.
+// seat / settlement state directly — every action is a callable.
 // ==========================================
 import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 
-type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'disputed' | 'refunded';
-type HoldStatus = 'escrow_locked' | 'completed' | 'failed' | 'unknown';
-type Decision = 'confirm' | 'refund' | 'escalate';
+type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
+type Decision = 'confirm' | 'reject' | 'cancel';
 
 interface BookingRow {
   id: string;
@@ -23,13 +22,11 @@ interface BookingRow {
   time: string;
   playerUid: string;
   playerName: string;
-  priceChips: number;
   status: BookingStatus;
-  disputeFlagged?: boolean;
 }
 
 const STATUS_FILTERS: Array<'all' | BookingStatus> = [
-  'all', 'pending', 'confirmed', 'rejected', 'disputed', 'refunded',
+  'all', 'pending', 'confirmed', 'rejected', 'cancelled',
 ];
 
 const statusColor = (s: BookingStatus): string => {
@@ -37,24 +34,13 @@ const statusColor = (s: BookingStatus): string => {
     case 'confirmed': return '#4CAF50';
     case 'pending': return '#FFC107';
     case 'rejected': return '#ff4444';
-    case 'refunded': return '#1E88E5';
-    case 'disputed': return '#d4af37';
+    case 'cancelled': return '#888';
     default: return '#888';
-  }
-};
-
-const holdColor = (s: HoldStatus): string => {
-  switch (s) {
-    case 'escrow_locked': return '#FFC107';
-    case 'completed': return '#4CAF50';
-    case 'failed': return '#ff4444';
-    default: return '#666';
   }
 };
 
 export default function BookingOversight() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
-  const [holds, setHolds] = useState<Record<string, HoldStatus>>({});
   const [statusFilter, setStatusFilter] = useState<'all' | BookingStatus>('all');
   const [textFilter, setTextFilter] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -82,35 +68,14 @@ export default function BookingOversight() {
               time: b.time || '',
               playerUid: b.playerUid || '',
               playerName: b.playerName || b.playerUid || 'Unknown',
-              priceChips: Number(b.priceChips || 0),
-              status: (['pending', 'confirmed', 'rejected', 'disputed', 'refunded'].includes(b.status)
+              status: (['pending', 'confirmed', 'rejected', 'cancelled'].includes(b.status)
                 ? b.status
                 : 'pending') as BookingStatus,
-              disputeFlagged: !!b.disputeFlagged,
             } as BookingRow;
           })
         );
       },
       (err) => console.error('Booking oversight sync error:', err)
-    );
-    return () => unsub();
-  }, []);
-
-  // Stream the escrow holds so each booking can show its linked hold status.
-  useEffect(() => {
-    const unsub = onSnapshot(
-      query(collection(db, 'transactions')),
-      (snap) => {
-        const map: Record<string, HoldStatus> = {};
-        snap.docs.forEach((d) => {
-          if (!d.id.startsWith('booking_hold_')) return;
-          const bookingId = d.id.replace('booking_hold_', '');
-          const st = d.data()?.status;
-          map[bookingId] = (['escrow_locked', 'completed', 'failed'].includes(st) ? st : 'unknown') as HoldStatus;
-        });
-        setHolds(map);
-      },
-      (err) => console.error('Booking hold sync error:', err)
     );
     return () => unsub();
   }, []);
@@ -135,7 +100,7 @@ export default function BookingOversight() {
       const fn = httpsCallable(getFunctions(), 'adminResolveBooking');
       const res: any = await fn({ bookingId, decision });
       if (!res?.data?.success) throw new Error('Resolution was not accepted by the server.');
-      const label = decision === 'confirm' ? 'confirmed' : decision === 'refund' ? 'refunded' : 'escalated to dispute';
+      const label = decision === 'confirm' ? 'confirmed' : decision === 'reject' ? 'rejected' : 'cancelled';
       notify(`Booking ${label}.`, 'success');
     } catch (e: any) {
       notify(e?.message || 'Failed to resolve booking.', 'error');
@@ -169,9 +134,9 @@ export default function BookingOversight() {
         <span style={{ color: '#666', fontSize: '12px' }}>{bookings.length} bookings streamed</span>
       </div>
       <p style={{ color: '#aaa', fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
-        Force-confirm, refund, or escalate any tee-time booking. Every action is settled server-side by
+        Force-confirm, reject, or cancel any tee-time booking. Every action is settled server-side by
         <code style={{ color: '#d4af37', margin: '0 4px' }}>adminResolveBooking</code>
-        — seats and chips are never written from this client.
+        — seats are never written from this client.
       </p>
 
       {/* FILTER BAR */}
@@ -212,22 +177,19 @@ export default function BookingOversight() {
               <th style={thStyle}>Player</th>
               <th style={thStyle}>Course</th>
               <th style={thStyle}>Date / Time</th>
-              <th style={thStyle}>Price</th>
               <th style={thStyle}>Status</th>
-              <th style={thStyle}>Hold</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: '28px', textAlign: 'center', color: '#555' }}>No bookings match the current filters.</td></tr>
+              <tr><td colSpan={5} style={{ padding: '28px', textAlign: 'center', color: '#555' }}>No bookings match the current filters.</td></tr>
             ) : (
               visible.map((b) => {
-                const hold: HoldStatus = holds[b.id] || 'unknown';
                 const busy = busyId === b.id;
                 const canConfirm = b.status === 'pending';
-                const canRefund = b.status === 'pending' || b.status === 'confirmed';
-                const canEscalate = b.status !== 'refunded' && b.status !== 'disputed';
+                const canReject = b.status === 'pending';
+                const canCancel = b.status === 'pending' || b.status === 'confirmed';
                 return (
                   <tr key={b.id} style={{ borderBottom: '1px solid #222' }}>
                     <td style={tdStyle}>
@@ -239,18 +201,9 @@ export default function BookingOversight() {
                       <span>{b.date}</span>{' '}
                       <span style={{ color: '#fff', fontWeight: 'bold' }}>{b.time}</span>
                     </td>
-                    <td style={{ ...tdStyle, color: '#d4af37', fontWeight: 'bold' }}>{b.priceChips.toLocaleString()} 🪙</td>
                     <td style={tdStyle}>
                       <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: `${statusColor(b.status)}22`, color: statusColor(b.status) }}>
                         {b.status}
-                      </span>
-                      {b.disputeFlagged && (
-                        <span style={{ marginLeft: '6px', color: '#d4af37', fontSize: '11px' }} title="Hold flagged for manual settlement">⚑</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ color: holdColor(hold), fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {hold === 'unknown' ? '—' : hold}
                       </span>
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -263,20 +216,20 @@ export default function BookingOversight() {
                         {busy ? '…' : 'Force Confirm'}
                       </button>
                       <button
-                        onClick={() => resolve(b.id, 'refund')}
-                        disabled={busy || !canRefund}
-                        style={actionBtn('#ff4444', busy || !canRefund)}
-                        title={canRefund ? 'Release seat and refund the player' : 'This booking cannot be refunded'}
+                        onClick={() => resolve(b.id, 'reject')}
+                        disabled={busy || !canReject}
+                        style={actionBtn('#ff4444', busy || !canReject)}
+                        title={canReject ? 'Reject this booking and release the seat' : 'Only pending bookings can be rejected'}
                       >
-                        {busy ? '…' : 'Refund'}
+                        {busy ? '…' : 'Reject'}
                       </button>
                       <button
-                        onClick={() => resolve(b.id, 'escalate')}
-                        disabled={busy || !canEscalate}
-                        style={actionBtn('#d4af37', busy || !canEscalate)}
-                        title={canEscalate ? 'Mark disputed and flag hold for manual settlement' : 'This booking cannot be escalated'}
+                        onClick={() => resolve(b.id, 'cancel')}
+                        disabled={busy || !canCancel}
+                        style={actionBtn('#d4af37', busy || !canCancel)}
+                        title={canCancel ? 'Cancel this booking and release the seat' : 'This booking cannot be cancelled'}
                       >
-                        {busy ? '…' : 'Escalate'}
+                        {busy ? '…' : 'Cancel'}
                       </button>
                     </td>
                   </tr>

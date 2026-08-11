@@ -23,8 +23,6 @@ const DICT: Record<Lang, Record<string, string>> = {
     openTeeTimes: 'Open tee-times',
     book: 'Request',
     seatsLeft: 'seats left',
-    free: 'Free',
-    chips: 'chips',
     error: 'Could not load courses. Please try again later.',
     back: '← Back to all courses',
   },
@@ -37,8 +35,6 @@ const DICT: Record<Lang, Record<string, string>> = {
     openTeeTimes: 'เวลาออกรอบที่ว่าง',
     book: 'ขอจอง',
     seatsLeft: 'ที่นั่งเหลือ',
-    free: 'ฟรี',
-    chips: 'ชิป',
     error: 'ไม่สามารถโหลดสนามได้ กรุณาลองใหม่ภายหลัง',
     back: '← กลับไปหน้าสนามทั้งหมด',
   },
@@ -153,14 +149,12 @@ export default function CourseDiscovery() {
             <div style={styles.slotGrid}>
               {courseSlots.map((s) => {
                 const seatsLeft = Number(s.capacity || 0) - Number(s.bookedCount || 0);
-                const priceText =
-                  s.priceChips > 0 ? `${s.priceChips} ${t('chips')}` : t('free');
                 return (
                   <div key={s.id} style={styles.slotCard}>
                     <div style={styles.slotDate}>{s.date}</div>
                     <div style={styles.slotTime}>{s.time}</div>
                     <div style={styles.slotMeta}>
-                      {priceText} · {seatsLeft} {t('seatsLeft')}
+                      {seatsLeft} {t('seatsLeft')} · {s.status}
                     </div>
                     <button style={styles.slotBtn} onClick={() => setSelectedSlot(s)}>
                       {t('book')} →
