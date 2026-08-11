@@ -1,5 +1,5 @@
 {
-  "manifestVersion": "1.1.0",
+  "manifestVersion": "1.1.1",
   "lane": "C",
   "scope": "course/role/portal — Lane C-owned slice of the shared clean-V2 canonical seed",
   "producedFor": "Director canonical projection decisions (issue #19, comment 5248925370); base batch 5248506512",
@@ -133,14 +133,14 @@
     { "enterpriseUid": "ex_enterprise_erin", "staffUid": "ex_estaff_iris", "email": "iris@example.test", "role": "manager", "status": "active", "invitedBy": "ex_enterprise_erin" }
   ],
 
-  "portal_media": [
-    { "assetId": "riverbend_hero", "versionId": "v1", "ownerAuthority": { "uid": "ex_operator_evan",   "type": "course_operators", "courseId": "ex_course_riverbend" }, "sourcePath": "assets/courses/riverbend_hero.jpg",  "targetPath": "fixtures/emulator/storage/courses/riverbend_hero_v1.jpg",  "type": "image/jpeg", "sizeBytes": 20480, "sha256": "3b1f2a9c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8", "visibility": "public", "consent": "synthetic_fixture_consent", "moderation": { "state": "approved", "provenance": "fixture" }, "bytesPresent": true },
-    { "assetId": "pineview_hero",  "versionId": "v1", "ownerAuthority": { "uid": "ex_enterprise_erin", "type": "course_operators", "courseId": "ex_course_pineview" },  "sourcePath": "assets/courses/pineview_hero.webp", "targetPath": "fixtures/emulator/storage/courses/pineview_hero_v1.webp", "type": "image/webp", "sizeBytes": 15360, "sha256": "9f8e7d6c5b4a3928170695847362514039281706958473625140392817069584", "visibility": "public", "consent": "synthetic_fixture_consent", "moderation": { "state": "approved", "provenance": "fixture" }, "bytesPresent": true }
-  ],
+  "portal_media": [],
 
   "excluded_media": [
-    { "assetId": "orphan_media", "versionId": "v1", "sourcePath": "assets/courses/missing_source.jpg", "bytesPresent": false, "excludedReason": "bytes_not_present_or_verifiable" }
+    { "assetId": "orphan_media",   "versionId": "v1", "sourcePath": "assets/courses/missing_source.jpg",  "type": "image/jpeg", "bytesPresent": false, "excludedReason": "bytes_not_present_or_verifiable" },
+    { "assetId": "riverbend_hero", "versionId": "v1", "ownerAuthority": { "uid": "ex_operator_evan",   "type": "course_operators", "courseId": "ex_course_riverbend" }, "sourcePath": "assets/courses/riverbend_hero.jpg",  "type": "image/jpeg", "visibility": "public", "bytesPresent": false, "excludedReason": "source_bytes_absent_in_pinned_commit" },
+    { "assetId": "pineview_hero",  "versionId": "v1", "ownerAuthority": { "uid": "ex_enterprise_erin", "type": "course_operators", "courseId": "ex_course_pineview" },  "sourcePath": "assets/courses/pineview_hero.webp", "type": "image/webp", "visibility": "public", "bytesPresent": false, "excludedReason": "source_bytes_absent_in_pinned_commit" }
   ],
+  "media_disposition_note": "riverbend_hero + pineview_hero were declared positive with synthetic placeholder hashes in v1.1.0; the source bytes do not exist in the repo (verified: no assets/courses/ path). Per Director correction they are EXCLUDED (bytes_not_present_or_verifiable) — no image/hash/size fabricated. courses[].heroAsset still names the intended (now-excluded, non-materializable) asset losslessly.",
 
   "expected": {
     "counts": {
@@ -160,8 +160,8 @@
       "booking_messages": 2,
       "booking_audit": 2,
       "enterprise_staff": 1,
-      "portal_media": 2,
-      "excluded_media": 1,
+      "portal_media": 0,
+      "excluded_media": 3,
       "negative_authority": 3
     },
     "invariants": [
@@ -177,7 +177,7 @@
       "booking_messages id == ${bookingId}__message__NNNN and booking_audit id == ${bookingId}__audit__NNNN with zero-based padded-4 seq",
       "every booking_message.bodyKey exists in bodyKey_catalogue; no free-text body field is present",
       "negative authority fixtures (suspended/roleless) are retained with reason markers and fail authorization",
-      "every portal_media carries assetId/versionId/ownerAuthority/sourcePath(assets/…)/targetPath(fixtures/…)/sha256/type/visibility/consent/moderation; unverifiable-bytes assets are excluded_media, never seeded",
+      "every positive portal_media carries verifiable bytes (bytesPresent:true) with assetId/versionId/ownerAuthority/sourcePath(assets/…)/targetPath(fixtures/…)/sha256/type/visibility/consent/moderation; any asset whose source bytes are absent/unverifiable is excluded_media (bytesPresent:false, no fabricated hash/size) and is never seeded",
       "every course alias resolves to a canonical Lane C courseId; unmapped/ambiguous aliases are rejected",
       "no document carries a financial field (priceChips|price|amount|hold|escrow|settlement|payout|refund|balance)",
       "no admin@golfriend.co / God-Mode identity or hard-coded privileged email exists anywhere",

@@ -306,12 +306,22 @@ for (const m of SEED.portal_media) {
   assert(m.bytesPresent === true, `media ${m.assetId}: bytes present + verifiable`, { assetId: m.assetId });
   assert(!/^https?:\/\//i.test(m.sourcePath) && !/^https?:\/\//i.test(m.targetPath), `media ${m.assetId}: no production URL`, { assetId: m.assetId });
 }
+const excludedById = new Map((SEED.excluded_media || []).map((e) => [e.assetId, e]));
 for (const e of (SEED.excluded_media || [])) {
   assert(e.bytesPresent === false, `excluded media ${e.assetId}: marked bytes-not-present`, { assetId: e.assetId });
   assert(!mediaById.has(e.assetId), `excluded media ${e.assetId}: NOT present in seeded portal_media`, { assetId: e.assetId });
+  assert(typeof e.excludedReason === 'string' && e.excludedReason.length > 0, `excluded media ${e.assetId}: has excludedReason`, { assetId: e.assetId });
+  // No fabricated verification metadata may remain on an excluded (unverifiable) asset.
+  assert(!('sha256' in e) && !('sizeBytes' in e), `excluded media ${e.assetId}: carries no fabricated hash/size`, { assetId: e.assetId });
 }
+// heroAsset is lossless: it names a known asset (positive OR excluded). An excluded
+// hero is non-materializable — proven so, never silently treated as present.
 for (const c of SEED.courses) {
-  assert(mediaById.has(c.heroAsset), `course ${c.courseId}: declared heroAsset resolves to a media record`, { courseId: c.courseId });
+  const asset = mediaById.get(c.heroAsset) || excludedById.get(c.heroAsset);
+  assert(!!asset, `course ${c.courseId}: declared heroAsset resolves to a known media record (positive or excluded)`, { courseId: c.courseId });
+  if (asset && excludedById.has(c.heroAsset)) {
+    assert(asset.bytesPresent === false, `course ${c.courseId}: excluded heroAsset is non-materializable (bytesPresent:false)`, { courseId: c.courseId });
+  }
 }
 
 // ---- Stage 5: counts / invariants / financial + God-Mode + zero-V1 scans ----

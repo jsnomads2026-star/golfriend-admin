@@ -1,8 +1,8 @@
 # Lane C — Clean-V2 Seed & Journey Conformance Evidence
 
-- **Fixture:** `fixtures/lanec-clean-v2-seed.json` (manifest v1.1.0)
+- **Fixture:** `fixtures/lanec-clean-v2-seed.json` (manifest v1.1.1)
 - **Synthetic target:** `golfriend-v2-preview` — V1 leaks: 0
-- **Generated:** 2026-08-11T04:32:43.753Z
+- **Generated:** 2026-08-11T05:28:43.994Z
 - **Status:** ✅ CONFORMANT (0 Lane C-owned failure(s))
 
 ## Seeded counts
@@ -24,8 +24,8 @@
 | `booking_messages` | 2 |
 | `booking_audit` | 2 |
 | `enterprise_staff` | 1 |
-| `portal_media` | 2 |
-| `excluded_media` | 1 |
+| `portal_media` | 0 |
+| `excluded_media` | 3 |
 | `negative_authority` | 3 |
 
 ## Invariants checked (executable)
@@ -41,7 +41,7 @@
 - booking_messages id == ${bookingId}__message__NNNN and booking_audit id == ${bookingId}__audit__NNNN with zero-based padded-4 seq
 - every booking_message.bodyKey exists in bodyKey_catalogue; no free-text body field is present
 - negative authority fixtures (suspended/roleless) are retained with reason markers and fail authorization
-- every portal_media carries assetId/versionId/ownerAuthority/sourcePath(assets/…)/targetPath(fixtures/…)/sha256/type/visibility/consent/moderation; unverifiable-bytes assets are excluded_media, never seeded
+- every positive portal_media carries verifiable bytes (bytesPresent:true) with assetId/versionId/ownerAuthority/sourcePath(assets/…)/targetPath(fixtures/…)/sha256/type/visibility/consent/moderation; any asset whose source bytes are absent/unverifiable is excluded_media (bytesPresent:false, no fabricated hash/size) and is never seeded
 - every course alias resolves to a canonical Lane C courseId; unmapped/ambiguous aliases are rejected
 - no document carries a financial field (priceChips|price|amount|hold|escrow|settlement|payout|refund|balance)
 - no admin@golfriend.co / God-Mode identity or hard-coded privileged email exists anywhere
