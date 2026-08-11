@@ -209,9 +209,15 @@ export default function CourseSeeder() {
 
   // 🔥 THE GOOGLE MAPS MASS AUTO-RESCUE ENGINE
   const executeMassRescue = async () => {
+    // 🔒 Disabled: geocoding ran client-side with an exposed Google Maps key.
+    // Provider/geocode rescue must run server-side; use the Course Sync console.
+    addLog(`\n🔒 ${SERVER_SYNC_NOTICE}`);
+    alert(SERVER_SYNC_NOTICE);
+    return;
+    // eslint-disable-next-line no-unreachable
     const quarantined = securedCourses.filter((c: any) => c.requiresManualGPS === true);
     if (quarantined.length === 0) return addLog("✅ Quarantine Ward is empty.");
-    
+
     setIsMassRescuing(true);
     addLog(`\n🚁 INITIATING MASS AUTO-RESCUE: Targeting ${quarantined.length} quarantined courses...`);
 
@@ -224,7 +230,7 @@ export default function CourseSeeder() {
       try {
         addLog(`   🚑 Rescuing [${i + 1}/${quarantined.length}]: ${c.clubName || c.name}...`);
         
-        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}&key=AIzaSyAl9S1rKMJXm5m-7L4zFlztcZWjGhINBgM`);
+        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}`);
         const data = await res.json();
 
         if (data.status === "OK" && data.results.length > 0) {
