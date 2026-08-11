@@ -2,52 +2,26 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
+import { resolveFirebaseTarget } from './firebaseTarget.js';
 
 // ==========================================
-// Firebase target abstraction (V1/V2 swap point).
-// The app currently runs against the golfriend-v1 project. Per issue #21, no
-// provider project may be created/changed here yet — this only ABSTRACTS the
-// config so a future V2 migration is a single, auditable change:
-//   1) add a 'golfriend-v2' entry below once that provider project exists, and
-//   2) set ACTIVE_PROJECT (or the VITE_FIREBASE_PROJECT build env) to it.
-// No component defines its own config — they all import db/auth/storage here.
+// Firebase target selection (V1 / fail-closed V2 preview).
+// The resolver (src/firebaseTarget.js) is the single, testable swap point:
+//  - default 'golfriend-v1' (current project; unchanged — issue #21 governs V2);
+//  - 'v2-preview' builds ONLY from injected VITE_FIREBASE_V2_* identities and
+//    FAILS CLOSED (throws) if any are missing/mixed — it never resolves V1.
+// Selected via VITE_FIREBASE_PROJECT (build env); defaults to golfriend-v1 and
+// never silently falls through. No component defines its own config.
 // ==========================================
 
-type FirebaseTarget = {
-  apiKey: string;        // public Firebase Web API key (non-secret by design)
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
-};
-
-const FIREBASE_PROJECTS: Record<string, FirebaseTarget> = {
-  'golfriend-v1': {
-    apiKey: 'AIzaSyDdcu6nWK4_wFqeuqZ5HodZ8GhLiLmIOYY',
-    authDomain: 'golfriend-v1.firebaseapp.com',
-    projectId: 'golfriend-v1',
-    storageBucket: 'golfriend-v1.firebasestorage.app',
-    messagingSenderId: '368292182099',
-    appId: '1:368292182099:web:986581e047a7e2ee2ceea6',
-  },
-  // 'golfriend-v2': { ... }  // TODO(issue #21): populate when the V2 provider
-  // project is provisioned. Do NOT create/point at a new provider project now.
-};
-
-// Single swap point. A build may override via VITE_FIREBASE_PROJECT without a
-// code change, but it defaults to golfriend-v1 and never silently falls through.
-const ACTIVE_PROJECT =
-  ((import.meta as any)?.env?.VITE_FIREBASE_PROJECT as string | undefined) || 'golfriend-v1';
-
-const firebaseConfig = FIREBASE_PROJECTS[ACTIVE_PROJECT];
-if (!firebaseConfig) {
-  throw new Error(
-    `Unknown Firebase target "${ACTIVE_PROJECT}". Add it to FIREBASE_PROJECTS (see issue #21) before selecting it.`,
-  );
-}
+const env = ((import.meta as any)?.env ?? {}) as Record<string, string | undefined>;
+const ACTIVE_PROJECT = env.VITE_FIREBASE_PROJECT || 'golfriend-v1';
 
 export const ACTIVE_FIREBASE_PROJECT = ACTIVE_PROJECT;
+
+// Throws on unknown mode, on a v2-preview with missing identities, or on any
+// V1 identifier leaking into a v2-preview config.
+const firebaseConfig = resolveFirebaseTarget(ACTIVE_PROJECT, env);
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);

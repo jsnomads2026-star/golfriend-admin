@@ -8,9 +8,11 @@
     "build": "tsc -b && vite build",
     "gate:authority": "node scripts/authority-gate.mjs",
     "gate:dead-route": "node scripts/dead-route-gate.mjs",
+    "gate:v2": "node scripts/v2-mode-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run verify:booking",
+    "verify:v2": "node scripts/v2-synthetic-verify.mjs",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run verify:booking && npm run verify:v2",
     "lint": "eslint .",
     "preview": "vite preview"
   },
