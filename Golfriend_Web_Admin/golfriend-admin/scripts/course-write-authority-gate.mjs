@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 const seeder = readFileSync(new URL('../src/components/CourseSeeder.tsx', import.meta.url), 'utf8');
 const functions = readFileSync(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
+const previewCore = readFileSync(new URL('../functions/src/courseSyncPreview.ts', import.meta.url), 'utf8');
 const precommission = readFileSync(new URL('../docs/PRECOMMISSION_SEED_AND_SMOKE.md', import.meta.url), 'utf8');
 const manifest = readFileSync(new URL('../AUTHORITY_MANIFEST.md', import.meta.url), 'utf8');
 
@@ -22,6 +23,12 @@ must(/isActiveStaff\(/.test(manualBody) && /admin_users/.test(manualBody),
 must(/gpsSource: 'manual'/.test(manualBody) && /manualLock: true/.test(manualBody) && /trusted: true/.test(manualBody),
   'manual correction locks and identifies trusted GPS provenance');
 must(/course_sync_audit/.test(manualBody), 'manual correction writes an audit record');
+must(/runSyncCoursesFromProviderPreview\('preview'/.test(functions),
+  'syncCoursesFromProvider routes preview decisions through the preview-only seam');
+must(/mode: 'preview'/.test(previewCore) && /productionWrites: 0/.test(previewCore) && !/firebase|fetch\s*\(/i.test(previewCore),
+  'synthetic preview seam is preview-only with no Firebase/network write surface');
+must(/projectId\.startsWith\('demo-'\)/.test(previewCore) && /localhost\|127\\\.0\\\.0\\\.1/.test(previewCore),
+  'synthetic harness fails closed outside demo projects and loopback emulator hosts');
 must(!/syncCoursesFromProvider[^\n]*legacy|callerEmail\s*===\s*['"]admin@golfriend\.co['"]/i.test(precommission),
   'precommission guidance contains no legacy email bypass');
 must(/setManualCourseCoordinates/.test(precommission) && /server-owned `admin_users\/\{uid\}`/.test(precommission),

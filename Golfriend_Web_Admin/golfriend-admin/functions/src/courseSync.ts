@@ -12,6 +12,7 @@ export interface CourseRecord {
   lat?: unknown;
   lng?: unknown;
   manualLock?: boolean;
+  trusted?: boolean;
   gpsSource?: string;
   requiresManualGPS?: boolean;
   [k: string]: unknown;
@@ -61,7 +62,7 @@ export function isValidCoordinate(lat: unknown, lng: unknown): boolean {
 
 /** A course whose GPS was hand-corrected must not be silently overwritten. */
 export function isManualLocked(rec: CourseRecord): boolean {
-  return rec.manualLock === true || rec.gpsSource === 'manual';
+  return rec.manualLock === true || rec.trusted === true || rec.gpsSource === 'manual' || rec.requiresManualGPS === true;
 }
 
 /** Deterministic match: the provider record's id must equal the requested id. */

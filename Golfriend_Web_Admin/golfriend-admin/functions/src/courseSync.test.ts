@@ -48,7 +48,9 @@ check('invalid coordinates rejected', () => {
 // --- manual lock detection ---
 check('manual lock detected', () => {
   assert.ok(isManualLocked({ manualLock: true }));
+  assert.ok(isManualLocked({ trusted: true }));
   assert.ok(isManualLocked({ gpsSource: 'manual' }));
+  assert.ok(isManualLocked({ requiresManualGPS: true }));
   assert.equal(isManualLocked({ gpsSource: 'golfapi' }), false);
   assert.equal(isManualLocked({}), false);
 });
@@ -92,6 +94,13 @@ check('manual correction preserved on divergent provider data', () => {
 check('manual lock nochange when identical', () => {
   const r = classifyCourseSync('course_1', { lat: 12.9, lng: 100.8, gpsSource: 'manual' }, { courseID: 'course_1', latitude: 12.9, longitude: 100.8 });
   assert.equal(r.result, 'nochange');
+});
+check('trusted and quarantined GPS are preserved', () => {
+  for (const existing of [{ trusted: true }, { requiresManualGPS: true }]) {
+    const r = classifyCourseSync('course_1', { latitude: 12.9, longitude: 100.8, ...existing }, { courseID: 'course_1', latitude: 5, longitude: 50 });
+    assert.equal(r.result, 'skipped_manual');
+    assert.equal(r.after, undefined);
+  }
 });
 
 console.log(`\ncourseSync core: ${passed} checks passed.`);

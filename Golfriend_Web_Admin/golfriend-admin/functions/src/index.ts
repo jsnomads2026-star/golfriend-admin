@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target v1
 import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
+import { runSyncCoursesFromProviderPreview } from "./courseSyncPreview.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
@@ -1024,7 +1025,11 @@ export const syncCoursesFromProvider = onCall(
         continue;
       }
 
-      const decision = classifyCourseSync(t.courseID, t.data, provider);
+      const decision = mode === 'preview'
+        ? runSyncCoursesFromProviderPreview('preview', [{ courseId: t.courseID, existing: t.data }], new Map([
+          [t.courseID, { kind: 'response' as const, course: provider }],
+        ])).results[0]
+        : classifyCourseSync(t.courseID, t.data, provider);
       const row: CourseSyncResultRow = { courseId: t.courseID, result: decision.result, message: decision.message, before: decision.before };
       if (decision.after) row.after = decision.after;
 
