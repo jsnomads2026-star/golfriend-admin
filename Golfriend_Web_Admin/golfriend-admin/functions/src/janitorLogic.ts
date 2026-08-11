@@ -18,6 +18,8 @@ export interface CourseRec {
   clubName?: string;
   manualLock?: boolean;
   trusted?: boolean;
+  gpsSource?: string;
+  requiresManualGPS?: boolean;
   createdAt?: number | string;
   [k: string]: unknown;
 }
@@ -40,7 +42,20 @@ export interface PurgePlan {
 
 /** A record is protected from deletion if it is manually locked or trusted. */
 export function isLocked(c: CourseRec | null | undefined): boolean {
-  return !!c && (c.manualLock === true || c.trusted === true);
+  return !!c && (
+    c.manualLock === true
+    || c.trusted === true
+    || c.requiresManualGPS === true
+    || c.gpsSource === 'manual'
+  );
+}
+
+/** Revalidate a planned deletion against the transaction-time document. */
+export function canDeletePlannedCourse(
+  plannedDocId: string,
+  current: CourseRec | null | undefined,
+): boolean {
+  return !!current && current.docId === plannedDocId && !isLocked(current);
 }
 
 /** The dedup identifier; null when neither clubID nor clubName is a usable string. */

@@ -8,7 +8,7 @@ import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
-import { planDuplicatePurge, isLocked, type CourseRec } from "./janitorLogic.js";
+import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -138,36 +138,41 @@ export const weeklyVaultJanitor = onSchedule({
     // selects a deterministic winner, and preserves last-known-good. See janitorLogic.ts.
     const plan = planDuplicatePurge(allCourses);
 
-    // Defence in depth: even if a plan were malformed, never delete a locked record.
+    // Preliminary defence in depth. Every candidate is re-read again inside its
+    // deletion transaction so a concurrent manual/trusted correction wins.
     const byId = new Map(allCourses.map((c) => [c.docId, c]));
     const safeToDelete = plan.toDelete.filter((id) => !isLocked(byId.get(id)));
 
     console.log(`⚠️ Janitor plan: keep ${Object.keys(plan.keep).length}, delete ${safeToDelete.length}, skipped-ambiguous ${plan.ambiguous.length}, no-identifier ${plan.skippedNoIdentifier.length}.`);
 
-    // Bounded audit evidence for every group decision (single doc, capped).
+    const deleted: string[] = [];
+    const protectedAtCommit: string[] = [];
+    for (const docId of safeToDelete) {
+      const wasDeleted = await db.runTransaction(async (tx) => {
+        const ref = db.collection("courses").doc(docId);
+        const fresh = await tx.get(ref);
+        const current = fresh.exists ? { ...(fresh.data() as CourseRec), docId: fresh.id } : null;
+        if (!canDeletePlannedCourse(docId, current)) return false;
+        tx.delete(ref);
+        return true;
+      });
+      if (wasDeleted) deleted.push(docId); else protectedAtCommit.push(docId);
+    }
+
+    // Bounded audit evidence records the actual transaction-time outcome.
     await db.collection("course_maintenance_audit").doc(`janitor_${event.scheduleTime || new Date().toISOString()}`).set({
       job: "weeklyVaultJanitor",
       ranAt: admin.firestore.FieldValue.serverTimestamp(),
       keptCount: Object.keys(plan.keep).length,
-      deletedCount: safeToDelete.length,
+      deletedCount: deleted.length,
+      deleted: deleted.slice(0, 200),
+      protectedAtCommit: protectedAtCommit.slice(0, 200),
       ambiguous: plan.ambiguous.slice(0, 200),
       skippedNoIdentifier: plan.skippedNoIdentifier.slice(0, 200),
       decisions: plan.audit.slice(0, 200),
     }, { merge: false });
 
-    if (safeToDelete.length === 0) { console.log("🏁 WEEKLY JANITOR COMPLETE. Nothing safe to purge."); return; }
-
-    let currentBatch = db.batch();
-    let operationCount = 0;
-    const commits: Promise<unknown>[] = [];
-    for (const docId of safeToDelete) {
-      currentBatch.delete(db.collection("courses").doc(docId));
-      operationCount++;
-      if (operationCount === 490) { commits.push(currentBatch.commit()); currentBatch = db.batch(); operationCount = 0; }
-    }
-    if (operationCount > 0) commits.push(currentBatch.commit());
-    await Promise.all(commits);
-    console.log(`🏁 WEEKLY JANITOR COMPLETE. Purged ${safeToDelete.length}; ${plan.ambiguous.length} ambiguous groups preserved.`);
+    console.log(`🏁 WEEKLY JANITOR COMPLETE. Purged ${deleted.length}; protected ${protectedAtCommit.length} at commit; ${plan.ambiguous.length} ambiguous groups preserved.`);
   } catch (error) {
     console.error("❌ CRITICAL JANITOR FAILURE:", error);
   }

@@ -6,7 +6,7 @@
 // preservation, and order-independence. Never executes the scheduled job.
 // ==========================================
 import assert from 'node:assert';
-import { planDuplicatePurge, isLocked, identifierOf } from './janitorLogic.js';
+import { planDuplicatePurge, isLocked, identifierOf, canDeletePlannedCourse } from './janitorLogic.js';
 
 let passed = 0;
 function check(name: string, fn: () => void) { fn(); passed += 1; console.log(`  ✓ ${name}`); }
@@ -46,6 +46,18 @@ check('trusted flag is honoured like a manual lock', () => {
   ]);
   assert.equal(plan.keep['C3'], 't');
   assert.deepEqual(plan.toDelete, ['u']);
+});
+check('manual GPS source and quarantine marker are protected like explicit locks', () => {
+  const plan = planDuplicatePurge([
+    { docId: 'manual-source', clubID: 'C3A', gpsSource: 'manual' },
+    { docId: 'provider-copy', clubID: 'C3A', clubName: 'Full', latitude: 1, longitude: 1 },
+    { docId: 'quarantined', clubID: 'C3B', requiresManualGPS: true },
+    { docId: 'other-copy', clubID: 'C3B', clubName: 'Other', latitude: 2, longitude: 2 },
+  ]);
+  assert.equal(plan.keep['C3A'], 'manual-source');
+  assert.equal(plan.keep['C3B'], 'quarantined');
+  assert.ok(!plan.toDelete.includes('manual-source'));
+  assert.ok(!plan.toDelete.includes('quarantined'));
 });
 
 // ---- FAIL CLOSED: ambiguous duplicate groups skipped, zero deletions ----
@@ -97,11 +109,23 @@ check('deterministic + order-independent: shuffled input yields identical plan',
 check('isLocked / identifierOf behave', () => {
   assert.equal(isLocked({ docId: 'x', manualLock: true }), true);
   assert.equal(isLocked({ docId: 'x', trusted: true }), true);
+  assert.equal(isLocked({ docId: 'x', gpsSource: 'manual' }), true);
+  assert.equal(isLocked({ docId: 'x', requiresManualGPS: true }), true);
   assert.equal(isLocked({ docId: 'x' }), false);
   assert.equal(isLocked(null), false);
   assert.equal(identifierOf({ docId: 'x', clubID: 'ID' }), 'ID');
   assert.equal(identifierOf({ docId: 'x', clubName: 'N' }), 'N');
   assert.equal(identifierOf({ docId: 'x' }), null);
+});
+
+check('transaction-time deletion guard fails closed when a planned record becomes protected', () => {
+  assert.equal(canDeletePlannedCourse('candidate', { docId: 'candidate', clubID: 'C8' }), true);
+  assert.equal(canDeletePlannedCourse('candidate', { docId: 'candidate', clubID: 'C8', manualLock: true }), false);
+  assert.equal(canDeletePlannedCourse('candidate', { docId: 'candidate', clubID: 'C8', trusted: true }), false);
+  assert.equal(canDeletePlannedCourse('candidate', { docId: 'candidate', clubID: 'C8', gpsSource: 'manual' }), false);
+  assert.equal(canDeletePlannedCourse('candidate', { docId: 'candidate', clubID: 'C8', requiresManualGPS: true }), false);
+  assert.equal(canDeletePlannedCourse('candidate', { docId: 'other', clubID: 'C8' }), false);
+  assert.equal(canDeletePlannedCourse('candidate', null), false);
 });
 
 console.log(`\njanitorLogic: ${passed} checks passed.`);
