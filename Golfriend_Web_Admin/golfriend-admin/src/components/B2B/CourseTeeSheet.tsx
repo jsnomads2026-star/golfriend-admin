@@ -64,29 +64,17 @@ export default function CourseTeeSheet() {
     setCartInputs(prev => ({ ...prev, [uid]: cartNumber }));
   };
 
+  // Flight check-in is UNAVAILABLE: the `checkInFlight` Cloud Function is failed
+  // closed (unresolved tournament/Play-domain authority) pending a founder policy
+  // decision for the non-financial V2 world. This handler no longer invokes any
+  // callable — it only surfaces an honest unavailable state. The flight sheet
+  // display and the (approved) reportPlayerIncident moderation action are unchanged.
   const executeCheckIn = async () => {
-    if (!selectedFlight) return;
-    setIsProcessing(true);
-
-    try {
-      const unassigned = selectedFlight.players.some(p => !cartInputs[p.uid]);
-      if (unassigned) throw new Error("All players must be assigned a cart to establish liability.");
-
-      const checkInFlight = httpsCallable(getFunctions(), 'checkInFlight');
-      const res: any = await checkInFlight({
-        gameId: selectedFlight.id,
-        cartAssignments: cartInputs
-      });
-      if (!res?.data?.success) throw new Error("Check-in failed.");
-
-      setNotification({ msg: `Flight ${selectedFlight.time} checked in successfully. Liability locked.`, type: 'success' });
-      setSelectedFlight(null);
-    } catch (error: any) {
-      setNotification({ msg: error.message || "Check-in failed.", type: 'error' });
-    } finally {
-      setIsProcessing(false);
-      setTimeout(() => setNotification(null), 4000);
-    }
+    setNotification({
+      msg: 'Flight check-in is unavailable pending founder policy review (checkInFlight is disabled in the non-financial V2 world).',
+      type: 'error',
+    });
+    setTimeout(() => setNotification(null), 5000);
   };
 
   const triggerNuclearButton = async (uid: string, nickname: string) => {
@@ -219,14 +207,16 @@ export default function CourseTeeSheet() {
               </div>
 
               {selectedFlight.status === 'pending' && (
-                <div style={{ marginTop: '20px', borderTop: '1px solid #333', paddingTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                  <button 
+                <div style={{ marginTop: '20px', borderTop: '1px solid #333', paddingTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                  <button
                     onClick={executeCheckIn}
-                    disabled={isProcessing}
-                    style={{ backgroundColor: '#D4AF37', color: '#000', border: 'none', padding: '12px 24px', borderRadius: '6px', fontWeight: '900', fontSize: '14px', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                    disabled
+                    title="Flight check-in is unavailable pending founder policy review."
+                    style={{ backgroundColor: '#2a2a2a', color: '#777', border: '1px solid #333', padding: '12px 24px', borderRadius: '6px', fontWeight: '900', fontSize: '14px', cursor: 'not-allowed' }}
                   >
-                    {isProcessing ? 'LOCKING...' : 'COMMIT CHECK-IN & ACTIVATE LIABILITY'}
+                    🔒 CHECK-IN UNAVAILABLE (POLICY REVIEW)
                   </button>
+                  <span style={{ fontSize: '11px', color: '#666' }}>checkInFlight is disabled in the non-financial V2 world.</span>
                 </div>
               )}
             </div>

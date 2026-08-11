@@ -7,12 +7,13 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnaps
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebaseConfig';
 
-import TournamentManager from '../admin/TournamentManager';
+// TournamentManager + RaffleEngine removed from navigation (manageTournamentOps /
+// drawRaffleWinner unresolved — fail-closed pending founder policy).
+import PolicyUnavailable from '../common/PolicyUnavailable';
 import TournamentTV from '../admin/TournamentTV';
-import RaffleEngine from '../admin/RaffleEngine';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
-import AdLeadsInbox from './AdLeadsInbox'; 
-import CourseTeeSheet from './CourseTeeSheet'; // 🔥 New B2B Liability Engine 
+import AdLeadsInbox from './AdLeadsInbox';
+import CourseTeeSheet from './CourseTeeSheet'; // 🔥 B2B flight sheet (check-in control quarantined)
 
 const MasterInventory = ({ onLaunchClick, onEditClick, isLimitReached, partnerUid }: { onLaunchClick: () => void, onEditClick: (item: any) => void, isLimitReached: boolean, partnerUid: string }) => {
   const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
@@ -610,11 +611,11 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'teesheet' && <CourseTeeSheet />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
-        {activeTab === 'tournaments' && <TournamentManager tournamentId="PUI_SPORTS_BAR_0007" isPremium={isMasterHost} />}
+        {activeTab === 'tournaments' && <PolicyUnavailable feature="Tournament Operations" category="unresolved-policy" callable="manageTournamentOps" />}
         {activeTab === 'adhub' && <AdHub isMasterHost={isMasterHost} partnerUid={authUid} />}
         {activeTab === 'wallet' && <WalletSettings partnerUid={authUid} />}
         {activeTab === 'tv' && <TournamentTV />}
-        {activeTab === 'raffle' && <RaffleEngine />}
+        {activeTab === 'raffle' && <PolicyUnavailable feature="Raffle Draw" category="unresolved-policy" callable="drawRaffleWinner" />}
         {activeTab === 'crm' && <AdLeadsInbox partnerUid={authUid} />}
         {activeTab === 'org' && <OrgProfile partnerUid={authUid} email={partnerData?.email} />}
         {activeTab === 'venues' && <VenueManager partnerUid={authUid} />}

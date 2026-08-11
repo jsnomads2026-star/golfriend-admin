@@ -11,24 +11,24 @@ import B2BStorefront from './components/public/B2BStorefront';
 import CourseDiscovery from './components/public/CourseDiscovery';
 import LegalPrivacy from './components/public/LegalPrivacy';
 import SupportPage from './components/public/SupportPage';
-import PhotoValidator from './components/admin/PhotoValidator';
-import CentralBankMonitor from './components/admin/CentralBankMonitor';
-import EscrowWatchtower from './components/admin/EscrowWatchtower';
-import ManualOverride from './components/admin/ManualOverride';
-import FiatLedger from './components/admin/FiatLedger';
+import PolicyUnavailable from './components/common/PolicyUnavailable';
+// Quarantined economy/settlement consoles removed from active navigation (their
+// Cloud Functions are quarantined fail-closed): PhotoValidator, CentralBankMonitor,
+// EscrowWatchtower, ManualOverride, FiatLedger — replaced by PolicyUnavailable.
+// See docs/V2_CALLABLE_AUTHORITY_CLASSIFICATION.md.
 import CourseSeeder from './components/CourseSeeder';
 import TeeTimeInventory from './components/admin/TeeTimeInventory'; // ⛳ Tee-time inventory management
 import CourseSyncConsole from './components/admin/CourseSyncConsole'; // 🛰️ Server-side Golf-API sync
-import CourseTeeSheet from './components/B2B/CourseTeeSheet'; // 🔥 New B2B Liability Engine
-import TournamentManager from './components/admin/TournamentManager'; 
-import TournamentTV from './components/admin/TournamentTV'; 
+import CourseTeeSheet from './components/B2B/CourseTeeSheet'; // 🔥 B2B flight sheet (check-in control quarantined)
+// TournamentManager removed from navigation (manageTournamentOps unresolved — fail-closed).
+import TournamentTV from './components/admin/TournamentTV';
 import EventGenesisConsole from './components/admin/EventGenesisConsole';
 // SponsorOnboardingWizard QUARANTINED (dead code w/ client ledger writes) — not routed.
 import SponsorDashboard from './components/admin/sponsors/SponsorDashboard';
 import LiveAutomationLog from './components/admin/LiveAutomationLog';
 import SupportModerationHub from './components/admin/SupportModerationHub';
 import PartnerVault from './components/admin/PartnerVault';
-import B2BPartners from './components/B2B/B2BPartners';
+// B2BPartners removed from navigation (adminManagePartner quarantined — fail-closed).
 import HRManagement from './components/admin/HRManagement'; // 🔥 HR & Staff
 import BookingOversight from './components/admin/BookingOversight'; // 📖 Booking oversight + refund/escalation
 import BookingAudit from './components/admin/BookingAudit'; // 🧾 Booking audit trail (read-only)
@@ -36,7 +36,7 @@ import BookingAudit from './components/admin/BookingAudit'; // 🧾 Booking audi
 // 🔥 B2B COMMERCE (OEM) COMPONENTS
 import VendorControlSystem from './components/admin/oem/VendorControlSystem';
 import OemProductForge from './components/admin/oem/OemProductForge';
-import OrderFulfillmentHub from './components/admin/oem/OrderFulfillmentHub';
+// OrderFulfillmentHub removed from navigation (updateFulfillmentOrder quarantined — fail-closed).
 import BuyerCustomerCRM from './components/admin/oem/BuyerCustomerCRM';
 
 export default function App() {
@@ -280,29 +280,30 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
 
       {/* Main Content Area */}
       <div style={styles.content}>
-        {activeTab === 'photos' && <PhotoValidator />}
-        {activeTab === 'escrow' && <EscrowWatchtower />}
-        {activeTab === 'fiat' && <FiatLedger />}
-        {activeTab === 'ledger' && <ManualOverride />}
-        {activeTab === 'bank' && <CentralBankMonitor />}
-        
+        {/* Quarantined economy/settlement consoles → honest unavailable state (no callable). */}
+        {activeTab === 'photos' && <PolicyUnavailable feature="Photo Validation (chip-coupled)" category="prohibited-financial" callable="resolvePhotoValidation" />}
+        {activeTab === 'escrow' && <PolicyUnavailable feature="Escrow Locks" category="prohibited-financial" callable="resolveEscrow" />}
+        {activeTab === 'fiat' && <PolicyUnavailable feature="Fiat Revenue Ledger" category="prohibited-financial" callable="logPlatformExpense" />}
+        {activeTab === 'ledger' && <PolicyUnavailable feature="Manual Wallet Override" category="prohibited-financial" callable="adminOverrideUser" />}
+        {activeTab === 'bank' && <PolicyUnavailable feature="Central Bank Monitor" category="prohibited-financial" callable="adminOverrideUser" />}
+
         {/* 🔥 RENDER THE ENGINE */}
         {activeTab === 'courses' && <CourseSeeder />}
         {activeTab === 'teetimes' && <TeeTimeInventory />}
         {activeTab === 'coursesync' && <CourseSyncConsole />}
         {activeTab === 'teesheet' && <CourseTeeSheet />}
-        {activeTab === 'tournaments' && <TournamentManager />}
+        {activeTab === 'tournaments' && <PolicyUnavailable feature="Tournament Operations" category="unresolved-policy" callable="manageTournamentOps" />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
-        
+
         {/* 🔥 RENDER OEM HUB */}
         {activeTab === 'vendors' && <VendorControlSystem />}
         {activeTab === 'adhub' && <SponsorDashboard />}
         {activeTab === 'forge' && <OemProductForge />}
-        {activeTab === 'fulfillment' && <OrderFulfillmentHub />}
+        {activeTab === 'fulfillment' && <PolicyUnavailable feature="Order Fulfillment" category="prohibited-financial" callable="updateFulfillmentOrder" />}
         {activeTab === 'crm' && <BuyerCustomerCRM />}
 
-        {/* 🔥 RENDER B2B PARTNERS */}
-        {activeTab === 'b2b' && <B2BPartners />}
+        {/* B2B partner wallet/tier command center → unavailable (adminManagePartner quarantined). */}
+        {activeTab === 'b2b' && <PolicyUnavailable feature="B2B Partner Wallet/Tier" category="prohibited-financial" callable="adminManagePartner" />}
 
         {/* 🔥 RENDER SYSTEM VAULT */}
         {activeTab === 'vault' && <PartnerVault />}

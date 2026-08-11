@@ -8,7 +8,8 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnaps
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebaseConfig';
 
-import TournamentManager from '../admin/TournamentManager';
+// TournamentManager removed from navigation (manageTournamentOps unresolved — fail-closed).
+import PolicyUnavailable from '../common/PolicyUnavailable';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
 import BookingRequests from './BookingRequests';
@@ -552,7 +553,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
         {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
-        {activeTab === 'tournaments' && <TournamentManager isMasterHost={isMasterHost} />}
+        {activeTab === 'tournaments' && <PolicyUnavailable feature="Tournament Operations" category="unresolved-policy" callable="manageTournamentOps" />}
         {activeTab === 'adhub' && <AdHub isMasterHost={isMasterHost} partnerUid={authUid} />}
         {activeTab === 'wallet' && <WalletSettings partnerUid={authUid} />}
         {activeTab === 'crm' && <AdLeadsInbox partnerUid={authUid} />}

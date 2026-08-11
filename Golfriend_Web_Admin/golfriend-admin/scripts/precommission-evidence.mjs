@@ -17,6 +17,8 @@ const AUTOMATED = [
   ['gate:a11y', 'scripts/portal-a11y-gate.mjs', 'portal state screens accessible; no God-Mode/TV-bypass/raw error'],
   ['gate:fnauth', 'scripts/functions-authority-gate.mjs', 'syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass'],
   ['gate:godmode', 'scripts/functions-godmode-gate.mjs', 'repository-wide: no admin@golfriend.co/caller-email/env God-Mode; retained callables use server-owned authority; quarantined callables fail-closed'],
+  ['gate:clientcallable', 'scripts/client-callable-gate.mjs', 'no reachable client surface invokes any quarantined/unresolved callable; prohibited consoles unreachable'],
+  ['verify:nav', 'scripts/nav-reachability-verify.mjs', 'quarantined console tabs render PolicyUnavailable; approved journeys remain mounted'],
   ['verify:booking', 'scripts/booking-journey-verify.mjs', 'non-financial booking journey'],
   ['verify:v2', 'scripts/v2-synthetic-verify.mjs', 'synthetic V2 non-financial journey; zero V1'],
   ['verify:roles', 'scripts/role-journey-verify.mjs', 'cross-role journey matrix; server-owned derivation'],
