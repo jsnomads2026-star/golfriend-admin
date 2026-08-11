@@ -136,9 +136,10 @@ Firestore evaluates `allow read` for both single-doc GET and multi-doc LIST; for
 
 **Owning callables:** every booking callable via `stampBookingAudit` (`AUTHORITY_MANIFEST.md:20`).
 
-**Read predicate for rules:** staff / God-Mode only recommended (audit trail; no client component currently reads it — no query found). write: `false`; additionally treat as **immutable** (no update/delete even via rules — enforced by Admin-SDK-only writes).
+**Read predicate for rules:** staff / God-Mode only (audit trail). write: `false`; additionally treat as **immutable** (no update/delete even via rules — enforced by Admin-SDK-only writes). Lane B's `booking_audit` rule (`allow read: if isStaff(); allow write: if false`) already covers the reader below — **no rules change required.**
 
-**Client read/query shapes:** none found (server-only append; no client reader).
+**Client read/query shapes:**
+- `query(collection(db,'booking_audit'), orderBy('at','desc'), limit(300))` — `BookingAudit.tsx` (admin, staff-only read-only viewer). Single-field `at` ordering → **Firestore single-field auto-index; no composite index required.** (This is the only booking-related reader added since the initial handoff; it does not change the write posture or the sole `tee_time_slots(date,time)` composite.)
 
 ---
 

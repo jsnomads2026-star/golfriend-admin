@@ -31,6 +31,7 @@ import PartnerVault from './components/admin/PartnerVault';
 import B2BPartners from './components/B2B/B2BPartners';
 import HRManagement from './components/admin/HRManagement'; // 🔥 HR & Staff
 import BookingOversight from './components/admin/BookingOversight'; // 📖 Booking oversight + refund/escalation
+import BookingAudit from './components/admin/BookingAudit'; // 🧾 Booking audit trail (read-only)
 
 // 🔥 B2B COMMERCE (OEM) COMPONENTS
 import VendorControlSystem from './components/admin/oem/VendorControlSystem';
@@ -85,7 +86,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
+  const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'bookingaudit' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
 
   // CORE AUTH LISTENER — access is derived ONLY from server-owned role docs.
   useEffect(() => {
@@ -230,6 +231,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
           <button style={{...styles.navBtn, ...(activeTab === 'photos' ? styles.activeBtn : {})}} onClick={() => setActiveTab('photos')}>📷 Photos</button>
           <button style={{...styles.navBtn, ...(activeTab === 'support' ? styles.activeBtn : {})}} onClick={() => setActiveTab('support')}>🛡️ Support</button>
           <button style={{...styles.navBtn, ...(activeTab === 'bookingoversight' ? styles.activeBtn : {})}} onClick={() => setActiveTab('bookingoversight')}>📖 Booking Oversight</button>
+          <button style={{...styles.navBtn, ...(activeTab === 'bookingaudit' ? styles.activeBtn : {})}} onClick={() => setActiveTab('bookingaudit')}>🧾 Booking Audit</button>
         </div>
 
         <div style={styles.sectionHeader}>CENTRAL ECONOMY</div>
@@ -307,6 +309,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         {activeTab === 'automation' && <LiveAutomationLog />}
         {activeTab === 'support' && <SupportModerationHub />}
         {activeTab === 'bookingoversight' && <BookingOversight />}
+        {activeTab === 'bookingaudit' && <BookingAudit />}
         {activeTab === 'hr' && <HRManagement />}
         {/* SponsorOnboardingWizard removed from routing (quarantined dead code). */}
       </div>
