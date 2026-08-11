@@ -7,6 +7,9 @@ import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
 import B2BStorefront from './components/public/B2BStorefront';
+import CourseDiscovery from './components/public/CourseDiscovery';
+import LegalPrivacy from './components/public/LegalPrivacy';
+import SupportPage from './components/public/SupportPage';
 import PhotoValidator from './components/admin/PhotoValidator';
 import CentralBankMonitor from './components/admin/CentralBankMonitor';
 import EscrowWatchtower from './components/admin/EscrowWatchtower';
@@ -25,6 +28,7 @@ import SupportModerationHub from './components/admin/SupportModerationHub';
 import PartnerVault from './components/admin/PartnerVault';
 import B2BPartners from './components/B2B/B2BPartners';
 import HRManagement from './components/admin/HRManagement'; // 🔥 HR & Staff
+import BookingOversight from './components/admin/BookingOversight'; // 📖 Booking oversight + refund/escalation
 
 // 🔥 B2B COMMERCE (OEM) COMPONENTS
 import VendorControlSystem from './components/admin/oem/VendorControlSystem';
@@ -39,6 +43,9 @@ export default function App() {
         {/* PUBLIC ARENA */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/storefront" element={<B2BStorefront />} />
+        <Route path="/discover" element={<CourseDiscovery />} />
+        <Route path="/legal" element={<LegalPrivacy />} />
+        <Route path="/support" element={<SupportPage />} />
         
         {/* SECURE ISOLATED DASHBOARDS */}
         <Route path="/partner" element={<Dashboard mode="partner" />} />
@@ -70,7 +77,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [authError, setAuthError] = useState('');
 
   // 🔥 Added 'teesheet' to the allowed state literal
-  const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
+  const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
 
   // 🔥 CORE AUTHENTICATION LISTENER
   useEffect(() => {
@@ -244,6 +251,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
           <button style={{...styles.navBtn, ...(activeTab === 'hr' ? styles.activeBtn : {})}} onClick={() => setActiveTab('hr')}>👔 HR & Staff</button>
           <button style={{...styles.navBtn, ...(activeTab === 'photos' ? styles.activeBtn : {})}} onClick={() => setActiveTab('photos')}>📷 Photos</button>
           <button style={{...styles.navBtn, ...(activeTab === 'support' ? styles.activeBtn : {})}} onClick={() => setActiveTab('support')}>🛡️ Support</button>
+          <button style={{...styles.navBtn, ...(activeTab === 'bookingoversight' ? styles.activeBtn : {})}} onClick={() => setActiveTab('bookingoversight')}>📖 Booking Oversight</button>
         </div>
 
         <div style={styles.sectionHeader}>CENTRAL ECONOMY</div>
@@ -318,6 +326,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         {activeTab === 'vault' && <PartnerVault />}
         {activeTab === 'automation' && <LiveAutomationLog />}
         {activeTab === 'support' && <SupportModerationHub />}
+        {activeTab === 'bookingoversight' && <BookingOversight />}
         {activeTab === 'hr' && <HRManagement />}
         
         {/* Legacy component kept alive in code, hidden from sidebar UI */}

@@ -783,6 +783,229 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// 📖 ADMIN BOOKING OVERSIGHT (Force-Resolve: Confirm / Refund / Escalate)
+// ==========================================
+// Platform-staff override for the booking lifecycle. Seats and chips are
+// settlement state, so this is server-owned: the client only names a decision;
+// the seat release, wallet refund and hold settlement all happen here in a
+// single transaction. Mirrors requestBooking/respondBooking exactly.
+export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { bookingId, decision } = request.data || {};
+  if (!bookingId || typeof bookingId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A bookingId is required.');
+  }
+  if (decision !== 'confirm' && decision !== 'refund' && decision !== 'escalate') {
+    throw new HttpsError('invalid-argument', 'decision must be confirm, refund or escalate.');
+  }
+
+  // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode.
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  if (!isStaff && !isGodMode) {
+    throw new HttpsError('permission-denied', 'You are not authorized to resolve bookings.');
+  }
+
+  const bookingRef = db.collection('bookings').doc(bookingId);
+
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const bSnap = await tx.get(bookingRef);
+      if (!bSnap.exists) throw new HttpsError('not-found', 'Booking not found.');
+      const booking = bSnap.data() || {};
+
+      const price = Number(booking.priceChips || 0);
+      const holdRef = db.collection('transactions').doc(`booking_hold_${bookingId}`);
+      const slotRef = db.collection('tee_time_slots').doc(booking.slotId);
+
+      // ---- CONFIRM: only a pending booking; settle the hold, seat stays counted ----
+      if (decision === 'confirm') {
+        if (booking.status !== 'pending') {
+          throw new HttpsError('failed-precondition', `Booking is already ${booking.status}.`);
+        }
+        tx.set(bookingRef, {
+          status: 'confirmed',
+          userStatusKey: 'booking_confirmed',
+          resolvedByUid: callerUid,
+          resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        if (price > 0) {
+          tx.set(holdRef, {
+            status: 'completed',
+            resolvedBy: 'ADMIN_CONFIRM',
+            resolvedByUid: callerUid,
+            resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        return { bookingId, status: 'confirmed' };
+      }
+
+      // ---- REFUND: release seat + refund player; idempotent guard ----
+      if (decision === 'refund') {
+        if (booking.status === 'refunded') {
+          throw new HttpsError('failed-precondition', 'Booking is already refunded.');
+        }
+        if (booking.status !== 'pending' && booking.status !== 'confirmed' && booking.status !== 'disputed') {
+          throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be refunded.`);
+        }
+        // Release the seat (only meaningful while it was still counted).
+        if (booking.status === 'pending' || booking.status === 'confirmed') {
+          const slotSnap = await tx.get(slotRef);
+          if (slotSnap.exists) {
+            const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
+            tx.set(slotRef, {
+              bookedCount: Math.max(0, bookedCount - 1),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+          }
+        }
+        // Refund the player's held chips and fail the hold.
+        if (price > 0) {
+          const playerRef = db.collection('users').doc(booking.playerUid);
+          tx.set(playerRef, { chips: admin.firestore.FieldValue.increment(price) }, { merge: true });
+          tx.set(holdRef, {
+            status: 'failed',
+            resolvedBy: 'ADMIN_REFUND',
+            resolvedByUid: callerUid,
+            resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        tx.set(bookingRef, {
+          status: 'refunded',
+          userStatusKey: 'booking_refunded',
+          resolvedByUid: callerUid,
+          resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return { bookingId, status: 'refunded' };
+      }
+
+      // ---- ESCALATE: mark disputed; flag hold for manual settlement (keep locked) ----
+      if (booking.status === 'refunded') {
+        throw new HttpsError('failed-precondition', 'A refunded booking cannot be escalated.');
+      }
+      tx.set(bookingRef, {
+        status: 'disputed',
+        userStatusKey: 'booking_disputed',
+        resolvedByUid: callerUid,
+        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      tx.set(holdRef, {
+        disputeFlagged: true,
+        resolvedByUid: callerUid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return { bookingId, status: 'disputed' };
+    });
+
+    logger.info(`📖 Booking ${out.bookingId} → ${out.status} by admin ${callerUid}.`);
+    return { success: true, ...out };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("📖 Admin booking resolution failed:", error);
+    throw new HttpsError('internal', error.message || 'Admin booking resolution failed.');
+  }
+});
+
+// ==========================================
+// 🧑‍💼 ENTERPRISE STAFF & ROLES (Server-Authoritative Role Grant)
+// ==========================================
+// Enterprise portal staff management. Role assignment is authoritative state, so
+// it is server-owned: the client cannot self-assign roles or write the roster.
+// Only an ACTIVE ENTERPRISE partner may invite/remove staff on their own org.
+// Roster lives at enterprise_staff/{enterpriseUid}/members/{staffUid}.
+export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { action, email, staffUid, role } = request.data || {};
+
+  if (action !== 'invite' && action !== 'remove') {
+    throw new HttpsError('invalid-argument', 'action must be "invite" or "remove".');
+  }
+
+  // Caller must be an ACTIVE ENTERPRISE partner (b2b_partners keyed by uid/email).
+  const candidateIds = [callerUid];
+  if (callerEmail) {
+    candidateIds.push(callerEmail);
+    candidateIds.push(callerEmail.charAt(0).toUpperCase() + callerEmail.slice(1));
+  }
+  let isEnterprisePartner = false;
+  for (const id of candidateIds) {
+    const pSnap = await db.collection('b2b_partners').doc(id).get();
+    const pData = pSnap.data();
+    if (pSnap.exists && pData?.status === 'active_partner' &&
+        (pData?.tier === 'enterprise' || pData?.tier === 'Enterprise')) {
+      isEnterprisePartner = true;
+      break;
+    }
+  }
+  if (!isEnterprisePartner) {
+    throw new HttpsError('permission-denied', 'Only an active enterprise partner can manage staff.');
+  }
+
+  // The enterprise's roster is namespaced under the caller's uid.
+  const membersCol = db.collection('enterprise_staff').doc(callerUid).collection('members');
+
+  try {
+    if (action === 'invite') {
+      const cleanEmail = (email || "").toLowerCase().trim();
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        throw new HttpsError('invalid-argument', 'A valid staff email is required.');
+      }
+      const allowedRoles = ['manager', 'venue_staff', 'analyst'];
+      const cleanRole = allowedRoles.includes(role) ? role : 'venue_staff';
+
+      // Resolve an EXISTING Firebase Auth user; roles bind to a real uid.
+      let staffRecord;
+      try {
+        staffRecord = await admin.auth().getUserByEmail(cleanEmail);
+      } catch {
+        throw new HttpsError('not-found', 'No Golfriend account exists for that email. Ask them to sign up first.');
+      }
+      if (staffRecord.uid === callerUid) {
+        throw new HttpsError('failed-precondition', 'You cannot add yourself as staff.');
+      }
+
+      await membersCol.doc(staffRecord.uid).set({
+        staffUid: staffRecord.uid,
+        email: cleanEmail,
+        role: cleanRole,
+        status: 'active',
+        enterpriseUid: callerUid,
+        invitedAt: admin.firestore.FieldValue.serverTimestamp(),
+        invitedBy: callerUid,
+      }, { merge: true });
+
+      logger.info(`🧑‍💼 Enterprise ${callerUid} added staff ${staffRecord.uid} (${cleanRole}).`);
+      return { success: true, staffUid: staffRecord.uid, role: cleanRole };
+    }
+
+    // action === 'remove'
+    if (!staffUid || typeof staffUid !== 'string') {
+      throw new HttpsError('invalid-argument', 'A staffUid is required to remove a member.');
+    }
+    await membersCol.doc(staffUid).delete();
+    logger.info(`🧑‍💼 Enterprise ${callerUid} removed staff ${staffUid}.`);
+    return { success: true, staffUid };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🧑‍💼 Enterprise staff management failed:", error);
+    throw new HttpsError('internal', error.message || 'Staff management failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1

@@ -437,7 +437,14 @@ const AdHub = ({ isMasterHost, partnerUid }: { isMasterHost: boolean, partnerUid
 
 import WalletSettings from './WalletSettings';
 
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000; 
+// 🏢 Enterprise portal sub-modules (organization, venues, staff, reporting, billing)
+import OrgProfile from './enterprise/OrgProfile';
+import VenueManager from './enterprise/VenueManager';
+import StaffRoles from './enterprise/StaffRoles';
+import EnterpriseReporting from './enterprise/EnterpriseReporting';
+import BillingBoundary from './enterprise/BillingBoundary';
+
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
 
 interface PartnerDashboardProps {
   partnerData: {
@@ -450,7 +457,7 @@ interface PartnerDashboardProps {
 
 export default function EnterpriseDashboard({ partnerData }: PartnerDashboardProps) {
   // 🔥 Added 'teesheet' to the allowed state literal
-  const [activeTab, setActiveTab] = useState<'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm'>('teesheet');
+  const [activeTab, setActiveTab] = useState<'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm' | 'org' | 'venues' | 'staff' | 'reporting' | 'billing'>('teesheet');
   const [liveTier, setLiveTier] = useState<string>(partnerData?.tier || 'basic_operator');
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -556,7 +563,40 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
           👥 Unified Host Inbox {!isMasterHost && '🔒'}
         </button>
 
-        <div style={styles.sectionHeader}>ACCOUNT</div>
+        <div style={styles.sectionHeader}>ENTERPRISE PORTAL</div>
+        <button
+          style={{...styles.navBtn, ...(activeTab === 'org' ? styles.activeBtn : {}), opacity: isMasterHost ? 1 : 0.4}}
+          onClick={() => isMasterHost && setActiveTab('org')}
+          disabled={!isMasterHost}
+        >
+          🏢 Organization {!isMasterHost && '🔒'}
+        </button>
+        <button
+          style={{...styles.navBtn, ...(activeTab === 'venues' ? styles.activeBtn : {}), opacity: isMasterHost ? 1 : 0.4}}
+          onClick={() => isMasterHost && setActiveTab('venues')}
+          disabled={!isMasterHost}
+        >
+          ⛳ Venues {!isMasterHost && '🔒'}
+        </button>
+        <button
+          style={{...styles.navBtn, ...(activeTab === 'staff' ? styles.activeBtn : {}), opacity: isMasterHost ? 1 : 0.4}}
+          onClick={() => isMasterHost && setActiveTab('staff')}
+          disabled={!isMasterHost}
+        >
+          🧑‍💼 Staff & Roles {!isMasterHost && '🔒'}
+        </button>
+        <button
+          style={{...styles.navBtn, ...(activeTab === 'reporting' ? styles.activeBtn : {}), opacity: isMasterHost ? 1 : 0.4}}
+          onClick={() => isMasterHost && setActiveTab('reporting')}
+          disabled={!isMasterHost}
+        >
+          📊 Reporting {!isMasterHost && '🔒'}
+        </button>
+
+        <div style={styles.sectionHeader}>ACCOUNT</div>
+        <button style={{...styles.navBtn, ...(activeTab === 'billing' ? styles.activeBtn : {})}} onClick={() => setActiveTab('billing')}>
+          🧾 Billing Overview
+        </button>
         <button style={{...styles.navBtn, ...(activeTab === 'wallet' ? styles.activeBtn : {})}} onClick={() => setActiveTab('wallet')}>
           💳 Wallet & Billing
         </button>
@@ -576,6 +616,11 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'tv' && <TournamentTV />}
         {activeTab === 'raffle' && <RaffleEngine />}
         {activeTab === 'crm' && <AdLeadsInbox partnerUid={authUid} />}
+        {activeTab === 'org' && <OrgProfile partnerUid={authUid} email={partnerData?.email} />}
+        {activeTab === 'venues' && <VenueManager partnerUid={authUid} />}
+        {activeTab === 'staff' && <StaffRoles partnerUid={authUid} />}
+        {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
+        {activeTab === 'billing' && <BillingBoundary partnerUid={authUid} />}
       </div>
     </div>
   );
