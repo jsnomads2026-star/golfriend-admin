@@ -1,15 +1,28 @@
 {
-  "lane_c_candidate": "8c3d510",
+  "lane_c_candidate": "f24ed0d",
   "lane_b": {
     "repo": "jsnomads2026-star/golfriend-app",
     "branch": "codex/v2-fun-loop-policy-foundation",
-    "pinned_tip": "442afaa3eb7e",
+    "pinned_tip": "c259a1c",
     "consumes": "Lane C read contract at ca2d6db..8c3d510 (LANEB_RULES_HANDOFF.md + issue #19 published contract)",
-    "expects": "clean firestore.v2-preview.rules implementing the published booking/operator read predicates; active firestore.rules + firebase.json unchanged"
+    "expects": "clean firestore.v2-preview.rules implementing the published booking/operator read predicates; active firestore.rules + firebase.json unchanged",
+    "previous_pinned_tip": "442afaa3eb7e",
+    "pinned_tip_full": "c259a1c98f0c0edc929af11f65e72b641e1431e7"
   },
   "drift_check": {
     "how": "re-run git ls-remote for the Lane B branch tip and compare to pinned_tip; if changed, re-verify firestore.v2-preview.rules against LANEB_RULES_HANDOFF.md",
-    "pinned_tip": "442afaa3eb7e"
+    "pinned_tip": "c259a1c",
+    "last_reverified_at": "2026-08-11T02:37:16.196Z",
+    "last_reverified_result": "PASS 13/13 (check:laneb) — firestore.v2-preview.{rules,indexes} match published contract",
+    "history": [
+      {
+        "from": "442afaa3eb7e",
+        "to": "c259a1c",
+        "result": "PASS 13/13",
+        "at": "2026-08-11T02:37:16.196Z",
+        "note": "Lane B advanced 442afaa→c259a1c (emulator rules matrix + storage + functions preflight); booking/operator read contract unchanged."
+      }
+    ]
   },
-  "generated_at": "2026-08-11T02:24:02.479Z"
+  "generated_at": "2026-08-11T02:37:16.196Z"
 }
