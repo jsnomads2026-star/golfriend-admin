@@ -59,15 +59,19 @@ this list is the reference set for rules, indexes, and seed planning.
 
 ## 2. Cloud Functions (names only)
 
-All exports from `functions/src/index.ts` (28 total).
+All exports from `functions/src/index.ts` (**25** total in the clean-V2 bundle).
 
-**Scheduled (`onSchedule`) — 3**
+**Scheduled (`onSchedule`) — 2**
 - `nightlyCourseHealer`
-- `weeklyVaultJanitor`
-- `hourlyTreasurySweep`
+- `weeklyVaultJanitor` (hardened: lock-safe, fail-closed dedup via the pure `janitorLogic` core + bounded `course_maintenance_audit`)
 
-**HTTP webhook (`onRequest`) — 1**
-- `stripeB2BWebhook`
+**HTTP webhook (`onRequest`) — 0**
+
+**Quarantined — NOT in the clean-V2 bundle** (removed from `index.ts`; reference in `docs/QUARANTINED_LEGACY_FINANCIAL_JOBS.md` + git history):
+- `hourlyTreasurySweep` (legacy `transactions`→`platform/treasury` reconciliation)
+- `stripeB2BWebhook` (fiat payment + legacy chip mint)
+
+Enforced out of the bundle by `scripts/functions-export-gate.mjs` (`gate:fnexport`).
 
 **Callable (`onCall`) — 23**
 - `inviteEmployee`

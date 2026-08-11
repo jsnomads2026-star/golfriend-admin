@@ -1,14 +1,14 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target v1
-import Stripe from "stripe";
 import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
+import { planDuplicatePurge, isLocked, type CourseRec } from "./janitorLogic.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -21,8 +21,6 @@ const visionClient = new vision.ImageAnnotatorClient(); // 🔥 ADDED
 // 🔐 Pulls the key securely from Google Secret Manager
 // 🔐 Pulls the key securely from Google Secret Manager
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
-const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
-const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 
 // ==========================================
 // 🌙 THE NIGHTLY HEALER (Runs every day at 3:00 AM)
@@ -133,197 +131,49 @@ export const weeklyVaultJanitor = onSchedule({
 
   try {
     const snapshot = await db.collection("courses").get();
-    const allCourses = snapshot.docs.map(doc => ({ docId: doc.id, ...(doc.data() as any) }));
+    const allCourses: CourseRec[] = snapshot.docs.map(doc => ({ docId: doc.id, ...(doc.data() as any) }));
 
-    const seenClubs = new Set();
-    const duplicatesToDelete: string[] = [];
+    // HARDENED: the pure core plans the safe subset. It NEVER plans deletion of a
+    // manually-locked / trusted course, FAILS CLOSED on ambiguous duplicate groups,
+    // selects a deterministic winner, and preserves last-known-good. See janitorLogic.ts.
+    const plan = planDuplicatePurge(allCourses);
 
-    for (const course of allCourses as any[]) {
-      const identifier = course.clubID || course.clubName;
-      if (!identifier) continue;
+    // Defence in depth: even if a plan were malformed, never delete a locked record.
+    const byId = new Map(allCourses.map((c) => [c.docId, c]));
+    const safeToDelete = plan.toDelete.filter((id) => !isLocked(byId.get(id)));
 
-      if (seenClubs.has(identifier)) {
-        duplicatesToDelete.push(course.docId);
-      } else {
-        seenClubs.add(identifier);
-      }
-    }
+    console.log(`⚠️ Janitor plan: keep ${Object.keys(plan.keep).length}, delete ${safeToDelete.length}, skipped-ambiguous ${plan.ambiguous.length}, no-identifier ${plan.skippedNoIdentifier.length}.`);
 
-    console.log(`⚠️ Janitor found ${duplicatesToDelete.length} duplicates to purge.`);
-    if (duplicatesToDelete.length === 0) return;
+    // Bounded audit evidence for every group decision (single doc, capped).
+    await db.collection("course_maintenance_audit").doc(`janitor_${event.scheduleTime || new Date().toISOString()}`).set({
+      job: "weeklyVaultJanitor",
+      ranAt: admin.firestore.FieldValue.serverTimestamp(),
+      keptCount: Object.keys(plan.keep).length,
+      deletedCount: safeToDelete.length,
+      ambiguous: plan.ambiguous.slice(0, 200),
+      skippedNoIdentifier: plan.skippedNoIdentifier.slice(0, 200),
+      decisions: plan.audit.slice(0, 200),
+    }, { merge: false });
 
-    const batches = [];
+    if (safeToDelete.length === 0) { console.log("🏁 WEEKLY JANITOR COMPLETE. Nothing safe to purge."); return; }
+
     let currentBatch = db.batch();
     let operationCount = 0;
-
-    for (const docId of duplicatesToDelete) {
-      const docRef = db.collection("courses").doc(docId);
-      currentBatch.delete(docRef);
+    const commits: Promise<unknown>[] = [];
+    for (const docId of safeToDelete) {
+      currentBatch.delete(db.collection("courses").doc(docId));
       operationCount++;
-
-      if (operationCount === 490) { 
-        batches.push(currentBatch.commit());
-        currentBatch = db.batch();
-        operationCount = 0;
-      }
+      if (operationCount === 490) { commits.push(currentBatch.commit()); currentBatch = db.batch(); operationCount = 0; }
     }
-
-    if (operationCount > 0) {
-      batches.push(currentBatch.commit());
-    }
-
-    await Promise.all(batches);
-    console.log(`🏁 WEEKLY JANITOR COMPLETE. Vault optimized.`);
+    if (operationCount > 0) commits.push(currentBatch.commit());
+    await Promise.all(commits);
+    console.log(`🏁 WEEKLY JANITOR COMPLETE. Purged ${safeToDelete.length}; ${plan.ambiguous.length} ambiguous groups preserved.`);
   } catch (error) {
     console.error("❌ CRITICAL JANITOR FAILURE:", error);
   }
 });
 
-// ==========================================
-// 🏦 CENTRAL BANK: Hourly Treasury Reconciliation Sweep
-// ==========================================
-export const hourlyTreasurySweep = onSchedule({
-  schedule: "0 * * * *", // Runs at minute 0 of every hour
-  timeZone: "Asia/Bangkok",
-  memory: "512MiB"
-}, async (event) => {
-  logger.info("🏦 CENTRAL BANK: Starting hourly reconciliation sweep...");
 
-  try {
-    // 1. Sweep the entire transaction vault
-    const snap = await db.collection('transactions').get();
-
-    let totalFiat = 0;
-    let totalEscrow = 0;
-    let totalVelocity = 0;
-
-    // 2. Mathematically rebuild the global economy from scratch
-    snap.docs.forEach(doc => {
-      const data = doc.data();
-
-      if (data.type === 'PHYSICAL_GOODS_PURCHASE' && data.product?.fiatPriceUsd) {
-        totalFiat += data.product.fiatPriceUsd;
-      }
-      if (data.status === 'escrow_locked' && data.amount) {
-        totalEscrow += Math.abs(data.amount);
-      }
-      if (data.status === 'completed' && data.amount) {
-        totalVelocity += data.amount;
-      }
-    });
-
-    // 3. Lock the audited numbers into the Master Treasury HUD
-    await db.collection('platform').doc('treasury').set({
-      totalFiatVolumeUsd: totalFiat,
-      totalEscrowLocked: totalEscrow,
-      netChipVelocity: totalVelocity,
-      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      reconciliationCount: snap.size
-    }, { merge: true });
-
-    logger.info(`✅ TREASURY RECONCILED: Fiat($${totalFiat}) Escrow(${totalEscrow}) Velocity(${totalVelocity}) from ${snap.size} records.`);
-  } catch (error) {
-    logger.error("❌ TREASURY SWEEP FAILED:", error);
-  }
-});
-
-// ==========================================
-// 💳 STRIPE B2B PAYMENT WEBHOOK
-// ==========================================
-
-export const stripeB2BWebhook = onRequest({ 
-  cors: true,
-  secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET]
-}, async (req, res) => {
-  const stripe = new Stripe(STRIPE_SECRET_KEY.value(), {
-    apiVersion: "2026-06-24.dahlia" as any, 
-  });
-  const endpointSecret = STRIPE_WEBHOOK_SECRET.value();
-
-  const sig = req.headers["stripe-signature"];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.rawBody, sig as string, endpointSecret);
-  } catch (err: any) {
-    logger.error("🚨 Webhook signature verification failed.", err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
-    return;
-  }
-
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    
-    // 🔥 1. Pull the EXACT partner ID we injected into the frontend URL (Fallback to email just in case)
-    const partnerId = session.client_reference_id || session.customer_details?.email;
-    
-    // 🔥 2. Extract Metadata from the Payment Link
-    const metadata = session.metadata || {};
-    const tier = metadata.tier || "small_business";
-    const duration = metadata.duration || "monthly";
-
-    if (partnerId) {
-      try {
-        const now = new Date();
-        const contractStartDate = now.toISOString();
-        
-        // 🔥 3. DATE ENGINE: Mathematically calculating the exact expiration
-        const expDate = new Date(now);
-        if (duration === "6_months") expDate.setMonth(expDate.getMonth() + 6);
-        else if (duration === "1_year") expDate.setFullYear(expDate.getFullYear() + 1);
-        else expDate.setMonth(expDate.getMonth() + 1); // Default to Monthly
-        
-        const contractEndDate = expDate.toISOString();
-
-        // 🔥 4. BADGE ENGINE
-        const badge = tier === "enterprise" ? "verified_enterprise" : null;
-
-        // 🔥 5. Execute the Multi-Schema Auto-Onboarding via Batch Write
-        const batch = db.batch();
-
-        // A. Create/Update the Corporate Contract in b2b_partners
-        const partnerRef = db.collection("b2b_partners").doc(partnerId);
-        batch.set(partnerRef, {
-          tier: tier,
-          status: "active_partner",
-          partnerBadge: badge,
-          contractDuration: duration,
-          contractStartDate: contractStartDate,
-          contractEndDate: contractEndDate,
-          payment_date: admin.firestore.FieldValue.serverTimestamp(),
-          stripe_session_id: session.id,
-        }, { merge: true });
-
-        // B. Upgrade the Player Profile & Mint 10k Initial Chips in users
-        const userRef = db.collection("users").doc(partnerId);
-        batch.set(userRef, {
-          tier: "commercial",
-          chips: admin.firestore.FieldValue.increment(10000)
-        }, { merge: true });
-
-        // C. Stamp the Immutable Ledger in transactions
-        const txRef = db.collection("transactions").doc();
-        batch.set(txRef, {
-          userId: partnerId,
-          title: `Stripe Auto-Onboarding: ${tier.toUpperCase()} Tier + 10k Chips`,
-          amount: 10000,
-          type: "STRIPE_AUTO_ONBOARD",
-          status: "completed",
-          enforcedBy: "SYSTEM",
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        await batch.commit();
-
-        logger.info(`✅ Successfully auto-onboarded B2B contract & minted chips for ${partnerId}`);
-      } catch (error) {
-        logger.error("🚨 Error saving partner to Firestore", error);
-      }
-    }
-  }
-
-  res.status(200).send({ received: true });
-});
 
 // ==========================================
 // 👔 HR MANAGEMENT: Secure Employee Provisioning
@@ -1613,7 +1463,6 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
   }
 });
 
-
 // ==========================================
 // ⚡ ADMIN USER OVERRIDE (Server-Authoritative Wallet + Reliability)
 // ==========================================
@@ -1633,7 +1482,6 @@ export const adminOverrideUser = onCall({ memory: "256MiB" }, async (request) =>
   }
   throw new HttpsError('unavailable', 'adminOverrideUser is disabled in the non-financial V2 world (quarantined: prohibited-financial).');
 });
-
 
 // ==========================================
 // 🤝 B2B PARTNER COMMAND (Server-Authoritative Tier + Wallet)
@@ -1704,7 +1552,6 @@ export const setEmployeeStatus = onCall({ memory: "256MiB" }, async (request) =>
   }
 });
 
-
 // ==========================================
 // 💸 PLATFORM EXPENSE: Server-Authoritative OPEX Ledger Writer
 // ==========================================
@@ -1755,7 +1602,6 @@ export const checkInFlight = onCall({ memory: "256MiB" }, async (request) => {
   }
   throw new HttpsError('unavailable', 'checkInFlight is disabled in the non-financial V2 world (quarantined: unresolved).');
 });
-
 
 // ==========================================
 // 🏆 TOURNAMENT OPS: Server-Authoritative Registration + Flight State

@@ -18,6 +18,7 @@ const AUTOMATED = [
   ['gate:fnauth', 'scripts/functions-authority-gate.mjs', 'syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass'],
   ['gate:godmode', 'scripts/functions-godmode-gate.mjs', 'repository-wide: no admin@golfriend.co/caller-email/env God-Mode; retained callables use server-owned authority; quarantined callables fail-closed'],
   ['gate:clientcallable', 'scripts/client-callable-gate.mjs', 'no reachable client surface invokes any quarantined/unresolved callable; prohibited consoles unreachable'],
+  ['gate:fnexport', 'scripts/functions-export-gate.mjs', 'hourlyTreasurySweep + stripeB2BWebhook cannot enter the clean-V2 bundle; weeklyVaultJanitor is lock-safe/fail-closed via the pure core'],
   ['verify:nav', 'scripts/nav-reachability-verify.mjs', 'quarantined console tabs render PolicyUnavailable; approved journeys remain mounted'],
   ['verify:booking', 'scripts/booking-journey-verify.mjs', 'non-financial booking journey'],
   ['verify:v2', 'scripts/v2-synthetic-verify.mjs', 'synthetic V2 non-financial journey; zero V1'],
