@@ -492,7 +492,7 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
 
   // ---- ACTION: create a bookable tee-time slot ----
   if (action === 'create') {
-    const { courseId, date, time, capacity, priceChips } = request.data || {};
+    const { courseId, date, time, capacity } = request.data || {};
 
     if (!courseId || typeof courseId !== 'string') {
       throw new HttpsError('invalid-argument', 'A courseId is required.');
@@ -512,11 +512,6 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
     if (!Number.isInteger(cap) || cap < 1 || cap > 8) {
       throw new HttpsError('invalid-argument', 'capacity must be an integer from 1 to 8.');
     }
-    const price = Number(priceChips);
-    if (!Number.isInteger(price) || price < 0) {
-      throw new HttpsError('invalid-argument', 'priceChips must be a non-negative integer.');
-    }
-
     // The slot must reference a real course in the vault (no invented inventory).
     const courseSnap = await db.collection('courses').doc(courseId).get();
     if (!courseSnap.exists) {
@@ -543,8 +538,7 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
         date,
         time,
         capacity: cap,
-        bookedCount: 0,          // server-owned; booking transactions increment this
-        priceChips: price,
+        bookedCount: 0,          // server-owned; booking requests increment this (non-financial)
         status: 'open',
         createdByUid: callerUid,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -587,17 +581,33 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
 });
 
 // ==========================================
-// 📅 BOOKING LIFECYCLE (Server-Authoritative Request → Confirm/Reject)
+// 📅 BOOKING LIFECYCLE (Server-Authoritative, NON-FINANCIAL)
 // ==========================================
-// The Golfriend booking flow: a player requests a published tee-time, the course
-// operator confirms or rejects, and the player sees a localized status. Seats and
-// funds are settlement state, so the whole lifecycle is server-owned:
+// Per the Director's ruling the booking flow is strictly non-financial: NO
+// priceChips, wallet debit, escrow hold, settlement, payout or refund. It is
+// purely operational — availability, capacity, request/confirm/reject/cancel,
+// messaging and an append-only audit trail:
 //  - no double-book: bookedCount is checked against capacity in a transaction;
-//  - the price is held in escrow (transactions/escrow_locked) at request time,
-//    settled on confirm and refunded on reject — never a direct client wallet write;
-//  - each booking carries a userStatusKey the client localizes.
+//  - seats are released on reject/cancel; no money ever moves;
+//  - each state change appends a `booking_audit` record; each booking carries a
+//    userStatusKey the client localizes.
 
-// Player requests a booking for an open tee-time slot.
+// Append-only, non-financial audit of a booking state change.
+function stampBookingAudit(
+  tx: FirebaseFirestore.Transaction,
+  bookingId: string,
+  action: string,
+  byUid: string,
+  byRole: string,
+) {
+  const auditRef = db.collection('booking_audit').doc();
+  tx.set(auditRef, {
+    bookingId, action, byUid, byRole,
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+// Player requests a booking for an open tee-time slot. No payment/hold.
 export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in to book.');
@@ -612,7 +622,6 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
   const userRef = db.collection('users').doc(playerUid);
   const bookingId = `${slotId}__${playerUid}`;
   const bookingRef = db.collection('bookings').doc(bookingId);
-  const holdRef = db.collection('transactions').doc(`booking_hold_${bookingId}`);
 
   try {
     const out = await db.runTransaction(async (tx) => {
@@ -630,34 +639,12 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
       }
 
       const userSnap = await tx.get(userRef);
-      if (!userSnap.exists) throw new HttpsError('not-found', 'Player profile not found.');
-      const uData = userSnap.data() || {};
-      const price = Number(slot.priceChips || 0);
-      const chips = Number(uData.chips || 0);
-      if (price > 0 && chips < price) {
-        throw new HttpsError('failed-precondition', 'Insufficient chips to hold this booking.');
-      }
+      const uData = userSnap.exists ? (userSnap.data() || {}) : {};
 
-      // Reserve the seat.
+      // Reserve the seat (capacity only — no wallet involvement).
       tx.set(slotRef, { bookedCount: bookedCount + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
 
-      // Hold the price in escrow (never settle on the client).
-      if (price > 0) {
-        tx.set(userRef, { chips: chips - price }, { merge: true });
-        tx.set(holdRef, {
-          uid: playerUid,
-          amount: -price,
-          status: 'escrow_locked',
-          type: 'BOOKING_HOLD',
-          bookingId,
-          slotId,
-          enforcedBy: 'SYSTEM',
-          timestamp: admin.firestore.FieldValue.serverTimestamp(),
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-      }
-
-      // Create the booking in a pending state.
+      // Create the booking in a pending state (non-financial).
       tx.set(bookingRef, {
         slotId,
         courseId: slot.courseId || '',
@@ -666,17 +653,17 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
         time: slot.time || '',
         playerUid,
         playerName: uData.nickname || uData.name || 'Player',
-        priceChips: price,
         status: 'pending',
         userStatusKey: 'booking_pending',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      return { bookingId, status: 'pending', priceHeld: price };
+      stampBookingAudit(tx, bookingId, 'requested', playerUid, 'player');
+      return { bookingId, status: 'pending' };
     });
 
-    logger.info(`📅 Booking ${out.bookingId} requested by ${playerUid} (held ${out.priceHeld}).`);
+    logger.info(`📅 Booking ${out.bookingId} requested by ${playerUid} (non-financial).`);
     return { success: true, ...out };
   } catch (error: any) {
     if (error instanceof HttpsError) throw error;
@@ -685,7 +672,7 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
   }
 });
 
-// Course operator (or staff) confirms or rejects a pending booking.
+// Course operator (or staff) confirms or rejects a pending booking. No settle/refund.
 export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
@@ -724,8 +711,6 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
         }
       }
 
-      const price = Number(booking.priceChips || 0);
-      const holdRef = db.collection('transactions').doc(`booking_hold_${bookingId}`);
       const slotRef = db.collection('tee_time_slots').doc(booking.slotId);
 
       if (decision === 'confirm') {
@@ -736,33 +721,15 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
           respondedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        // Settle the hold (seat stays counted).
-        if (price > 0) {
-          tx.set(holdRef, {
-            status: 'completed',
-            resolvedBy: 'OPERATOR_CONFIRM',
-            resolvedByUid: callerUid,
-            resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-        }
+        stampBookingAudit(tx, bookingId, 'confirmed', callerUid, isPrivileged ? 'staff' : 'operator');
         return { bookingId, status: 'confirmed' };
       }
 
-      // Reject: release the seat and refund the hold.
+      // Reject: release the seat. No refund (nothing was ever charged).
       const slotSnap = await tx.get(slotRef);
       if (slotSnap.exists) {
         const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
         tx.set(slotRef, { bookedCount: Math.max(0, bookedCount - 1), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-      }
-      if (price > 0) {
-        const playerRef = db.collection('users').doc(booking.playerUid);
-        tx.set(playerRef, { chips: admin.firestore.FieldValue.increment(price) }, { merge: true });
-        tx.set(holdRef, {
-          status: 'failed',
-          resolvedBy: 'OPERATOR_REJECT',
-          resolvedByUid: callerUid,
-          resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
       }
       tx.set(bookingRef, {
         status: 'rejected',
@@ -771,6 +738,7 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
         respondedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
+      stampBookingAudit(tx, bookingId, 'rejected', callerUid, isPrivileged ? 'staff' : 'operator');
       return { bookingId, status: 'rejected' };
     });
 
@@ -783,13 +751,123 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
   }
 });
 
+// Cancel a booking. The owning player, the course operator, or staff may cancel
+// a pending/confirmed booking; the seat is released. Non-financial.
+export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { bookingId } = request.data || {};
+  if (!bookingId || typeof bookingId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A bookingId is required.');
+  }
+
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  const isPrivileged = isStaff || isGodMode;
+  const bookingRef = db.collection('bookings').doc(bookingId);
+
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const bSnap = await tx.get(bookingRef);
+      if (!bSnap.exists) throw new HttpsError('not-found', 'Booking not found.');
+      const booking = bSnap.data() || {};
+      if (booking.status !== 'pending' && booking.status !== 'confirmed') {
+        throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be cancelled.`);
+      }
+
+      const isOwner = booking.playerUid === callerUid;
+      let role = isOwner ? 'player' : (isPrivileged ? 'staff' : 'operator');
+      if (!isOwner && !isPrivileged) {
+        const opSnap = await tx.get(db.collection('course_operators').doc(booking.courseId));
+        if (!opSnap.exists || opSnap.data()?.operatorUid !== callerUid) {
+          throw new HttpsError('permission-denied', 'You are not allowed to cancel this booking.');
+        }
+      }
+
+      const slotSnap = await tx.get(db.collection('tee_time_slots').doc(booking.slotId));
+      if (slotSnap.exists) {
+        const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
+        tx.set(db.collection('tee_time_slots').doc(booking.slotId), {
+          bookedCount: Math.max(0, bookedCount - 1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+      tx.set(bookingRef, {
+        status: 'cancelled',
+        userStatusKey: 'booking_cancelled',
+        cancelledByUid: callerUid,
+        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      stampBookingAudit(tx, bookingId, 'cancelled', callerUid, role);
+      return { bookingId, status: 'cancelled' };
+    });
+
+    logger.info(`📅 Booking ${out.bookingId} cancelled by ${callerUid}.`);
+    return { success: true, ...out };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("📅 Booking cancel failed:", error);
+    throw new HttpsError('internal', error.message || 'Booking cancel failed.');
+  }
+});
+
+// Booking messaging: a participant (the player, the course operator, or staff)
+// appends a message to the booking thread. Purely communicative, non-financial.
+export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  const { bookingId, text } = request.data || {};
+  if (!bookingId || typeof bookingId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A bookingId is required.');
+  }
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new HttpsError('invalid-argument', 'Message text is required.');
+  }
+  const cleanText = text.trim().slice(0, 2000);
+
+  const bookingRef = db.collection('bookings').doc(bookingId);
+  const bSnap = await bookingRef.get();
+  if (!bSnap.exists) throw new HttpsError('not-found', 'Booking not found.');
+  const booking = bSnap.data() || {};
+
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
+  const isGodMode = callerEmail === 'admin@golfriend.co';
+  const isOwner = booking.playerUid === callerUid;
+  let senderRole = isOwner ? 'player' : (isStaff || isGodMode ? 'staff' : 'operator');
+  if (!isOwner && !isStaff && !isGodMode) {
+    const opSnap = await db.collection('course_operators').doc(booking.courseId).get();
+    if (!opSnap.exists || opSnap.data()?.operatorUid !== callerUid) {
+      throw new HttpsError('permission-denied', 'Only booking participants can message.');
+    }
+  }
+
+  await bookingRef.collection('messages').add({
+    senderUid: callerUid,
+    senderRole,
+    text: cleanText,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await bookingRef.set({ lastMessageAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+  logger.info(`📅 Booking message on ${bookingId} by ${callerUid} (${senderRole}).`);
+  return { success: true };
+});
+
 // ==========================================
-// 📖 ADMIN BOOKING OVERSIGHT (Force-Resolve: Confirm / Refund / Escalate)
+// 📖 ADMIN BOOKING OVERSIGHT (Non-Financial Force-Resolve: Confirm / Reject / Cancel)
 // ==========================================
-// Platform-staff override for the booking lifecycle. Seats and chips are
-// settlement state, so this is server-owned: the client only names a decision;
-// the seat release, wallet refund and hold settlement all happen here in a
-// single transaction. Mirrors requestBooking/respondBooking exactly.
+// Platform-staff override for the booking lifecycle. NON-FINANCIAL: no refund,
+// payout, escrow or settlement — only seat/status transitions with audit. The
+// client names a decision; the seat release + status change happen server-side.
 export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
@@ -800,8 +878,8 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
   if (!bookingId || typeof bookingId !== 'string') {
     throw new HttpsError('invalid-argument', 'A bookingId is required.');
   }
-  if (decision !== 'confirm' && decision !== 'refund' && decision !== 'escalate') {
-    throw new HttpsError('invalid-argument', 'decision must be confirm, refund or escalate.');
+  if (decision !== 'confirm' && decision !== 'reject' && decision !== 'cancel') {
+    throw new HttpsError('invalid-argument', 'decision must be confirm, reject or cancel.');
   }
 
   // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode.
@@ -819,91 +897,63 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
       const bSnap = await tx.get(bookingRef);
       if (!bSnap.exists) throw new HttpsError('not-found', 'Booking not found.');
       const booking = bSnap.data() || {};
-
-      const price = Number(booking.priceChips || 0);
-      const holdRef = db.collection('transactions').doc(`booking_hold_${bookingId}`);
       const slotRef = db.collection('tee_time_slots').doc(booking.slotId);
 
-      // ---- CONFIRM: only a pending booking; settle the hold, seat stays counted ----
+      const releaseSeat = async () => {
+        const slotSnap = await tx.get(slotRef);
+        if (slotSnap.exists) {
+          const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
+          tx.set(slotRef, {
+            bookedCount: Math.max(0, bookedCount - 1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+      };
+
+      // ---- CONFIRM: only a pending booking; seat stays counted ----
       if (decision === 'confirm') {
         if (booking.status !== 'pending') {
           throw new HttpsError('failed-precondition', `Booking is already ${booking.status}.`);
         }
         tx.set(bookingRef, {
-          status: 'confirmed',
-          userStatusKey: 'booking_confirmed',
+          status: 'confirmed', userStatusKey: 'booking_confirmed',
           resolvedByUid: callerUid,
           resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        if (price > 0) {
-          tx.set(holdRef, {
-            status: 'completed',
-            resolvedBy: 'ADMIN_CONFIRM',
-            resolvedByUid: callerUid,
-            resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-        }
+        stampBookingAudit(tx, bookingId, 'admin_confirmed', callerUid, 'staff');
         return { bookingId, status: 'confirmed' };
       }
 
-      // ---- REFUND: release seat + refund player; idempotent guard ----
-      if (decision === 'refund') {
-        if (booking.status === 'refunded') {
-          throw new HttpsError('failed-precondition', 'Booking is already refunded.');
+      // ---- REJECT: only a pending booking; release the seat ----
+      if (decision === 'reject') {
+        if (booking.status !== 'pending') {
+          throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be rejected.`);
         }
-        if (booking.status !== 'pending' && booking.status !== 'confirmed' && booking.status !== 'disputed') {
-          throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be refunded.`);
-        }
-        // Release the seat (only meaningful while it was still counted).
-        if (booking.status === 'pending' || booking.status === 'confirmed') {
-          const slotSnap = await tx.get(slotRef);
-          if (slotSnap.exists) {
-            const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
-            tx.set(slotRef, {
-              bookedCount: Math.max(0, bookedCount - 1),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
-          }
-        }
-        // Refund the player's held chips and fail the hold.
-        if (price > 0) {
-          const playerRef = db.collection('users').doc(booking.playerUid);
-          tx.set(playerRef, { chips: admin.firestore.FieldValue.increment(price) }, { merge: true });
-          tx.set(holdRef, {
-            status: 'failed',
-            resolvedBy: 'ADMIN_REFUND',
-            resolvedByUid: callerUid,
-            resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-        }
+        await releaseSeat();
         tx.set(bookingRef, {
-          status: 'refunded',
-          userStatusKey: 'booking_refunded',
+          status: 'rejected', userStatusKey: 'booking_rejected',
           resolvedByUid: callerUid,
           resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        return { bookingId, status: 'refunded' };
+        stampBookingAudit(tx, bookingId, 'admin_rejected', callerUid, 'staff');
+        return { bookingId, status: 'rejected' };
       }
 
-      // ---- ESCALATE: mark disputed; flag hold for manual settlement (keep locked) ----
-      if (booking.status === 'refunded') {
-        throw new HttpsError('failed-precondition', 'A refunded booking cannot be escalated.');
+      // ---- CANCEL: a pending/confirmed booking; release the seat ----
+      if (booking.status !== 'pending' && booking.status !== 'confirmed') {
+        throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be cancelled.`);
       }
+      await releaseSeat();
       tx.set(bookingRef, {
-        status: 'disputed',
-        userStatusKey: 'booking_disputed',
+        status: 'cancelled', userStatusKey: 'booking_cancelled',
         resolvedByUid: callerUid,
         resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
-      tx.set(holdRef, {
-        disputeFlagged: true,
-        resolvedByUid: callerUid,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-      return { bookingId, status: 'disputed' };
+      stampBookingAudit(tx, bookingId, 'admin_cancelled', callerUid, 'staff');
+      return { bookingId, status: 'cancelled' };
     });
 
     logger.info(`📖 Booking ${out.bookingId} → ${out.status} by admin ${callerUid}.`);

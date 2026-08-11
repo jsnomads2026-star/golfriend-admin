@@ -48,8 +48,13 @@ export default function SponsorOnboardingWizard() {
     setStep(2);
   };
 
-  // 🔥 THE GATEWAY ENGINE: Structuring Schema #19
+  // 🔒 QUARANTINED (Director gate): this legacy wizard performed client-side
+  // writes to `marketplaceOffers` and the `transactions` ledger. It is dead code
+  // (unrouted in App.tsx) and its checkout is decommissioned — no client writes fire.
   const executeCheckout = async () => {
+    alert('This onboarding wizard is decommissioned. Use the Sponsor Dashboard.');
+    return;
+    // eslint-disable-next-line no-unreachable
     setIsProcessing(true);
     try {
       // 1. Compile the Universal Global Intake

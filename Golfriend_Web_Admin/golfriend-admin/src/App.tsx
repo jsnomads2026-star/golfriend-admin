@@ -22,7 +22,7 @@ import CourseTeeSheet from './components/B2B/CourseTeeSheet'; // 🔥 New B2B Li
 import TournamentManager from './components/admin/TournamentManager'; 
 import TournamentTV from './components/admin/TournamentTV'; 
 import EventGenesisConsole from './components/admin/EventGenesisConsole';
-import SponsorOnboardingWizard from './components/admin/sponsors/SponsorOnboardingWizard';
+// SponsorOnboardingWizard QUARANTINED (dead code w/ client ledger writes) — not routed.
 import SponsorDashboard from './components/admin/sponsors/SponsorDashboard';
 import LiveAutomationLog from './components/admin/LiveAutomationLog';
 import SupportModerationHub from './components/admin/SupportModerationHub';
@@ -331,9 +331,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         {activeTab === 'support' && <SupportModerationHub />}
         {activeTab === 'bookingoversight' && <BookingOversight />}
         {activeTab === 'hr' && <HRManagement />}
-        
-        {/* Legacy component kept alive in code, hidden from sidebar UI */}
-        {activeTab === 'sponsor' && <SponsorOnboardingWizard />}
+        {/* SponsorOnboardingWizard removed from routing (quarantined dead code). */}
       </div>
     </div>
   );
