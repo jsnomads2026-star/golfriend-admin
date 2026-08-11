@@ -375,6 +375,182 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// 💸 PLATFORM EXPENSE: Server-Authoritative OPEX Ledger Writer
+// ==========================================
+// The fiat P&L expense log feeds the treasury reconciliation sweep, so the
+// ledger write is server-owned: Director/God-Mode only, validated, audit-stamped.
+export const logPlatformExpense = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || '').toLowerCase();
+  const { amount, vendor } = request.data || {};
+
+  try {
+    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
+    const isDirector = callerDoc.exists && callerDoc.data()?.role === 'Director';
+    if (!isDirector && callerEmail !== 'admin@golfriend.co') {
+      throw new HttpsError('permission-denied', 'Only the Director can log platform expenses.');
+    }
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      throw new HttpsError('invalid-argument', 'Amount must be a finite number greater than zero.');
+    }
+    if (typeof vendor !== 'string' || !vendor.trim()) {
+      throw new HttpsError('invalid-argument', 'Vendor is required.');
+    }
+    const cleanVendor = vendor.trim().slice(0, 120);
+
+    await db.collection('transactions').add({
+      uid: 'PLATFORM_TREASURY',
+      type: 'PLATFORM_EXPENSE',
+      status: 'completed',
+      paymentProvider: 'MANUAL_OUTFLOW',
+      fiatAmountUsd: amount,
+      productName: `OPEX: ${cleanVendor}`,
+      enforcedBy: 'SYSTEM',
+      loggedByUid: callerUid,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Platform Expense Ledger Error:", error);
+    throw new HttpsError('internal', error.message || 'Failed to log expense.');
+  }
+});
+
+// ==========================================
+// 🎁 RAFFLE ENGINE: Server-Authoritative Prize Draw
+// ==========================================
+// The winner is selected server-side over the real registrations and written to
+// the authoritative tournament doc — a client can neither pick nor set the winner.
+export const drawRaffleWinner = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || '').toLowerCase();
+  const { tournamentId } = request.data || {};
+
+  if (typeof tournamentId !== 'string' || tournamentId.trim() === '') {
+    throw new HttpsError('invalid-argument', 'A valid tournamentId is required.');
+  }
+
+  try {
+    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
+    const isDirector = callerDoc.exists && callerDoc.data()?.role === 'Director';
+    if (!isDirector && callerEmail !== 'admin@golfriend.co') {
+      throw new HttpsError('permission-denied', 'Only the Director can draw the raffle.');
+    }
+
+    const registrationsSnap = await db
+      .collection('tournaments').doc(tournamentId)
+      .collection('registrations').get();
+    if (registrationsSnap.empty) {
+      throw new HttpsError('failed-precondition', 'No eligible tickets in the drum.');
+    }
+
+    const tickets = registrationsSnap.docs;
+    const winnerIndex = Math.floor(Math.random() * tickets.length);
+    const winnerNickname = tickets[winnerIndex].data()?.nickname || '';
+
+    await db.collection('tournaments').doc(tournamentId).set({
+      displayState: 'raffle',
+      raffleWinner: winnerNickname,
+      raffleDrawnByUid: callerUid,
+      raffleDrawnAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return { success: true, winnerNickname };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Raffle Draw Error:", error);
+    throw new HttpsError('internal', error.message || 'Raffle draw failed.');
+  }
+});
+
+// ==========================================
+// ⛳ TEE SHEET: Server-Authoritative Flight Check-In & Liability Lock
+// ==========================================
+// Booking/flight status finalization is server-owned: staff, God-Mode, or the
+// course's claimed operator only, guarded on the flight being pending.
+export const checkInFlight = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || '').toLowerCase();
+  const { gameId, cartAssignments } = request.data || {};
+
+  try {
+    if (typeof gameId !== 'string' || gameId.trim() === '') {
+      throw new HttpsError('invalid-argument', 'A valid gameId is required.');
+    }
+    if (cartAssignments === null || typeof cartAssignments !== 'object' || Array.isArray(cartAssignments)) {
+      throw new HttpsError('invalid-argument', 'cartAssignments must be an object.');
+    }
+    for (const value of Object.values(cartAssignments as Record<string, unknown>)) {
+      if (typeof value !== 'string' || value.trim() === '') {
+        throw new HttpsError('invalid-argument', 'Every cart assignment must be a non-empty string.');
+      }
+    }
+
+    const gameRef = db.collection('games').doc(gameId);
+    const gameSnap = await gameRef.get();
+    if (!gameSnap.exists) {
+      throw new HttpsError('not-found', 'Flight not found.');
+    }
+    const gameData = gameSnap.data() || {};
+
+    // AUTHORIZATION: platform staff OR God-Mode OR the course's claimed operator.
+    let authorized = false;
+    const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+    if (adminSnap.exists && adminSnap.data()?.status !== 'Suspended') authorized = true;
+    if (!authorized && callerEmail === 'admin@golfriend.co') authorized = true;
+    if (!authorized) {
+      const courseId = gameData.courseId;
+      if (typeof courseId === 'string' && courseId.trim() !== '') {
+        const operatorSnap = await db.collection('course_operators').doc(courseId).get();
+        if (operatorSnap.exists && operatorSnap.data()?.operatorUid === callerUid) authorized = true;
+      }
+    }
+    if (!authorized) {
+      throw new HttpsError('permission-denied', 'You are not authorized to check in this flight.');
+    }
+
+    if (gameData.status !== 'pending') {
+      throw new HttpsError('failed-precondition', `Flight is already ${gameData.status}.`);
+    }
+
+    const players = Array.isArray(gameData.players) ? gameData.players : [];
+    for (const player of players) {
+      const uid = player?.uid;
+      if (typeof uid === 'string' && uid.trim() !== '') {
+        const assigned = (cartAssignments as Record<string, string>)[uid];
+        if (typeof assigned !== 'string' || assigned.trim() === '') {
+          throw new HttpsError('invalid-argument', 'Every player must be assigned a cart.');
+        }
+      }
+    }
+
+    await gameRef.set({
+      status: 'checked_in',
+      cartAssignments,
+      checkedInByUid: callerUid,
+      checkedInAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return { success: true };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Flight Check-In Error:", error);
+    throw new HttpsError('internal', error.message || 'Check-in failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1

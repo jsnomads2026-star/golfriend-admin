@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export default function RaffleEngine() {
   const [eligiblePlayers, setEligiblePlayers] = useState<any[]>([]);
@@ -23,29 +24,33 @@ export default function RaffleEngine() {
 
   const executeSpin = async () => {
     if (eligiblePlayers.length === 0) return;
-    
+
     setIsSpinning(true);
     setRecentWinner(null);
 
-    // 1. Send the TV into "SPINNING..." mode immediately
-    await updateDoc(doc(db, 'tournaments', 'PATTAYA_OPEN'), { 
-      displayState: 'raffle',
-      raffleWinner: '' 
-    });
+    try {
+      // 1. Server selects the winner (server RNG over the real registrations
+      //    subcollection) and writes the authoritative displayState/raffleWinner.
+      //    The client never picks or writes the winner.
+      const drawRaffleWinner = httpsCallable(getFunctions(), 'drawRaffleWinner');
+      const res: any = await drawRaffleWinner({ tournamentId: 'PATTAYA_OPEN' });
 
-    // 2. Cinematic delay for suspense
-    setTimeout(async () => {
-      const winnerIndex = Math.floor(Math.random() * eligiblePlayers.length);
-      const winner = eligiblePlayers[winnerIndex];
-      
-      setRecentWinner(winner.nickname);
+      if (!res?.data?.success || !res?.data?.winnerNickname) {
+        throw new Error('Raffle draw failed to return a winner.');
+      }
+
+      const winnerNickname: string = res.data.winnerNickname;
+
+      // 2. Cinematic delay for suspense, then reveal the server's winner.
+      setTimeout(() => {
+        setRecentWinner(winnerNickname);
+        setIsSpinning(false);
+      }, 2500);
+    } catch (err: any) {
+      console.error('Raffle draw failed:', err);
+      alert(err?.message || 'The raffle drum is empty or the draw could not be completed.');
       setIsSpinning(false);
-
-      // 3. Lock in the winner and cast it to the TV
-      await updateDoc(doc(db, 'tournaments', 'PATTAYA_OPEN'), { 
-        raffleWinner: winner.nickname 
-      });
-    }, 2500);
+    }
   };
 
   return (

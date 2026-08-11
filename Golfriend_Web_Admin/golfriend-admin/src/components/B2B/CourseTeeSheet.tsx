@@ -2,7 +2,8 @@
 // FILE: src/components/B2B/CourseTeeSheet.tsx
 // ==========================================
 import { useState, useEffect } from 'react';
-import { doc, updateDoc, collection, query, where, onSnapshot, writeBatch, increment } from 'firebase/firestore';
+import { doc, collection, query, where, onSnapshot, writeBatch, increment } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 
 interface Player {
@@ -71,12 +72,13 @@ export default function CourseTeeSheet() {
       const unassigned = selectedFlight.players.some(p => !cartInputs[p.uid]);
       if (unassigned) throw new Error("All players must be assigned a cart to establish liability.");
 
-      const flightRef = doc(db, 'games', selectedFlight.id);
-      await updateDoc(flightRef, {
-        status: 'checked_in',
+      const checkInFlight = httpsCallable(getFunctions(), 'checkInFlight');
+      const res: any = await checkInFlight({
+        gameId: selectedFlight.id,
         cartAssignments: cartInputs
       });
-      
+      if (!res?.data?.success) throw new Error("Check-in failed.");
+
       setNotification({ msg: `Flight ${selectedFlight.time} checked in successfully. Liability locked.`, type: 'success' });
       setSelectedFlight(null);
     } catch (error: any) {
