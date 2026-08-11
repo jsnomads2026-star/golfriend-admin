@@ -1,8 +1,8 @@
 # Precommission Evidence — Lane C
 
-- **Candidate:** `feat/laneC-consolidated` @ `386182b`
-- **Generated:** 2026-08-11T02:50:27.303Z
-- **Automated controls:** 9/9 pass, 0 fail
+- **Candidate:** `feat/laneC-consolidated` @ `25bba8f`
+- **Generated:** 2026-08-11T02:58:25.715Z
+- **Automated controls:** 10/10 pass, 0 fail
 - **Manual/provider controls:** 6 BLOCKED (autoApproval:false)
 
 ## Automated controls (run by this tool)
@@ -12,6 +12,7 @@
 | `gate:dead-route` | ✅ pass | quarantined components unrouted/guarded; no superseded financial booking |
 | `gate:v2` | ✅ pass | v2-preview fail-closed; zero-V1 |
 | `gate:a11y` | ✅ pass | portal state screens accessible; no God-Mode/TV-bypass/raw error |
+| `gate:fnauth` | ✅ pass | syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass |
 | `verify:booking` | ✅ pass | non-financial booking journey |
 | `verify:v2` | ✅ pass | synthetic V2 non-financial journey; zero V1 |
 | `verify:roles` | ✅ pass | cross-role journey matrix; server-owned derivation |

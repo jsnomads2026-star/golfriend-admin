@@ -15,6 +15,7 @@ const AUTOMATED = [
   ['gate:dead-route', 'scripts/dead-route-gate.mjs', 'quarantined components unrouted/guarded; no superseded financial booking'],
   ['gate:v2', 'scripts/v2-mode-gate.mjs', 'v2-preview fail-closed; zero-V1'],
   ['gate:a11y', 'scripts/portal-a11y-gate.mjs', 'portal state screens accessible; no God-Mode/TV-bypass/raw error'],
+  ['gate:fnauth', 'scripts/functions-authority-gate.mjs', 'syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass'],
   ['verify:booking', 'scripts/booking-journey-verify.mjs', 'non-financial booking journey'],
   ['verify:v2', 'scripts/v2-synthetic-verify.mjs', 'synthetic V2 non-financial journey; zero V1'],
   ['verify:roles', 'scripts/role-journey-verify.mjs', 'cross-role journey matrix; server-owned derivation'],

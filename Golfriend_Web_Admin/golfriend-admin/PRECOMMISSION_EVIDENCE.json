@@ -1,8 +1,8 @@
 {
   "lane": "C",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "386182b",
-  "generated_at": "2026-08-11T02:50:27.303Z",
+  "candidate_head": "25bba8f",
+  "generated_at": "2026-08-11T02:58:25.715Z",
   "automated_controls": [
     {
       "control": "gate:authority",
@@ -31,6 +31,13 @@
       "status": "pass",
       "proves": "portal state screens accessible; no God-Mode/TV-bypass/raw error",
       "detail": "GATE PASSED: all checks green."
+    },
+    {
+      "control": "gate:fnauth",
+      "type": "automated",
+      "status": "pass",
+      "proves": "syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass",
+      "detail": "✅ functions-authority gate passed: syncCoursesFromProvider authorizes via server-owned active staff only; no email God-Mode / env bypass; authority core fail-cl"
     },
     {
       "control": "verify:booking",
@@ -145,8 +152,8 @@
   "manifest_hashes_ref": "MANIFEST_HASHES.json",
   "ledger_ref": "LANEC_LEDGER.json",
   "summary": {
-    "automated_total": 9,
-    "automated_pass": 9,
+    "automated_total": 10,
+    "automated_pass": 10,
     "automated_fail": 0,
     "manual_blocked": 6
   }

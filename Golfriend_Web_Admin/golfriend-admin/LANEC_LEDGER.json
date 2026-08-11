@@ -2,11 +2,19 @@
   "lane": "C",
   "repo": "jsnomads2026-star/golfriend-admin",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "386182b",
-  "candidate_head_full": "386182bbf5f7860a18539571b0e8469b7b4dc24d",
+  "candidate_head": "25bba8f",
+  "candidate_head_full": "25bba8fe22b002779eff0ea00f133458f4713e0d",
   "accepted_gate_sha": "ca2d6db",
-  "generated_at": "2026-08-11T02:50:26.419Z",
+  "generated_at": "2026-08-11T02:58:24.740Z",
   "included_commits": [
+    {
+      "hash": "25bba8f",
+      "subject": "feat(laneC-security): remove admin@golfriend.co break-glass from syncCoursesFromProvider"
+    },
+    {
+      "hash": "cef6530",
+      "subject": "chore(laneC): refresh freeze evidence to current HEAD (ledger/hashes/precommission)"
+    },
     {
       "hash": "386182b",
       "subject": "chore(laneC): drift re-verify Lane B pin c259a1c→db478ba (PASS 13/13)"

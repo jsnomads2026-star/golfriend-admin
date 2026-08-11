@@ -1,12 +1,12 @@
 {
-  "candidate_head": "386182b",
-  "generated_at": "2026-08-11T02:50:26.422Z",
+  "candidate_head": "25bba8f",
+  "generated_at": "2026-08-11T02:58:24.744Z",
   "algorithm": "sha256",
   "files": [
     {
       "file": "package.json",
-      "sha256": "40264cd39d04c2e7e1923ed1ddc2a13e227296c957b0eaae715fde6a4d15f223",
-      "bytes": 2022
+      "sha256": "c54bf5b132c3c1c8c1df9d1864dc6876ce45a78f01a0ab2df77c5e357b7f29ac",
+      "bytes": 2110
     },
     {
       "file": ".firebaserc",
@@ -14,9 +14,14 @@
       "bytes": 59
     },
     {
+      "file": "functions/package.json",
+      "sha256": "afe51ba01210163ce89d617077b866b019f7a284faed62ccc0d6ec435dd88894",
+      "bytes": 1241
+    },
+    {
       "file": "functions/src/index.ts",
-      "sha256": "588fa76dcd35bbe687d3fa4b6bec3746634b7ee6118a14d940ad4d799f1712f1",
-      "bytes": 109409
+      "sha256": "f22f10cac508972f1977b737d19d343454a5dc2442cce00469cb13f93e381736",
+      "bytes": 109590
     },
     {
       "file": "functions/src/courseSync.ts",
@@ -27,6 +32,11 @@
       "file": "functions/src/bookingLogic.ts",
       "sha256": "07837f4a3bb14c117bec1018dad1114bae54a4688731eb96f537fada1e55702f",
       "bytes": 3208
+    },
+    {
+      "file": "functions/src/authority.ts",
+      "sha256": "d55da07bae7f3dc7092644858c5caed1028633b5daaee735062b860c5d1cdf3b",
+      "bytes": 1439
     },
     {
       "file": "src/App.tsx",
@@ -89,9 +99,14 @@
       "bytes": 2699
     },
     {
+      "file": "scripts/functions-authority-gate.mjs",
+      "sha256": "b3eac05371a523eb78d26111b40fca98e17a064d602498ab4a7861e9ce081dd3",
+      "bytes": 3028
+    },
+    {
       "file": "LANEC_LEDGER.json",
-      "sha256": "9b8fd6485d71cdc2fb60f6d9a6786eb46661c337a32d0f3c1a2b2f72d233824f",
-      "bytes": 5978
+      "sha256": "992deaa8e28aaf7a4da3536ed883f58b95db6bd157d276506e3db4fae4d0dc3f",
+      "bytes": 6265
     },
     {
       "file": "LANEB_DEPENDENCY_PIN.json",
