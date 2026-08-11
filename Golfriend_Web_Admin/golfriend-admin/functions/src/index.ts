@@ -375,6 +375,254 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // ==========================================
+// 🏆 TOURNAMENT OPS: Server-Authoritative Registration + Flight State
+// ==========================================
+export const manageTournamentOps = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || '').toLowerCase();
+  const { tournamentId, action } = request.data || {};
+
+  if (typeof tournamentId !== 'string' || !tournamentId.trim()) {
+    throw new HttpsError('invalid-argument', 'A valid tournamentId is required.');
+  }
+  const VALID_ACTIONS = ['setDisplayState', 'setRegistration', 'resetFlights', 'assignFlights'];
+  if (typeof action !== 'string' || !VALID_ACTIONS.includes(action)) {
+    throw new HttpsError('invalid-argument', 'Unknown or missing action.');
+  }
+
+  try {
+    const tournamentRef = db.collection('tournaments').doc(tournamentId);
+    const tournamentSnap = await tournamentRef.get();
+    if (!tournamentSnap.exists) {
+      throw new HttpsError('not-found', 'Tournament not found.');
+    }
+    const tournamentData = tournamentSnap.data() || {};
+
+    // AUTHORIZATION: platform staff OR God-Mode OR the tournament host.
+    let authorized = false;
+    const staffDoc = await db.collection('admin_users').doc(callerUid).get();
+    if (staffDoc.exists && staffDoc.data()?.status !== 'Suspended') authorized = true;
+    if (!authorized && callerEmail === 'admin@golfriend.co') authorized = true;
+    if (!authorized && tournamentData.hostUid && tournamentData.hostUid === callerUid) authorized = true;
+    if (!authorized) {
+      throw new HttpsError('permission-denied', 'You are not authorized to manage this tournament.');
+    }
+
+    if (action === 'setDisplayState') {
+      const { displayState } = request.data || {};
+      if (typeof displayState !== 'string' || !displayState.trim()) {
+        throw new HttpsError('invalid-argument', 'displayState must be a non-empty string.');
+      }
+      await tournamentRef.set({ displayState }, { merge: true });
+    } else if (action === 'setRegistration') {
+      const { status } = request.data || {};
+      if (status !== 'registration_open' && status !== 'registration_closed') {
+        throw new HttpsError('invalid-argument', 'Invalid registration status.');
+      }
+      await tournamentRef.set({ status }, { merge: true });
+    } else if (action === 'resetFlights') {
+      const regsSnap = await tournamentRef.collection('registrations').get();
+      const docs = regsSnap.docs;
+      for (let i = 0; i < docs.length; i += 450) {
+        const batch = db.batch();
+        docs.slice(i, i + 450).forEach((d) => {
+          batch.update(d.ref, { flightNumber: null, status: 'waiting' });
+        });
+        await batch.commit();
+      }
+      await tournamentRef.set({ opBy: callerUid, opAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    } else if (action === 'assignFlights') {
+      const { assignments } = request.data || {};
+      if (!Array.isArray(assignments)) {
+        throw new HttpsError('invalid-argument', 'assignments must be an array.');
+      }
+      const clean: { registrationId: string; flightNumber: number }[] = [];
+      for (const a of assignments) {
+        const registrationId = a?.registrationId;
+        const flightNumber = a?.flightNumber;
+        if (typeof registrationId !== 'string' || !registrationId.trim()) {
+          throw new HttpsError('invalid-argument', 'Each assignment needs a non-empty registrationId.');
+        }
+        if (typeof flightNumber !== 'number' || !Number.isInteger(flightNumber) || flightNumber <= 0) {
+          throw new HttpsError('invalid-argument', 'Each assignment needs a positive integer flightNumber.');
+        }
+        clean.push({ registrationId, flightNumber });
+      }
+      for (let i = 0; i < clean.length; i += 450) {
+        const batch = db.batch();
+        clean.slice(i, i + 450).forEach(({ registrationId, flightNumber }) => {
+          const pRef = tournamentRef.collection('registrations').doc(registrationId);
+          batch.update(pRef, { flightNumber, status: 'locked' });
+        });
+        await batch.commit();
+      }
+      await tournamentRef.set({ opBy: callerUid, opAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+
+    return { success: true, action };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Tournament Ops Error:", error);
+    throw new HttpsError('internal', error?.message || 'Failed to manage tournament ops.');
+  }
+});
+
+// ==========================================
+// 📸 PHOTO VALIDATION RESOLVER (Server-Authoritative Wallet/Reputation/Moderation)
+// ==========================================
+// Manual photo approve/reject adjusts chips + reliability + verification/moderation
+// on another user — settlement + moderation state that must not be client-written.
+// Staff-gated; fixed server-side deltas floored at 0; audited.
+export const resolvePhotoValidation = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+
+  try {
+    const callerEmail = (request.auth.token?.email || '').toLowerCase();
+    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
+    const isActiveStaff = callerDoc.exists && callerDoc.data()?.status !== 'Suspended';
+    const isMasterAdmin = callerEmail === 'admin@golfriend.co';
+    if (!isActiveStaff && !isMasterAdmin) {
+      throw new HttpsError('permission-denied', 'Only active platform staff may resolve photo validations.');
+    }
+
+    const { targetUid, decision, source } = request.data || {};
+    if (typeof targetUid !== 'string' || targetUid.trim() === '') {
+      throw new HttpsError('invalid-argument', 'A valid targetUid is required.');
+    }
+    if (decision !== 'approve' && decision !== 'reject') {
+      throw new HttpsError('invalid-argument', "decision must be 'approve' or 'reject'.");
+    }
+    const resolvedSource = source === undefined ? 'review' : source;
+    if (resolvedSource !== 'review' && resolvedSource !== 'override') {
+      throw new HttpsError('invalid-argument', "source must be 'review' or 'override'.");
+    }
+
+    const userRef = db.collection('users').doc(targetUid);
+    const txRef = db.collection('transactions').doc();
+
+    const result = await db.runTransaction(async (tx) => {
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists) {
+        throw new HttpsError('not-found', 'Target user does not exist.');
+      }
+      const data = userSnap.data() || {};
+      const currentChips = typeof data.chips === 'number' ? data.chips : 0;
+      const currentRel = typeof data.reliability_score === 'number' ? data.reliability_score : 0;
+
+      const chipsDelta = decision === 'approve' ? 50 : -50;
+      const relDelta = decision === 'approve' ? 10 : -25;
+      const newChips = Math.max(0, currentChips + chipsDelta);
+      const newRel = Math.max(0, currentRel + relDelta);
+      const appliedChipsDelta = newChips - currentChips;
+
+      if (decision === 'approve') {
+        tx.update(userRef, {
+          isVerified: true, verification_status: 'verified', photoValidated: true,
+          requiresManualReview: false, behavior_badge: 'Verified Member',
+          star_rating_display: 'New Member', chips: newChips, reliability_score: newRel,
+        });
+      } else {
+        tx.update(userRef, {
+          isVerified: false, verification_status: 'rejected', photoValidated: false,
+          requiresManualReview: false, behavior_badge: 'Flagged: Invalid Photo',
+          photo_url: '', chips: newChips, reliability_score: newRel,
+        });
+      }
+
+      tx.set(txRef, {
+        userId: targetUid, type: 'PHOTO_VALIDATION', amount: appliedChipsDelta,
+        status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
+        decision, source: resolvedSource,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return { newChips, newRel };
+    });
+
+    return { success: true, decision, chips: result.newChips, reliability_score: result.newRel };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Photo Validation Resolver Error:", error);
+    throw new HttpsError('internal', error.message || 'Photo validation failed.');
+  }
+});
+
+// ==========================================
+// 🚚 FULFILLMENT LEDGER: Server-Authoritative Order Lifecycle
+// ==========================================
+export const updateFulfillmentOrder = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || '').toLowerCase();
+  const { orderId, action, courier, tracking } = request.data || {};
+
+  try {
+    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
+    const isActiveStaff = callerDoc.exists && callerDoc.data()?.status !== 'Suspended';
+    if (!isActiveStaff && callerEmail !== 'admin@golfriend.co') {
+      throw new HttpsError('permission-denied', 'You are not authorized to manage fulfillment orders.');
+    }
+    if (typeof orderId !== 'string' || orderId.trim() === '') {
+      throw new HttpsError('invalid-argument', 'A valid orderId is required.');
+    }
+    if (action !== 'dispatch' && action !== 'confirmShipment') {
+      throw new HttpsError('invalid-argument', 'action must be "dispatch" or "confirmShipment".');
+    }
+
+    const orderRef = db.collection('fulfillment_orders').doc(orderId);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) {
+      throw new HttpsError('not-found', 'Fulfillment order does not exist.');
+    }
+    const order = orderSnap.data() || {};
+    const currentStatus = order.status;
+    let newStatus: string;
+
+    if (action === 'dispatch') {
+      if (currentStatus === 'shipped' || currentStatus === 'delivered' || currentStatus === 'awaiting_vendor') {
+        throw new HttpsError('failed-precondition', `Order cannot be dispatched from status "${currentStatus}".`);
+      }
+      newStatus = 'shipped';
+      const vendorId = order.vendorId;
+      if (typeof vendorId === 'string' && vendorId.trim() !== '') {
+        const vendorSnap = await db.collection('vendors').doc(vendorId).get();
+        if (vendorSnap.exists) {
+          const protocol = vendorSnap.data()?.fulfillmentProtocol;
+          if (protocol === 'email_manifest' || protocol === 'daily_csv') newStatus = 'awaiting_vendor';
+        }
+      }
+      await orderRef.set({
+        status: newStatus, dispatchedByUid: callerUid,
+        dispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } else {
+      if (typeof courier !== 'string' || courier.trim() === '' || typeof tracking !== 'string' || tracking.trim() === '') {
+        throw new HttpsError('invalid-argument', 'Both courier and tracking are required.');
+      }
+      newStatus = 'shipped';
+      await orderRef.set({
+        status: newStatus, courier, trackingNumber: tracking, shippedByUid: callerUid,
+        shippedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    return { success: true, status: newStatus };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Fulfillment Ledger Error:", error);
+    throw new HttpsError('internal', error.message || 'Fulfillment update failed.');
+  }
+});
+
+// ==========================================
 // 👁️ PHOTO WATCHTOWER: Automated Vision AI Gatekeeper
 // ==========================================
 export const photoWatchtower = functionsV1

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { collection, getDocs, doc, writeBatch, increment, query, where, limit } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; 
+import { collection, getDocs, query, where, limit } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { db } from '../../firebaseConfig';
 import ManualOverride from './ManualOverride'; // 🔥 Injecting the God-Mode HUD
 
 interface PendingValidation {
@@ -82,22 +83,15 @@ export default function PhotoValidator() {
   const handleOverride = async (user: any, forceApprove: boolean) => {
     setProcessingId(user.id);
     try {
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', user.id);
-      
-      if (forceApprove) {
-        batch.update(userRef, { 
-          isVerified: true, verification_status: 'verified', behavior_badge: 'Verified Member', star_rating_display: 'New Member',
-          chips: increment(50), reliability_score: increment(25) 
-        });
-      } else {
-        batch.update(userRef, { 
-          isVerified: false, verification_status: 'rejected', behavior_badge: 'Flagged: Admin Override', photo_url: "",
-          chips: increment(-50), reliability_score: increment(-25) 
-        });
-      }
-      await batch.commit();
-      await fetchWatchtowerData(); 
+      const fn = httpsCallable(getFunctions(), 'resolvePhotoValidation');
+      const res: any = await fn({
+        targetUid: user.id,
+        decision: forceApprove ? 'approve' : 'reject',
+        source: 'override'
+      });
+      if (!res?.data?.success) throw new Error('Override was not confirmed by the server.');
+
+      await fetchWatchtowerData();
       showNotification(`Override successful for ${user.nickname}.`, "success");
     } catch (error) {
       showNotification("Override failed.", "error");
@@ -109,40 +103,21 @@ export default function PhotoValidator() {
 
   const handleDecision = async (claim: PendingValidation, isApproved: boolean) => {
     setProcessingId(claim.id);
-    
+
     try {
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', claim.id); 
+      const fn = httpsCallable(getFunctions(), 'resolvePhotoValidation');
+      const res: any = await fn({
+        targetUid: claim.id,
+        decision: isApproved ? 'approve' : 'reject',
+        source: 'review'
+      });
+      if (!res?.data?.success) throw new Error('Decision was not confirmed by the server.');
 
-      if (isApproved) {
-        batch.update(userRef, { 
-          isVerified: true,
-          verification_status: 'verified',
-          photoValidated: true,
-          requiresManualReview: false, 
-          behavior_badge: 'Verified Member',
-          star_rating_display: 'New Member',
-          chips: increment(50), 
-          reliability_score: increment(10)
-        });
-      } else {
-        batch.update(userRef, { 
-          isVerified: false,
-          verification_status: 'rejected',
-          photoValidated: false,
-          requiresManualReview: false, 
-          behavior_badge: 'Flagged: Invalid Photo',
-          photo_url: "", 
-          reliability_score: increment(-15) 
-        });
-      }
-
-      await batch.commit();
-      await fetchWatchtowerData(); 
+      await fetchWatchtowerData();
       showNotification(`Photo ${isApproved ? 'Approved' : 'Rejected'} for ${claim.nickname}.`, "success");
 
     } catch (error) {
-      console.error("Batch update failed:", error);
+      console.error("Photo validation failed:", error);
       showNotification("Database error. Could not process decision.", "error");
     } finally {
       setProcessingId(null);

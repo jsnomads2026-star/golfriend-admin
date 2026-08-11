@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, onSnapshot, doc, writeBatch, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import TournamentTV from './TournamentTV'; // 🔥 NEW: Importing the TV Component
 import RaffleEngine from './RaffleEngine'; // 🔥 NEW: Importing the Raffle Engine
 
@@ -71,8 +72,10 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
     }
 
     try {
-      // 🚀 Schema Locked: Localizing transient raffle physics to the TV layer
-      await updateDoc(doc(db, 'tournaments', tournamentId), { displayState: state });
+      // 🚀 Schema Locked: Route authoritative display-state write through the server
+      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const res: any = await fn({ tournamentId, action: 'setDisplayState', displayState: state });
+      if (!res?.data?.success) throw new Error('Server rejected TV signal.');
       showNotification(`📺 TV Signal Sent: ${state.toUpperCase()}`, "success");
     } catch (error) {
       showNotification("Failed to send TV signal.", "error");
@@ -83,7 +86,9 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
   const toggleRegistration = async () => {
     try {
       const newStatus = tournamentStatus === 'registration_open' ? 'registration_closed' : 'registration_open';
-      await updateDoc(doc(db, 'tournaments', tournamentId), { status: newStatus });
+      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const res: any = await fn({ tournamentId, action: 'setRegistration', status: newStatus });
+      if (!res?.data?.success) throw new Error('Server rejected registration change.');
       showNotification(`Registration is now: ${newStatus.replace('_', ' ').toUpperCase()}`, "success");
     } catch (error) {
       showNotification("Failed to toggle registration.", "error");
@@ -93,17 +98,12 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
   // 4.5. THE OVERRIDE: RESET FLIGHTS
   const handleResetFlights = async () => {
     if (flights.length === 0) return showNotification("No flights to reset.", "info");
-    
+
     try {
-      const batch = writeBatch(db);
-      // Flatten the flights array to get all locked players
-      flights.flat().forEach(player => {
-        const pRef = doc(db, 'tournaments', tournamentId, 'registrations', player.id);
-        // Wipe the flight number to send them back to the waiting room
-        batch.update(pRef, { flightNumber: null, status: 'waiting' });
-      });
-      
-      await batch.commit();
+      // 🔐 Authoritative flight clear happens server-side; client only requests the action
+      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const res: any = await fn({ tournamentId, action: 'resetFlights' });
+      if (!res?.data?.success) throw new Error('Server rejected flight reset.');
       showNotification("♻️ Flights reset. Players returned to waiting room.", "success");
     } catch (error) {
       console.error("Reset Error:", error);
@@ -116,7 +116,8 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
     if (waitingRoom.length === 0) return showNotification("The waiting room is empty.", "info");
 
     try {
-      const batch = writeBatch(db);
+      // 🧠 Pairing algorithm stays client-side; only the WRITE is server-authoritative.
+      const assignments: { registrationId: string, flightNumber: number }[] = [];
       let nextFlight = flights.length + 1;
 
       const friendGroups: Record<string, any[]> = {};
@@ -135,8 +136,7 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
 
       const lockFlight = () => {
         currentFlightList.forEach(p => {
-          const pRef = doc(db, 'tournaments', tournamentId, 'registrations', p.id);
-          batch.update(pRef, { flightNumber: nextFlight, status: 'locked' });
+          assignments.push({ registrationId: p.id, flightNumber: nextFlight });
         });
         nextFlight++;
         currentFlightList = [];
@@ -159,7 +159,9 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
 
       if (currentFlightList.length > 0) lockFlight();
 
-      await batch.commit();
+      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const res: any = await fn({ tournamentId, action: 'assignFlights', assignments });
+      if (!res?.data?.success) throw new Error('Server rejected flight assignments.');
       showNotification("✅ AI Sorting Complete! Friend groups preserved.", "success");
     } catch (error) {
       console.error("AI Sort Error:", error);
