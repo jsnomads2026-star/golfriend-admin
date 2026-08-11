@@ -9,10 +9,12 @@
     "gate:authority": "node scripts/authority-gate.mjs",
     "gate:dead-route": "node scripts/dead-route-gate.mjs",
     "gate:v2": "node scripts/v2-mode-gate.mjs",
+    "gate:a11y": "node scripts/portal-a11y-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run verify:booking && npm run verify:v2",
+    "verify:roles": "node scripts/role-journey-verify.mjs",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run verify:booking && npm run verify:v2 && npm run verify:roles",
     "lint": "eslint .",
     "preview": "vite preview"
   },

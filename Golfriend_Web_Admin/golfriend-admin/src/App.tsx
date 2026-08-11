@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { resolvePortalAccess, STATE_COPY } from './auth/roleJourney.js';
 import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
@@ -59,184 +60,160 @@ export default function App() {
   );
 }
 
+// Bounded client session: auto sign-out after inactivity (defence-in-depth; the
+// server is the authority). Applies to any authorized portal session.
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+
 function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [user, setUser] = useState<any>(null);
-  const [partnerData, setPartnerData] = useState<any>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  // 🔥 MANUAL LOGOUT: Admin God-Mode
+  const [partnerData, setPartnerData] = useState<any>(null); // b2b_partners/{...}
+  const [adminData, setAdminData] = useState<any>(null);     // admin_users/{uid}
+  const [isAuthLoading, setIsAuthLoading] = useState(true);  // auth_pending
+  const [roleLoading, setRoleLoading] = useState(false);     // role_resolving
+  const [resolveError, setResolveError] = useState(false);   // error (honest UI)
+
   const executeSecureLogout = async () => {
-    console.log("🚪 Executing Secure Logout...");
     try {
       await signOut(getAuth());
+      window.location.href = mode === 'partner' ? '/storefront' : '/';
+    } catch {
       window.location.href = '/';
-    } catch (error) {
-      console.error("🚨 Failed to terminate session:", error);
     }
   };
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // 🔥 Added 'teesheet' to the allowed state literal
   const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
 
-  // 🔥 CORE AUTHENTICATION LISTENER
+  // CORE AUTH LISTENER — access is derived ONLY from server-owned role docs.
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      
-      if (currentUser) {
-        try {
-          // 🔒 Check if the logged-in user is a B2B Commercial Partner
-          let partnerDoc = null;
-          let retries = 3; // Will check 3 times
+      setResolveError(false);
+      setAdminData(null);
+      setPartnerData(null);
 
-          // ⏳ WEBHOOK BUFFER: Retries the database check to give Stripe time to write the data
-          while (retries > 0) {
-            partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.uid));
-            
-            if (!partnerDoc.exists() && currentUser.email) {
-              partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.email));
-              if (!partnerDoc.exists()) {
-                const capitalizedEmail = currentUser.email.charAt(0).toUpperCase() + currentUser.email.slice(1);
-                partnerDoc = await getDoc(doc(db, 'b2b_partners', capitalizedEmail));
-              }
+      if (!currentUser) { setIsAuthLoading(false); setRoleLoading(false); return; }
+
+      setIsAuthLoading(false);
+      setRoleLoading(true); // role_resolving
+      try {
+        if (mode === 'admin') {
+          // Server-owned admin authorization: admin_users/{uid}. No email/God-Mode literal.
+          const snap = await getDoc(doc(db, 'admin_users', currentUser.uid));
+          setAdminData(snap.exists() ? snap.data() : null);
+        } else {
+          // Partner: b2b_partners keyed by uid or email (retry for webhook buffer).
+          let partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.uid));
+          let retries = 3;
+          while (!partnerDoc.exists() && retries > 0 && currentUser.email) {
+            partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.email));
+            if (!partnerDoc.exists()) {
+              const cap = currentUser.email.charAt(0).toUpperCase() + currentUser.email.slice(1);
+              partnerDoc = await getDoc(doc(db, 'b2b_partners', cap));
             }
-
-            if (partnerDoc && partnerDoc.exists()) {
-              break; // Found it! Exit the loop.
-            }
-
-            // Wait 1.5 seconds before checking again
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            if (partnerDoc.exists()) break;
+            await new Promise((r) => setTimeout(r, 1500));
             retries--;
           }
-
-          if (partnerDoc && partnerDoc.exists()) {
-            setPartnerData(partnerDoc.data());
-          } else {
-            setPartnerData(null);
-          }
-        } catch (error) {
-          console.error("🚨 Failed to verify B2B Partner status:", error);
-          setPartnerData(null);
+          setPartnerData(partnerDoc.exists() ? partnerDoc.data() : null);
         }
-      } else {
-        setPartnerData(null);
+      } catch {
+        // Never surface raw provider errors — set the honest 'error' state.
+        setResolveError(true);
+      } finally {
+        setRoleLoading(false);
       }
-      
-      setIsAuthLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [mode]);
+
+  // Bounded inactivity sign-out for any authenticated session.
+  useEffect(() => {
+    if (!user) return;
+    let t: ReturnType<typeof setTimeout>;
+    const reset = () => { clearTimeout(t); t = setTimeout(() => { executeSecureLogout(); }, SESSION_IDLE_MS); };
+    const evts = ['mousemove', 'keydown', 'click', 'scroll'];
+    reset();
+    evts.forEach((e) => window.addEventListener(e, reset));
+    return () => { clearTimeout(t); evts.forEach((e) => window.removeEventListener(e, reset)); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     try {
       await signInWithEmailAndPassword(getAuth(), email, password);
-    } catch (error: any) {
-      setAuthError('INVALID MASTER CREDENTIALS');
+    } catch {
+      // Honest, provider-error-free copy.
+      setAuthError('Sign-in failed. Check your credentials and try again.');
     }
   };
 
-  // 🔥 TV MODE BYPASS: Checks the URL to see if it should hijack the screen
+  // ---- Server-owned access derivation (single source of truth) ----
+  const access = resolvePortalAccess({
+    mode, authPending: isAuthLoading, user, roleLoading, resolveError,
+    adminDoc: adminData, partnerDoc: partnerData,
+  });
+
+  // Quarantined TV display: NEVER an unauthenticated bypass — only an authorized
+  // admin/staff session may open it (was: rendered before any auth check).
   const isTvMode = new URLSearchParams(window.location.search).get('tv') === 'true';
-
   if (isTvMode) {
-    return <TournamentTV />;
+    if (access.state === 'authorized' && access.surface === 'admin') return <TournamentTV />;
+    // otherwise fall through to the normal state screens (no bypass).
   }
 
-  // 🔥 SECURE B2B GATEWAY: Routes commercial partners to their isolated UI
-  if (mode === 'partner') {
-    if (user && partnerData) {
-      const isMasterHost = 
-        partnerData.tier === 'enterprise' || 
-        partnerData.tier === 'Enterprise' || 
-        partnerData.tier === 'master_host' || 
-        partnerData.tier === 'Product & Service Promotion';
-
-      return isMasterHost ? (
-        <EnterpriseDashboard partnerData={partnerData} />
-      ) : (
-        <SmallBusinessDashboard partnerData={partnerData} />
-      );
-    }
-
-    if (user && !partnerData && !isAuthLoading) {
-      return (
-        <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}>
-          <h1 style={styles.logo}>B2B PROFILE NOT FOUND</h1>
-          <p style={{color: '#888', marginBottom: '24px'}}>We could not locate an active commercial license for this account.</p>
-          <button onClick={executeSecureLogout} style={{padding: '12px 24px', backgroundColor: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
-            Return to Storefront
-          </button>
-        </div>
-      );
-    }
+  // Authorized partner → the role-appropriate portal (surface derived server-side).
+  if (access.state === 'authorized' && mode === 'partner') {
+    return access.surface === 'enterprise'
+      ? <EnterpriseDashboard partnerData={partnerData} />
+      : <SmallBusinessDashboard partnerData={partnerData} />;
   }
 
-  // 🔥 STRICT ADMIN LOCK: Prevents unauthorized access to God-Mode
-  if (mode === 'admin' && user && user.email !== 'admin@golfriend.co') {
+  // Signed-out: admin shows the login form; partner routes to the public storefront.
+  if (access.state === 'signed_out') {
+    if (mode === 'partner') { window.location.href = '/storefront'; return null; }
     return (
-      <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}>
-        <h1 style={styles.logo}>UNAUTHORIZED GOD-MODE ACCESS</h1>
-        <p style={{color: '#ff4444', marginBottom: '24px'}}>CRITICAL SECURITY: This account is not an authorized Director.</p>
-        <button onClick={executeSecureLogout} style={{padding: '12px 24px', backgroundColor: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
-          Force Logout
-        </button>
-      </div>
-    );
-  }
-
-  // 🔥 SECURE GATE: Loading State
-  if (isAuthLoading) {
-    return (
-      <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center'}}>
-        <h1 style={styles.logo}>SECURE CONNECTION ESTABLISHING...</h1>
-      </div>
-    );
-  }
-
-  // 🔥 SECURE GATE: Login Lock
-  if (!user) {
-    if (mode === 'partner') {
-      window.location.href = '/storefront';
-      return null;
-    }
-    
-    return (
-      <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}>
+      <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}} role="main">
         <div style={{backgroundColor: '#121212', padding: '40px', borderRadius: '12px', border: '1px solid #333', width: '340px'}}>
-          <h1 style={styles.logo}>GOLFRIEND GOD-MODE</h1>
-          <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-            <input 
-              id="godmode_admin_email"
-              name="godmode_admin_email"
-              type="email" 
-              placeholder="Master Email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)}
-              style={{padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: 'white', borderRadius: '6px'}}
-              autoComplete="new-password"
-            />
-            <input 
-              id="godmode_admin_password"
-              name="godmode_admin_password"
-              type="password" 
-              placeholder="Master Password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)}
-              style={{padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: 'white', borderRadius: '6px'}}
-              autoComplete="new-password"
-            />
-            {authError && <p style={{color: '#ff4444', fontSize: '12px', textAlign: 'center', margin: 0}}>{authError}</p>}
+          <h1 style={styles.logo}>GOLFRIEND ADMIN SIGN-IN</h1>
+          <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '16px'}} aria-label="Admin sign-in">
+            <input id="admin_email" name="admin_email" type="email" placeholder="Email" aria-label="Email"
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              style={{padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: 'white', borderRadius: '6px'}} autoComplete="username" />
+            <input id="admin_password" name="admin_password" type="password" placeholder="Password" aria-label="Password"
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              style={{padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: 'white', borderRadius: '6px'}} autoComplete="current-password" />
+            {authError && <p role="alert" style={{color: '#ff4444', fontSize: '12px', textAlign: 'center', margin: 0}}>{authError}</p>}
             <button type="submit" style={{padding: '12px', backgroundColor: '#d4af37', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
-              INITIALIZE
+              SIGN IN
             </button>
           </form>
         </div>
+      </div>
+    );
+  }
+
+  // Loading / role-resolving / error / unauthorized / suspended → honest state screens.
+  if (access.state !== 'authorized') {
+    const copy = STATE_COPY[access.state] || STATE_COPY.error;
+    const isBusy = access.state === 'auth_pending' || access.state === 'role_resolving';
+    const isError = copy.tone === 'error';
+    return (
+      <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}
+        role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'} aria-busy={isBusy}>
+        <h1 style={{...styles.logo, color: isError ? '#ff4444' : '#d4af37'}}>{copy.title}</h1>
+        {(access.state === 'unauthorized' || access.state === 'suspended' || access.state === 'error') && (
+          <button onClick={executeSecureLogout}
+            style={{marginTop: '16px', padding: '12px 24px', backgroundColor: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
+            {mode === 'partner' ? 'Return to Storefront' : 'Sign out'}
+          </button>
+        )}
       </div>
     );
   }
