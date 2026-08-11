@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target v1
 import Stripe from "stripe";
 import vision from "@google-cloud/vision"; // 🔥 ADDED
+export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -126,54 +127,7 @@ export const weeklyVaultJanitor = onSchedule({
   timeZone: "Asia/Bangkok",
   memory: "512MiB"
 }, async (event) => {
-  console.log("🧹 WEEKLY JANITOR: Initializing deduplication sweep...");
-
-  try {
-    const snapshot = await db.collection("courses").get();
-    const allCourses = snapshot.docs.map(doc => ({ docId: doc.id, ...(doc.data() as any) }));
-
-    const seenClubs = new Set();
-    const duplicatesToDelete: string[] = [];
-
-    for (const course of allCourses as any[]) {
-      const identifier = course.clubID || course.clubName;
-      if (!identifier) continue;
-
-      if (seenClubs.has(identifier)) {
-        duplicatesToDelete.push(course.docId);
-      } else {
-        seenClubs.add(identifier);
-      }
-    }
-
-    console.log(`⚠️ Janitor found ${duplicatesToDelete.length} duplicates to purge.`);
-    if (duplicatesToDelete.length === 0) return;
-
-    const batches = [];
-    let currentBatch = db.batch();
-    let operationCount = 0;
-
-    for (const docId of duplicatesToDelete) {
-      const docRef = db.collection("courses").doc(docId);
-      currentBatch.delete(docRef);
-      operationCount++;
-
-      if (operationCount === 490) { 
-        batches.push(currentBatch.commit());
-        currentBatch = db.batch();
-        operationCount = 0;
-      }
-    }
-
-    if (operationCount > 0) {
-      batches.push(currentBatch.commit());
-    }
-
-    await Promise.all(batches);
-    console.log(`🏁 WEEKLY JANITOR COMPLETE. Vault optimized.`);
-  } catch (error) {
-    console.error("❌ CRITICAL JANITOR FAILURE:", error);
-  }
+  logger.warn("Weekly course deletion is disabled: a club can legitimately contain multiple courses. Duplicate candidates must be reviewed by a coordinator.");
 });
 
 // ==========================================
