@@ -21,6 +21,7 @@ const AUTOMATED = [
   ['verify:roles', 'scripts/role-journey-verify.mjs', 'cross-role journey matrix; server-owned derivation'],
   ['verify:guards', 'scripts/route-guard-verify.mjs', 'every privileged route behind the resolver'],
   ['verify:courseops', 'scripts/course-ops-journey-verify.mjs', 'course-ops commissioning journey under synthetic V2'],
+  ['verify:seed', 'scripts/lanec-seed-conformance-verify.mjs', 'clean-V2 course/role/portal seed & journey conformance; zero-V1; non-financial'],
 ];
 
 // Externally-run controls this commit (npm build/test + optional Lane B check).

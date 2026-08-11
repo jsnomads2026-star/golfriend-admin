@@ -1,0 +1,103 @@
+{
+  "manifestVersion": "1.0.0",
+  "lane": "C",
+  "scope": "course/role/portal — Lane C-owned slice of the shared clean-V2 canonical seed",
+  "producedFor": "Director clean-V2 precommission-data batch (issue #19, comment 5248506512)",
+  "authority": "server-owned only — admin_users (staff) + b2b_partners (portal). NO email/God-Mode identity, NO client role assignment, NO financial booking fields anywhere.",
+  "notes": "Lane B owns the unifying canonical seed schema + executable emulator seed/reset/integrity runner; Lane A owns the mobile Example World media/persona fixture. This file is the Lane C course/role/portal contribution, validated locally by scripts/lanec-seed-conformance-verify.mjs. Deterministic Example World identities; test-safe local media references only; zero V1.",
+
+  "personas": {
+    "admin_users": [
+      { "uid": "ex_director_ava",   "email": "ava@example.test",   "name": "Ava Director",   "role": "Director", "status": "Active",    "expectedStaff": true,  "expectedDirector": true,  "expectedPortalState": "authorized" },
+      { "uid": "ex_manager_ben",    "email": "ben@example.test",   "name": "Ben Manager",    "role": "Manager",  "status": "Active",    "expectedStaff": true,  "expectedDirector": false, "expectedPortalState": "authorized" },
+      { "uid": "ex_support_chloe",  "email": "chloe@example.test", "name": "Chloe Support",  "role": "Support",  "status": "Active",    "expectedStaff": true,  "expectedDirector": false, "expectedPortalState": "authorized" },
+      { "uid": "ex_suspended_dana", "email": "dana@example.test",  "name": "Dana Suspended", "role": "Manager",  "status": "Suspended", "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "suspended" },
+      { "uid": "ex_roleless_omar",  "email": "omar@example.test",  "name": "Omar NoRole",    "role": "",         "status": "Active",    "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "unauthorized" }
+    ],
+    "b2b_partners": [
+      { "id": "ex_operator_evan",   "tier": "small_business", "status": "active_partner", "name": "Evan Ops",       "expectedPortalSurface": "small",      "expectedPortalState": "authorized" },
+      { "id": "ex_enterprise_erin", "tier": "enterprise",     "status": "active_partner", "name": "Erin Enterprise","expectedPortalSurface": "enterprise", "expectedPortalState": "authorized" },
+      { "id": "ex_suspended_finn",  "tier": "small_business", "status": "suspended",      "name": "Finn Frozen",    "expectedPortalSurface": "partner",    "expectedPortalState": "suspended" }
+    ],
+    "players": [
+      { "uid": "ex_player_grace", "nickname": "Grace" },
+      { "uid": "ex_player_hank",  "nickname": "Hank" }
+    ]
+  },
+
+  "courses": [
+    { "courseId": "ex_course_riverbend", "clubName": "Riverbend Links", "latitude": 12.9236, "longitude": 100.8825, "providerId": "ex_course_riverbend", "manualLock": false, "heroAsset": "riverbend_hero" },
+    { "courseId": "ex_course_pineview",  "clubName": "Pineview Downs",  "latitude": 18.7883, "longitude": 98.9853,  "providerId": "ex_course_pineview",  "manualLock": true,  "heroAsset": "pineview_hero" }
+  ],
+
+  "course_operators": [
+    { "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "operatorUid": "ex_operator_evan",   "operatorPartnerId": "ex_operator_evan" },
+    { "courseId": "ex_course_pineview",  "courseName": "Pineview Downs",  "operatorUid": "ex_enterprise_erin", "operatorPartnerId": "ex_enterprise_erin" }
+  ],
+
+  "tee_time_slots": [
+    { "id": "ex_course_riverbend_2999-01-01_0800", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "08:00", "capacity": 4, "bookedCount": 1, "status": "open",   "createdByUid": "ex_operator_evan" },
+    { "id": "ex_course_riverbend_2999-01-01_0900", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "09:00", "capacity": 4, "bookedCount": 0, "status": "open",   "createdByUid": "ex_operator_evan" },
+    { "id": "ex_course_pineview_2999-01-02_0730",  "courseId": "ex_course_pineview",  "courseName": "Pineview Downs",  "date": "2999-01-02", "time": "07:30", "capacity": 2, "bookedCount": 0, "status": "closed", "createdByUid": "ex_enterprise_erin" }
+  ],
+
+  "bookings": [
+    { "id": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "slotId": "ex_course_riverbend_2999-01-01_0800", "courseId": "ex_course_riverbend", "courseName": "Riverbend Links", "date": "2999-01-01", "time": "08:00", "playerUid": "ex_player_grace", "playerName": "Grace", "status": "confirmed", "userStatusKey": "booking_confirmed", "respondedByUid": "ex_operator_evan" }
+  ],
+
+  "booking_messages": [
+    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "senderUid": "ex_player_grace", "senderRole": "player",   "text": "On my way to the first tee." },
+    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "senderUid": "ex_operator_evan", "senderRole": "operator", "text": "Confirmed — see you at the pro shop." }
+  ],
+
+  "booking_audit": [
+    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "action": "requested", "byUid": "ex_player_grace", "byRole": "player" },
+    { "bookingId": "ex_course_riverbend_2999-01-01_0800__ex_player_grace", "action": "confirmed", "byUid": "ex_operator_evan", "byRole": "operator" }
+  ],
+
+  "enterprise_staff": [
+    { "enterpriseUid": "ex_enterprise_erin", "staffUid": "ex_estaff_iris", "email": "iris@example.test", "role": "manager", "status": "active", "invitedBy": "ex_enterprise_erin" }
+  ],
+
+  "portal_media": [
+    { "assetId": "riverbend_hero", "ownerCourseId": "ex_course_riverbend", "type": "image/jpeg", "ref": "test-assets/courses/riverbend_hero.jpg", "sizeBytes": 20480, "consent": "test_fixture", "moderation": "approved" },
+    { "assetId": "pineview_hero",  "ownerCourseId": "ex_course_pineview",  "type": "image/webp", "ref": "test-assets/courses/pineview_hero.webp", "sizeBytes": 15360, "consent": "test_fixture", "moderation": "approved" }
+  ],
+
+  "expected": {
+    "counts": {
+      "admin_users": 5,
+      "b2b_partners": 3,
+      "players": 2,
+      "courses": 2,
+      "course_operators": 2,
+      "tee_time_slots": 3,
+      "bookings": 1,
+      "booking_messages": 2,
+      "booking_audit": 2,
+      "enterprise_staff": 1,
+      "portal_media": 2
+    },
+    "invariants": [
+      "every course_operators.operatorUid resolves to a b2b_partners id",
+      "every tee_time_slots.courseId resolves to a courses.courseId",
+      "every booking.slotId resolves to a tee_time_slots.id and booking.playerUid to a players.uid",
+      "every booking.status is one of pending|confirmed|rejected|cancelled",
+      "every tee_time_slots.bookedCount equals the number of non-terminal (pending|confirmed) bookings on that slot",
+      "every booking_message.bookingId and booking_audit.bookingId resolves to a booking.id",
+      "every portal_media.ownerCourseId resolves to a courses.courseId",
+      "no document carries a financial field (priceChips|price|amount|hold|escrow|settlement|payout|refund|balance)",
+      "no admin@golfriend.co / God-Mode identity or hard-coded privileged email exists anywhere",
+      "no golfriend-v1 identifier appears anywhere"
+    ]
+  },
+
+  "exclusions": [
+    "Fun Loop prerequisites, Master Album/private media, chats — owned by Lane A/Lane B canonical seed, out of Lane C scope",
+    "Join/account-lifecycle receipts (v2_initialization_receipts) — Lane B backend",
+    "Any production URL, credential, provider result, or Golf API data",
+    "Any financial/economy state (Chips, wallet, transactions, escrow) — booking is strictly non-financial"
+  ],
+
+  "zeroV1Proof": "This file contains no golfriend-v1 project id, api key, app id, or bucket; verified by scripts/lanec-seed-conformance-verify.mjs against firebaseTarget.V1_FORBIDDEN."
+}
