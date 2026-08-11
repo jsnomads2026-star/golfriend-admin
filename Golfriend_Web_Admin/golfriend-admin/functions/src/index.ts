@@ -8,7 +8,7 @@ import Stripe from "stripe";
 import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
-import { isActiveStaff } from "./authority.js";
+import { isActiveStaff, isActiveDirector } from "./authority.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -473,15 +473,12 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
 
-  // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode
-  // may manage any course; otherwise the caller must be the claimed operator of
-  // the specific course being touched (partner-scoped self-service authoring).
+  // AUTHORIZATION: active platform staff (server-owned admin_users role) may manage
+  // any course; otherwise the caller must be the claimed operator of the specific
+  // course being touched (partner-scoped self-service authoring). No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  const isPrivileged = isStaff || isGodMode;
+  const isPrivileged = isActiveStaff(adminSnap.exists ? adminSnap.data() : null);
 
   const assertCourseOperator = async (cid: string) => {
     const opSnap = await db.collection('course_operators').doc(cid).get();
@@ -679,7 +676,6 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
   const { bookingId, decision } = request.data || {};
   if (!bookingId || typeof bookingId !== 'string') {
     throw new HttpsError('invalid-argument', 'A bookingId is required.');
@@ -688,10 +684,10 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
     throw new HttpsError('invalid-argument', 'decision must be confirm or reject.');
   }
 
+  // AUTHORIZATION: active platform staff (server-owned admin_users role) or the
+  // claimed course operator. No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  const isPrivileged = isStaff || isGodMode;
+  const isPrivileged = isActiveStaff(adminSnap.exists ? adminSnap.data() : null);
 
   const bookingRef = db.collection('bookings').doc(bookingId);
 
@@ -759,16 +755,15 @@ export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
   const { bookingId } = request.data || {};
   if (!bookingId || typeof bookingId !== 'string') {
     throw new HttpsError('invalid-argument', 'A bookingId is required.');
   }
 
+  // AUTHORIZATION: booking owner, active platform staff (server-owned admin_users
+  // role), or the claimed course operator. No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  const isPrivileged = isStaff || isGodMode;
+  const isPrivileged = isActiveStaff(adminSnap.exists ? adminSnap.data() : null);
   const bookingRef = db.collection('bookings').doc(bookingId);
 
   try {
@@ -824,7 +819,6 @@ export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) =
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
   const { bookingId, text } = request.data || {};
   if (!bookingId || typeof bookingId !== 'string') {
     throw new HttpsError('invalid-argument', 'A bookingId is required.');
@@ -839,12 +833,13 @@ export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) =
   if (!bSnap.exists) throw new HttpsError('not-found', 'Booking not found.');
   const booking = bSnap.data() || {};
 
+  // AUTHORIZATION: booking owner, active platform staff (server-owned admin_users
+  // role), or the claimed course operator. No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
+  const isStaff = isActiveStaff(adminSnap.exists ? adminSnap.data() : null);
   const isOwner = booking.playerUid === callerUid;
-  let senderRole = isOwner ? 'player' : (isStaff || isGodMode ? 'staff' : 'operator');
-  if (!isOwner && !isStaff && !isGodMode) {
+  let senderRole = isOwner ? 'player' : (isStaff ? 'staff' : 'operator');
+  if (!isOwner && !isStaff) {
     const opSnap = await db.collection('course_operators').doc(booking.courseId).get();
     if (!opSnap.exists || opSnap.data()?.operatorUid !== callerUid) {
       throw new HttpsError('permission-denied', 'Only booking participants can message.');
@@ -874,7 +869,6 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
   const { bookingId, decision } = request.data || {};
   if (!bookingId || typeof bookingId !== 'string') {
     throw new HttpsError('invalid-argument', 'A bookingId is required.');
@@ -883,11 +877,9 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
     throw new HttpsError('invalid-argument', 'decision must be confirm, reject or cancel.');
   }
 
-  // AUTHORIZATION: platform staff (any non-suspended admin_users) or God-Mode.
+  // AUTHORIZATION: active platform staff only (server-owned admin_users role). No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isStaff = adminSnap.exists && adminSnap.data()?.status !== 'Suspended';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  if (!isStaff && !isGodMode) {
+  if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
     throw new HttpsError('permission-denied', 'You are not authorized to resolve bookings.');
   }
 
@@ -1369,7 +1361,6 @@ export const applyModerationStrike = onCall({ memory: "256MiB" }, async (request
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
   const { ticketId, tier, reason } = request.data || {};
 
   const tierNum = Number(tier);
@@ -1384,11 +1375,9 @@ export const applyModerationStrike = onCall({ memory: "256MiB" }, async (request
   }
   const safeReason = reason.trim().slice(0, 500);
 
-  // AUTHORIZATION: Director only.
+  // AUTHORIZATION: active Director only (server-owned admin_users role). No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  if (!isDirector && !isGodMode) {
+  if (!isActiveDirector(adminSnap.exists ? adminSnap.data() : null)) {
     throw new HttpsError('permission-denied', 'Only the Director can issue moderation strikes.');
   }
 
@@ -1490,90 +1479,15 @@ export const applyModerationStrike = onCall({ memory: "256MiB" }, async (request
 // (guards on status === 'escrow_locked') so a double-click or REFUND-then-PAYOUT
 // cannot double-settle. A refund credit is stamped as its own audited ledger tx.
 export const resolveEscrow = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (prohibited-financial): escrow settlement + chip refund is wallet/settlement authority.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
-  const { txId, resolution } = request.data || {};
-
-  if (!txId || typeof txId !== 'string') {
-    throw new HttpsError('invalid-argument', 'An escrow transaction id is required.');
-  }
-  if (resolution !== 'REFUND' && resolution !== 'PAYOUT') {
-    throw new HttpsError('invalid-argument', 'Resolution must be REFUND or PAYOUT.');
-  }
-
-  // AUTHORIZATION: Director only. Accept the admin_users Director role (see
-  // inviteEmployee) or the platform God-Mode identity used by the admin gate.
-  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  if (!isDirector && !isGodMode) {
-    throw new HttpsError('permission-denied', 'Only the Director can resolve escrow holds.');
-  }
-
-  const txRef = db.collection('transactions').doc(txId);
-  const refundTxRef = db.collection('transactions').doc(`escrow_refund_${txId}`);
-
-  try {
-    const result = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(txRef);
-      if (!snap.exists) {
-        throw new HttpsError('not-found', 'Escrow transaction not found.');
-      }
-      const data = snap.data() || {};
-      // Idempotency / once-only guard: only an actively locked hold can resolve.
-      if (data.status !== 'escrow_locked') {
-        throw new HttpsError('failed-precondition', `Escrow is not locked (current status: ${data.status || 'unknown'}); it may already be resolved.`);
-      }
-
-      // Server-truth uid/amount from the ledger — never from the client.
-      const uid = data.uid;
-      const amount = Math.abs(Number(data.amount || 0));
-      if (!uid) {
-        throw new HttpsError('failed-precondition', 'Escrow record is missing an owner uid.');
-      }
-
-      // 1. Resolve the hold in the ledger.
-      tx.update(txRef, {
-        status: resolution === 'REFUND' ? 'failed' : 'completed',
-        resolvedBy: 'DIRECTOR_OVERRIDE',
-        resolvedByUid: callerUid,
-        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      // 2. On refund, return the held chips to the buyer + stamp an audited tx.
-      if (resolution === 'REFUND' && amount > 0) {
-        const userRef = db.collection('users').doc(uid);
-        tx.set(userRef, {
-          chips: admin.firestore.FieldValue.increment(amount),
-        }, { merge: true });
-
-        tx.set(refundTxRef, {
-          userId: uid,
-          title: `Escrow Refund (hold ${txId})`,
-          amount: amount,
-          type: 'ESCROW_REFUND',
-          status: 'completed',
-          enforcedBy: 'SYSTEM',
-          resolvedByUid: callerUid,
-          sourceEscrowId: txId,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      }
-
-      return { uid, amount, resolution };
-    });
-
-    logger.info(`🔒 Escrow ${txId} resolved via ${resolution} by ${callerUid} (uid ${result.uid}, amount ${result.amount}).`);
-    return { success: true, ...result };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("🔒 Escrow resolution failed:", error);
-    throw new HttpsError('internal', error.message || 'Escrow resolution failed.');
-  }
+  throw new HttpsError('unavailable', 'resolveEscrow is disabled in the non-financial V2 world (quarantined: prohibited-financial).');
 });
 
 // ==========================================
@@ -1709,130 +1623,15 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
 // Director/God-Mode-gated, amounts/enums validated, chips floored at 0 on burn,
 // and every change stamped to the immutable ledger with the audit reason.
 export const adminOverrideUser = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (prohibited-financial): mints/burns chips (wallet); coupled reliability path removed pending a non-financial moderation design.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
-  const { action, targetUid, reason } = request.data || {};
-
-  if (!targetUid || typeof targetUid !== 'string') {
-    throw new HttpsError('invalid-argument', 'A targetUid is required.');
-  }
-  if (!reason || typeof reason !== 'string' || !reason.trim()) {
-    throw new HttpsError('invalid-argument', 'An audit reason is required.');
-  }
-  const safeReason = reason.trim().slice(0, 500);
-
-  // AUTHORIZATION: Director (admin_users) or God-Mode identity only.
-  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
-  const isGodMode = callerEmail === 'admin@golfriend.co';
-  if (!isDirector && !isGodMode) {
-    throw new HttpsError('permission-denied', 'Only the Director can run manual overrides.');
-  }
-
-  const userRef = db.collection('users').doc(targetUid);
-
-  // ---- ECONOMY: mint/burn chips ----
-  if (action === 'economy') {
-    const { operation } = request.data || {};
-    if (operation !== 'MINT' && operation !== 'BURN') {
-      throw new HttpsError('invalid-argument', 'operation must be MINT or BURN.');
-    }
-    const magnitude = Math.abs(parseInt(String(request.data?.amount), 10));
-    if (!Number.isInteger(magnitude) || magnitude <= 0) {
-      throw new HttpsError('invalid-argument', 'amount must be a positive integer.');
-    }
-
-    try {
-      const out = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(userRef);
-        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
-        const current = Number(snap.data()?.chips || 0);
-        const delta = operation === 'BURN' ? -magnitude : magnitude;
-        const newChips = Math.max(0, current + delta);
-        const appliedDelta = newChips - current; // floored burn may apply less
-
-        tx.set(userRef, { chips: newChips }, { merge: true });
-
-        const txRef = db.collection('transactions').doc();
-        tx.set(txRef, {
-          uid: targetUid,
-          userId: targetUid,
-          type: 'ADMIN_OVERRIDE',
-          amount: appliedDelta,
-          status: 'completed',
-          enforcedBy: 'SYSTEM',
-          resolvedByUid: callerUid,
-          auditReason: safeReason,
-          timestamp: admin.firestore.FieldValue.serverTimestamp(),
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        return { newChips, appliedDelta };
-      });
-      logger.info(`⚡ Economy override ${operation} ${magnitude} on ${targetUid} by ${callerUid} (applied ${out.appliedDelta}).`);
-      return { success: true, ...out };
-    } catch (error: any) {
-      if (error instanceof HttpsError) throw error;
-      logger.error("⚡ Economy override failed:", error);
-      throw new HttpsError('internal', error.message || 'Economy override failed.');
-    }
-  }
-
-  // ---- RELIABILITY: reputation / verification metrics ----
-  if (action === 'reliability') {
-    const { reliabilityScore, behaviorBadge, starRating, verificationStatus } = request.data || {};
-    const score = Number(reliabilityScore);
-    if (!Number.isFinite(score) || score < 0 || score > 100) {
-      throw new HttpsError('invalid-argument', 'reliability_score must be between 0 and 100.');
-    }
-    const allowedVerification = ['verified', 'pending', 'unverified', 'suspended'];
-    if (!allowedVerification.includes(verificationStatus)) {
-      throw new HttpsError('invalid-argument', 'Invalid verification status.');
-    }
-    if (typeof behaviorBadge !== 'string' || typeof starRating !== 'string') {
-      throw new HttpsError('invalid-argument', 'Badge and star rating are required.');
-    }
-
-    try {
-      const snap = await userRef.get();
-      if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
-      const before = {
-        reliability_score: snap.data()?.reliability_score ?? null,
-        verification_status: snap.data()?.verification_status ?? null,
-      };
-      const batch = db.batch();
-      batch.set(userRef, {
-        reliability_score: Math.round(score),
-        behavior_badge: behaviorBadge.slice(0, 80),
-        star_rating_display: starRating.slice(0, 40),
-        verification_status: verificationStatus,
-      }, { merge: true });
-      const txRef = db.collection('transactions').doc();
-      batch.set(txRef, {
-        uid: targetUid,
-        userId: targetUid,
-        type: 'ADMIN_RELIABILITY_OVERRIDE',
-        amount: 0,
-        status: 'completed',
-        enforcedBy: 'SYSTEM',
-        resolvedByUid: callerUid,
-        auditReason: safeReason,
-        before,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      await batch.commit();
-      logger.info(`⚡ Reliability override on ${targetUid} by ${callerUid}.`);
-      return { success: true, reliability_score: Math.round(score) };
-    } catch (error: any) {
-      if (error instanceof HttpsError) throw error;
-      logger.error("⚡ Reliability override failed:", error);
-      throw new HttpsError('internal', error.message || 'Reliability override failed.');
-    }
-  }
-
-  throw new HttpsError('invalid-argument', 'Unknown action. Use "economy" or "reliability".');
+  throw new HttpsError('unavailable', 'adminOverrideUser is disabled in the non-financial V2 world (quarantined: prohibited-financial).');
 });
 
 
@@ -1843,104 +1642,15 @@ export const adminOverrideUser = onCall({ memory: "256MiB" }, async (request) =>
 // chips (wallet) — settlement/role state that must never be client-written.
 // Director/God-Mode only; transactional; adjustments floored at 0; audited.
 export const adminManagePartner = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (prohibited-financial): mints/adjusts chips (wallet) + commercial tier settlement.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || '').toLowerCase();
-  const { action, targetUid, amount, memo } = request.data || {};
-
-  if (!targetUid || typeof targetUid !== 'string') {
-    throw new HttpsError('invalid-argument', 'A targetUid is required.');
-  }
-
-  // AUTHORIZATION: Director or God-Mode only.
-  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-  const isDirector = adminSnap.exists && adminSnap.data()?.role === 'Director';
-  if (!isDirector && callerEmail !== 'admin@golfriend.co') {
-    throw new HttpsError('permission-denied', 'Only the Director can manage B2B partners.');
-  }
-
-  const userRef = db.collection('users').doc(targetUid);
-
-  try {
-    // ---- UPGRADE TIER → commercial ----
-    if (action === 'upgradeTier') {
-      const out = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(userRef);
-        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
-        tx.set(userRef, { tier: 'commercial' }, { merge: true });
-        const txRef = db.collection('transactions').doc();
-        tx.set(txRef, {
-          userId: targetUid, title: 'Account Tier Upgrade: COMMERCIAL', type: 'B2B_UPGRADE',
-          amount: 0, status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        return { tier: 'commercial' };
-      });
-      logger.info(`🤝 Partner ${targetUid} upgraded to commercial by ${callerUid}.`);
-      return { success: true, ...out };
-    }
-
-    // ---- MINT chips (positive only) ----
-    if (action === 'mint') {
-      const mint = parseInt(String(amount), 10);
-      if (!Number.isInteger(mint) || mint <= 0) {
-        throw new HttpsError('invalid-argument', 'Mint amount must be a positive integer.');
-      }
-      const out = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(userRef);
-        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
-        const newChips = Number(snap.data()?.chips || 0) + mint;
-        tx.set(userRef, { chips: newChips }, { merge: true });
-        const txRef = db.collection('transactions').doc();
-        tx.set(txRef, {
-          userId: targetUid, title: `Admin Mint: +${mint} Chips`, type: 'ADMIN_MINT',
-          amount: mint, status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        return { chips: newChips };
-      });
-      logger.info(`🤝 Minted ${mint} chips to ${targetUid} by ${callerUid}.`);
-      return { success: true, ...out };
-    }
-
-    // ---- LEDGER ADJUST (+/-, memo required) ----
-    if (action === 'adjust') {
-      const adj = parseInt(String(amount), 10);
-      if (!Number.isInteger(adj) || adj === 0) {
-        throw new HttpsError('invalid-argument', 'Adjustment must be a non-zero integer.');
-      }
-      if (typeof memo !== 'string' || !memo.trim()) {
-        throw new HttpsError('invalid-argument', 'A memo is required for audit compliance.');
-      }
-      const cleanMemo = memo.trim().slice(0, 200);
-      const out = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(userRef);
-        if (!snap.exists) throw new HttpsError('not-found', 'Target user not found.');
-        const current = Number(snap.data()?.chips || 0);
-        const newChips = Math.max(0, current + adj);
-        const applied = newChips - current;
-        tx.set(userRef, { chips: newChips }, { merge: true });
-        const txRef = db.collection('transactions').doc();
-        tx.set(txRef, {
-          userId: targetUid, title: `Admin Override: ${cleanMemo}`,
-          amount: applied, type: applied > 0 ? 'ADMIN_REFUND' : 'ADMIN_DEDUCTION',
-          status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        return { chips: newChips, applied };
-      });
-      logger.info(`🤝 Ledger adjust ${adj} on ${targetUid} by ${callerUid} (applied ${out.applied}).`);
-      return { success: true, ...out };
-    }
-
-    throw new HttpsError('invalid-argument', 'Unknown action. Use upgradeTier, mint or adjust.');
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("🤝 B2B partner management failed:", error);
-    throw new HttpsError('internal', error.message || 'Partner management failed.');
-  }
+  throw new HttpsError('unavailable', 'adminManagePartner is disabled in the non-financial V2 world (quarantined: prohibited-financial).');
 });
 
 // ==========================================
@@ -2001,45 +1711,15 @@ export const setEmployeeStatus = onCall({ memory: "256MiB" }, async (request) =>
 // The fiat P&L expense log feeds the treasury reconciliation sweep, so the
 // ledger write is server-owned: Director/God-Mode only, validated, audit-stamped.
 export const logPlatformExpense = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (prohibited-financial): fiat OPEX / treasury ledger writer.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || '').toLowerCase();
-  const { amount, vendor } = request.data || {};
-
-  try {
-    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
-    const isDirector = callerDoc.exists && callerDoc.data()?.role === 'Director';
-    if (!isDirector && callerEmail !== 'admin@golfriend.co') {
-      throw new HttpsError('permission-denied', 'Only the Director can log platform expenses.');
-    }
-    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-      throw new HttpsError('invalid-argument', 'Amount must be a finite number greater than zero.');
-    }
-    if (typeof vendor !== 'string' || !vendor.trim()) {
-      throw new HttpsError('invalid-argument', 'Vendor is required.');
-    }
-    const cleanVendor = vendor.trim().slice(0, 120);
-
-    await db.collection('transactions').add({
-      uid: 'PLATFORM_TREASURY',
-      type: 'PLATFORM_EXPENSE',
-      status: 'completed',
-      paymentProvider: 'MANUAL_OUTFLOW',
-      fiatAmountUsd: amount,
-      productName: `OPEX: ${cleanVendor}`,
-      enforcedBy: 'SYSTEM',
-      loggedByUid: callerUid,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return { success: true };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("Platform Expense Ledger Error:", error);
-    throw new HttpsError('internal', error.message || 'Failed to log expense.');
-  }
+  throw new HttpsError('unavailable', 'logPlatformExpense is disabled in the non-financial V2 world (quarantined: prohibited-financial).');
 });
 
 // ==========================================
@@ -2048,48 +1728,15 @@ export const logPlatformExpense = onCall({ memory: "256MiB" }, async (request) =
 // The winner is selected server-side over the real registrations and written to
 // the authoritative tournament doc — a client can neither pick nor set the winner.
 export const drawRaffleWinner = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (unresolved): raffle prize draw (tournament economy); no approved non-financial V2 policy.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || '').toLowerCase();
-  const { tournamentId } = request.data || {};
-
-  if (typeof tournamentId !== 'string' || tournamentId.trim() === '') {
-    throw new HttpsError('invalid-argument', 'A valid tournamentId is required.');
-  }
-
-  try {
-    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
-    const isDirector = callerDoc.exists && callerDoc.data()?.role === 'Director';
-    if (!isDirector && callerEmail !== 'admin@golfriend.co') {
-      throw new HttpsError('permission-denied', 'Only the Director can draw the raffle.');
-    }
-
-    const registrationsSnap = await db
-      .collection('tournaments').doc(tournamentId)
-      .collection('registrations').get();
-    if (registrationsSnap.empty) {
-      throw new HttpsError('failed-precondition', 'No eligible tickets in the drum.');
-    }
-
-    const tickets = registrationsSnap.docs;
-    const winnerIndex = Math.floor(Math.random() * tickets.length);
-    const winnerNickname = tickets[winnerIndex].data()?.nickname || '';
-
-    await db.collection('tournaments').doc(tournamentId).set({
-      displayState: 'raffle',
-      raffleWinner: winnerNickname,
-      raffleDrawnByUid: callerUid,
-      raffleDrawnAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    return { success: true, winnerNickname };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("Raffle Draw Error:", error);
-    throw new HttpsError('internal', error.message || 'Raffle draw failed.');
-  }
+  throw new HttpsError('unavailable', 'drawRaffleWinner is disabled in the non-financial V2 world (quarantined: unresolved).');
 });
 
 // ==========================================
@@ -2098,77 +1745,15 @@ export const drawRaffleWinner = onCall({ memory: "256MiB" }, async (request) => 
 // Booking/flight status finalization is server-owned: staff, God-Mode, or the
 // course's claimed operator only, guarded on the flight being pending.
 export const checkInFlight = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (unresolved): flight/games check-in; outside non-financial booking scope; no approved V2 policy.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || '').toLowerCase();
-  const { gameId, cartAssignments } = request.data || {};
-
-  try {
-    if (typeof gameId !== 'string' || gameId.trim() === '') {
-      throw new HttpsError('invalid-argument', 'A valid gameId is required.');
-    }
-    if (cartAssignments === null || typeof cartAssignments !== 'object' || Array.isArray(cartAssignments)) {
-      throw new HttpsError('invalid-argument', 'cartAssignments must be an object.');
-    }
-    for (const value of Object.values(cartAssignments as Record<string, unknown>)) {
-      if (typeof value !== 'string' || value.trim() === '') {
-        throw new HttpsError('invalid-argument', 'Every cart assignment must be a non-empty string.');
-      }
-    }
-
-    const gameRef = db.collection('games').doc(gameId);
-    const gameSnap = await gameRef.get();
-    if (!gameSnap.exists) {
-      throw new HttpsError('not-found', 'Flight not found.');
-    }
-    const gameData = gameSnap.data() || {};
-
-    // AUTHORIZATION: platform staff OR God-Mode OR the course's claimed operator.
-    let authorized = false;
-    const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-    if (adminSnap.exists && adminSnap.data()?.status !== 'Suspended') authorized = true;
-    if (!authorized && callerEmail === 'admin@golfriend.co') authorized = true;
-    if (!authorized) {
-      const courseId = gameData.courseId;
-      if (typeof courseId === 'string' && courseId.trim() !== '') {
-        const operatorSnap = await db.collection('course_operators').doc(courseId).get();
-        if (operatorSnap.exists && operatorSnap.data()?.operatorUid === callerUid) authorized = true;
-      }
-    }
-    if (!authorized) {
-      throw new HttpsError('permission-denied', 'You are not authorized to check in this flight.');
-    }
-
-    if (gameData.status !== 'pending') {
-      throw new HttpsError('failed-precondition', `Flight is already ${gameData.status}.`);
-    }
-
-    const players = Array.isArray(gameData.players) ? gameData.players : [];
-    for (const player of players) {
-      const uid = player?.uid;
-      if (typeof uid === 'string' && uid.trim() !== '') {
-        const assigned = (cartAssignments as Record<string, string>)[uid];
-        if (typeof assigned !== 'string' || assigned.trim() === '') {
-          throw new HttpsError('invalid-argument', 'Every player must be assigned a cart.');
-        }
-      }
-    }
-
-    await gameRef.set({
-      status: 'checked_in',
-      cartAssignments,
-      checkedInByUid: callerUid,
-      checkedInAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    return { success: true };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("Flight Check-In Error:", error);
-    throw new HttpsError('internal', error.message || 'Check-in failed.');
-  }
+  throw new HttpsError('unavailable', 'checkInFlight is disabled in the non-financial V2 world (quarantined: unresolved).');
 });
 
 
@@ -2176,96 +1761,15 @@ export const checkInFlight = onCall({ memory: "256MiB" }, async (request) => {
 // 🏆 TOURNAMENT OPS: Server-Authoritative Registration + Flight State
 // ==========================================
 export const manageTournamentOps = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (unresolved): tournament registration/flight ops; outside non-financial booking scope; no approved V2 policy.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || '').toLowerCase();
-  const { tournamentId, action } = request.data || {};
-
-  if (typeof tournamentId !== 'string' || !tournamentId.trim()) {
-    throw new HttpsError('invalid-argument', 'A valid tournamentId is required.');
-  }
-  const VALID_ACTIONS = ['setDisplayState', 'setRegistration', 'resetFlights', 'assignFlights'];
-  if (typeof action !== 'string' || !VALID_ACTIONS.includes(action)) {
-    throw new HttpsError('invalid-argument', 'Unknown or missing action.');
-  }
-
-  try {
-    const tournamentRef = db.collection('tournaments').doc(tournamentId);
-    const tournamentSnap = await tournamentRef.get();
-    if (!tournamentSnap.exists) {
-      throw new HttpsError('not-found', 'Tournament not found.');
-    }
-    const tournamentData = tournamentSnap.data() || {};
-
-    // AUTHORIZATION: platform staff OR God-Mode OR the tournament host.
-    let authorized = false;
-    const staffDoc = await db.collection('admin_users').doc(callerUid).get();
-    if (staffDoc.exists && staffDoc.data()?.status !== 'Suspended') authorized = true;
-    if (!authorized && callerEmail === 'admin@golfriend.co') authorized = true;
-    if (!authorized && tournamentData.hostUid && tournamentData.hostUid === callerUid) authorized = true;
-    if (!authorized) {
-      throw new HttpsError('permission-denied', 'You are not authorized to manage this tournament.');
-    }
-
-    if (action === 'setDisplayState') {
-      const { displayState } = request.data || {};
-      if (typeof displayState !== 'string' || !displayState.trim()) {
-        throw new HttpsError('invalid-argument', 'displayState must be a non-empty string.');
-      }
-      await tournamentRef.set({ displayState }, { merge: true });
-    } else if (action === 'setRegistration') {
-      const { status } = request.data || {};
-      if (status !== 'registration_open' && status !== 'registration_closed') {
-        throw new HttpsError('invalid-argument', 'Invalid registration status.');
-      }
-      await tournamentRef.set({ status }, { merge: true });
-    } else if (action === 'resetFlights') {
-      const regsSnap = await tournamentRef.collection('registrations').get();
-      const docs = regsSnap.docs;
-      for (let i = 0; i < docs.length; i += 450) {
-        const batch = db.batch();
-        docs.slice(i, i + 450).forEach((d) => {
-          batch.update(d.ref, { flightNumber: null, status: 'waiting' });
-        });
-        await batch.commit();
-      }
-      await tournamentRef.set({ opBy: callerUid, opAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    } else if (action === 'assignFlights') {
-      const { assignments } = request.data || {};
-      if (!Array.isArray(assignments)) {
-        throw new HttpsError('invalid-argument', 'assignments must be an array.');
-      }
-      const clean: { registrationId: string; flightNumber: number }[] = [];
-      for (const a of assignments) {
-        const registrationId = a?.registrationId;
-        const flightNumber = a?.flightNumber;
-        if (typeof registrationId !== 'string' || !registrationId.trim()) {
-          throw new HttpsError('invalid-argument', 'Each assignment needs a non-empty registrationId.');
-        }
-        if (typeof flightNumber !== 'number' || !Number.isInteger(flightNumber) || flightNumber <= 0) {
-          throw new HttpsError('invalid-argument', 'Each assignment needs a positive integer flightNumber.');
-        }
-        clean.push({ registrationId, flightNumber });
-      }
-      for (let i = 0; i < clean.length; i += 450) {
-        const batch = db.batch();
-        clean.slice(i, i + 450).forEach(({ registrationId, flightNumber }) => {
-          const pRef = tournamentRef.collection('registrations').doc(registrationId);
-          batch.update(pRef, { flightNumber, status: 'locked' });
-        });
-        await batch.commit();
-      }
-      await tournamentRef.set({ opBy: callerUid, opAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    }
-
-    return { success: true, action };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("Tournament Ops Error:", error);
-    throw new HttpsError('internal', error?.message || 'Failed to manage tournament ops.');
-  }
+  throw new HttpsError('unavailable', 'manageTournamentOps is disabled in the non-financial V2 world (quarantined: unresolved).');
 });
 
 // ==========================================
@@ -2275,149 +1779,30 @@ export const manageTournamentOps = onCall({ memory: "256MiB" }, async (request) 
 // on another user — settlement + moderation state that must not be client-written.
 // Staff-gated; fixed server-side deltas floored at 0; audited.
 export const resolvePhotoValidation = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (prohibited-financial): adjusts chips +/-50 (wallet) alongside photo moderation.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-
-  try {
-    const callerEmail = (request.auth.token?.email || '').toLowerCase();
-    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
-    const isActiveStaff = callerDoc.exists && callerDoc.data()?.status !== 'Suspended';
-    const isMasterAdmin = callerEmail === 'admin@golfriend.co';
-    if (!isActiveStaff && !isMasterAdmin) {
-      throw new HttpsError('permission-denied', 'Only active platform staff may resolve photo validations.');
-    }
-
-    const { targetUid, decision, source } = request.data || {};
-    if (typeof targetUid !== 'string' || targetUid.trim() === '') {
-      throw new HttpsError('invalid-argument', 'A valid targetUid is required.');
-    }
-    if (decision !== 'approve' && decision !== 'reject') {
-      throw new HttpsError('invalid-argument', "decision must be 'approve' or 'reject'.");
-    }
-    const resolvedSource = source === undefined ? 'review' : source;
-    if (resolvedSource !== 'review' && resolvedSource !== 'override') {
-      throw new HttpsError('invalid-argument', "source must be 'review' or 'override'.");
-    }
-
-    const userRef = db.collection('users').doc(targetUid);
-    const txRef = db.collection('transactions').doc();
-
-    const result = await db.runTransaction(async (tx) => {
-      const userSnap = await tx.get(userRef);
-      if (!userSnap.exists) {
-        throw new HttpsError('not-found', 'Target user does not exist.');
-      }
-      const data = userSnap.data() || {};
-      const currentChips = typeof data.chips === 'number' ? data.chips : 0;
-      const currentRel = typeof data.reliability_score === 'number' ? data.reliability_score : 0;
-
-      const chipsDelta = decision === 'approve' ? 50 : -50;
-      const relDelta = decision === 'approve' ? 10 : -25;
-      const newChips = Math.max(0, currentChips + chipsDelta);
-      const newRel = Math.max(0, currentRel + relDelta);
-      const appliedChipsDelta = newChips - currentChips;
-
-      if (decision === 'approve') {
-        tx.update(userRef, {
-          isVerified: true, verification_status: 'verified', photoValidated: true,
-          requiresManualReview: false, behavior_badge: 'Verified Member',
-          star_rating_display: 'New Member', chips: newChips, reliability_score: newRel,
-        });
-      } else {
-        tx.update(userRef, {
-          isVerified: false, verification_status: 'rejected', photoValidated: false,
-          requiresManualReview: false, behavior_badge: 'Flagged: Invalid Photo',
-          photo_url: '', chips: newChips, reliability_score: newRel,
-        });
-      }
-
-      tx.set(txRef, {
-        userId: targetUid, type: 'PHOTO_VALIDATION', amount: appliedChipsDelta,
-        status: 'completed', enforcedBy: 'SYSTEM', resolvedByUid: callerUid,
-        decision, source: resolvedSource,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      return { newChips, newRel };
-    });
-
-    return { success: true, decision, chips: result.newChips, reliability_score: result.newRel };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("Photo Validation Resolver Error:", error);
-    throw new HttpsError('internal', error.message || 'Photo validation failed.');
-  }
+  throw new HttpsError('unavailable', 'resolvePhotoValidation is disabled in the non-financial V2 world (quarantined: prohibited-financial).');
 });
 
 // ==========================================
 // 🚚 FULFILLMENT LEDGER: Server-Authoritative Order Lifecycle
 // ==========================================
 export const updateFulfillmentOrder = onCall({ memory: "256MiB" }, async (request) => {
+  // QUARANTINED (prohibited-commerce): physical-goods order fulfillment lifecycle.
+  // Not a valid non-financial V2 operation — disabled with no privileged authority,
+  // no email/God-Mode, and no financial/economy mutation. Prior implementation is
+  // preserved in git history; a compliant V2 design (if the founder approves one)
+  // must be built fresh, not re-enabled by re-authentication.
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
-  const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || '').toLowerCase();
-  const { orderId, action, courier, tracking } = request.data || {};
-
-  try {
-    const callerDoc = await db.collection('admin_users').doc(callerUid).get();
-    const isActiveStaff = callerDoc.exists && callerDoc.data()?.status !== 'Suspended';
-    if (!isActiveStaff && callerEmail !== 'admin@golfriend.co') {
-      throw new HttpsError('permission-denied', 'You are not authorized to manage fulfillment orders.');
-    }
-    if (typeof orderId !== 'string' || orderId.trim() === '') {
-      throw new HttpsError('invalid-argument', 'A valid orderId is required.');
-    }
-    if (action !== 'dispatch' && action !== 'confirmShipment') {
-      throw new HttpsError('invalid-argument', 'action must be "dispatch" or "confirmShipment".');
-    }
-
-    const orderRef = db.collection('fulfillment_orders').doc(orderId);
-    const orderSnap = await orderRef.get();
-    if (!orderSnap.exists) {
-      throw new HttpsError('not-found', 'Fulfillment order does not exist.');
-    }
-    const order = orderSnap.data() || {};
-    const currentStatus = order.status;
-    let newStatus: string;
-
-    if (action === 'dispatch') {
-      if (currentStatus === 'shipped' || currentStatus === 'delivered' || currentStatus === 'awaiting_vendor') {
-        throw new HttpsError('failed-precondition', `Order cannot be dispatched from status "${currentStatus}".`);
-      }
-      newStatus = 'shipped';
-      const vendorId = order.vendorId;
-      if (typeof vendorId === 'string' && vendorId.trim() !== '') {
-        const vendorSnap = await db.collection('vendors').doc(vendorId).get();
-        if (vendorSnap.exists) {
-          const protocol = vendorSnap.data()?.fulfillmentProtocol;
-          if (protocol === 'email_manifest' || protocol === 'daily_csv') newStatus = 'awaiting_vendor';
-        }
-      }
-      await orderRef.set({
-        status: newStatus, dispatchedByUid: callerUid,
-        dispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-    } else {
-      if (typeof courier !== 'string' || courier.trim() === '' || typeof tracking !== 'string' || tracking.trim() === '') {
-        throw new HttpsError('invalid-argument', 'Both courier and tracking are required.');
-      }
-      newStatus = 'shipped';
-      await orderRef.set({
-        status: newStatus, courier, trackingNumber: tracking, shippedByUid: callerUid,
-        shippedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-
-    return { success: true, status: newStatus };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("Fulfillment Ledger Error:", error);
-    throw new HttpsError('internal', error.message || 'Fulfillment update failed.');
-  }
+  throw new HttpsError('unavailable', 'updateFulfillmentOrder is disabled in the non-financial V2 world (quarantined: prohibited-commerce).');
 });
 
 // ==========================================
