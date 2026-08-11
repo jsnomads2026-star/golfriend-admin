@@ -1,12 +1,12 @@
 {
-  "candidate_head": "453f8e4",
-  "generated_at": "2026-08-11T04:07:49.882Z",
+  "candidate_head": "704f3ed",
+  "generated_at": "2026-08-11T04:22:18.742Z",
   "algorithm": "sha256",
   "files": [
     {
       "file": "package.json",
-      "sha256": "5877a91019668b665e169bcdaed13093a23dd1af430f005ff26e7c6079b8ea46",
-      "bytes": 2476
+      "sha256": "7e7441723f8e84770ebd2b2e250b26d91a78eb8e8d8422003a8296f271f54da4",
+      "bytes": 2565
     },
     {
       "file": ".firebaserc",
@@ -15,13 +15,13 @@
     },
     {
       "file": "functions/package.json",
-      "sha256": "7719ba192bf24eb6bc0f9140bcf25248730e66f94b72b839b23a5b2719b34609",
-      "bytes": 1359
+      "sha256": "20c4cbd9804f234194af18f25d347298d5b597c36f45617534b19f48161ee221",
+      "bytes": 1453
     },
     {
       "file": "functions/src/index.ts",
-      "sha256": "4c667891b80577ae68ad76a4fc5f0be9551ac50fff107f4c655e7d07bf026eff",
-      "bytes": 83955
+      "sha256": "a2a89a7fa70f357330ea7fe2c75e999e16138a65780ce3524a643b4f63393c80",
+      "bytes": 79320
     },
     {
       "file": "functions/src/courseSync.ts",
@@ -75,8 +75,8 @@
     },
     {
       "file": "docs/BLANK_PROJECT_MANIFEST.md",
-      "sha256": "028571e680d7fefc4eda15adda1c847979445abf82bd755b5b037724536ceb99",
-      "bytes": 6244
+      "sha256": "fd9ff0f26b76b52c4a72a5177c74ff1eee0d078923ab0a73dfa6204dd6349ccd",
+      "bytes": 6710
     },
     {
       "file": "docs/FIREBASE_V1V2_INVENTORY.md",
@@ -105,8 +105,8 @@
     },
     {
       "file": "LANEC_LEDGER.json",
-      "sha256": "c3b90196d4b584e29f1b7bd2e5f4db1bd91a489bbdc9f377d4b8b47822ab4243",
-      "bytes": 7426
+      "sha256": "82cf419dfd751bee627bdfc6149ce7b7fb91dacf39f87e462c3dabd35eb1c1e5",
+      "bytes": 7711
     },
     {
       "file": "LANEB_DEPENDENCY_PIN.json",
@@ -125,8 +125,8 @@
     },
     {
       "file": "scripts/precommission-evidence.mjs",
-      "sha256": "15e562026d5365f5e6bca210d01a6aeb9e05febb926eabdb934d4585ce128d4e",
-      "bytes": 6581
+      "sha256": "b505e6c60340e2a116cda969afe39400265b5a32d9a8a5a889ff441b1a50971c",
+      "bytes": 6777
     },
     {
       "file": "functions/src/v2AuthorityConformance.test.ts",
@@ -162,6 +162,26 @@
       "file": "docs/V2_SCHEDULED_JOBS_CLASSIFICATION.md",
       "sha256": "a33009e6cb496cb3868ff798ec724f74c3d78826fb745bb04d683c43e9bef0c8",
       "bytes": 3411
+    },
+    {
+      "file": "functions/src/janitorLogic.ts",
+      "sha256": "bb50280b6ff4814215ff66abbfc434f4a58f6e9fe30859ce498f38bc174b24f4",
+      "bytes": 5718
+    },
+    {
+      "file": "functions/src/janitorLogic.test.ts",
+      "sha256": "15f1010fa40d5c1c6a08035a5a952c665bf5e8ddef869c88e7905840a417e519",
+      "bytes": 4795
+    },
+    {
+      "file": "scripts/functions-export-gate.mjs",
+      "sha256": "62bd59c42d28d57efa2821472701e452fb198e1a4ed1e87482d1ba76a7c03dae",
+      "bytes": 4391
+    },
+    {
+      "file": "docs/QUARANTINED_LEGACY_FINANCIAL_JOBS.md",
+      "sha256": "810c06bcf62e7a62353a485f0dd38085ddd0bd52eeecb6f95f438c1c929e5fee",
+      "bytes": 7438
     }
   ]
 }

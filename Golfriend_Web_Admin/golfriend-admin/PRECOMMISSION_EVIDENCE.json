@@ -1,8 +1,8 @@
 {
   "lane": "C",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "453f8e4",
-  "generated_at": "2026-08-11T04:07:50.809Z",
+  "candidate_head": "704f3ed",
+  "generated_at": "2026-08-11T04:22:19.705Z",
   "automated_controls": [
     {
       "control": "gate:authority",
@@ -52,6 +52,13 @@
       "status": "pass",
       "proves": "no reachable client surface invokes any quarantined/unresolved callable; prohibited consoles unreachable",
       "detail": "✅ client-callable gate passed: no reachable surface invokes any of the 9 quarantined callables; 9 prohibited consoles unreachable; approved journeys intact."
+    },
+    {
+      "control": "gate:fnexport",
+      "type": "automated",
+      "status": "pass",
+      "proves": "hourlyTreasurySweep + stripeB2BWebhook cannot enter the clean-V2 bundle; weeklyVaultJanitor is lock-safe/fail-closed via the pure core",
+      "detail": "✅ functions-export gate passed: hourlyTreasurySweep + stripeB2BWebhook cannot enter the clean-V2 bundle; weeklyVaultJanitor routes through the hardened lock-saf"
     },
     {
       "control": "verify:nav",
@@ -180,8 +187,8 @@
   "manifest_hashes_ref": "MANIFEST_HASHES.json",
   "ledger_ref": "LANEC_LEDGER.json",
   "summary": {
-    "automated_total": 14,
-    "automated_pass": 14,
+    "automated_total": 15,
+    "automated_pass": 15,
     "automated_fail": 0,
     "manual_blocked": 6
   }
