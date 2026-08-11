@@ -1,0 +1,169 @@
+{
+  "lane": "C",
+  "repo": "jsnomads2026-star/golfriend-admin",
+  "candidate_branch": "feat/laneC-consolidated",
+  "candidate_head": "ca2d6db",
+  "accepted_gate_sha": "ca2d6db",
+  "generated_at": "2026-08-11T01:31:00.946Z",
+  "included_commits": [
+    {
+      "hash": "ca2d6db",
+      "subject": "chore(laneC): authority manifest + fail-closed source gate"
+    },
+    {
+      "hash": "38e6328",
+      "subject": "feat(booking): non-financial frontend + source tests + reporting/ledger cleanup"
+    },
+    {
+      "hash": "3f2f7b3",
+      "subject": "feat(booking): non-financial booking lifecycle + quarantine SponsorWizard (backend)"
+    },
+    {
+      "hash": "c718188",
+      "subject": "chore(laneC): consolidate approved Lane C work into one branch"
+    },
+    {
+      "hash": "54c4fdd",
+      "subject": "Merge branch 'feat/server-side-golf-api-course-sync' into feat/laneC-consolidated"
+    },
+    {
+      "hash": "e919f78",
+      "subject": "fix(security): remove exposed Google Maps key from CourseSeeder client"
+    },
+    {
+      "hash": "9e1c74f",
+      "subject": "feat(laneC): admin booking oversight, enterprise portal, public web (slices 4-6)"
+    },
+    {
+      "hash": "cfdc087",
+      "subject": "feat(course-sync): server-side Golf-API sync with validation & audit"
+    },
+    {
+      "hash": "723fcb5",
+      "subject": "feat(booking): request -> confirm/reject lifecycle (roadmap slice 3)"
+    },
+    {
+      "hash": "1b67e5b",
+      "subject": "feat(sb-portal): course onboarding + availability & pricing (roadmap slice 2)"
+    },
+    {
+      "hash": "1e1cfdd",
+      "subject": "feat(admin): tee-time inventory management (roadmap slice 1)"
+    }
+  ],
+  "superseded_branches": [
+    {
+      "branch": "feat/admin-tee-time-inventory",
+      "tip": "1e1cfdd",
+      "note": "roadmap 1: tee-time inventory (manageTeeTimeSlot)",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/sbportal-course-onboarding-availability",
+      "tip": "1b67e5b",
+      "note": "roadmap 2: SB onboarding + availability",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/booking-request-confirm-lifecycle",
+      "tip": "723fcb5",
+      "note": "roadmap 3: booking lifecycle",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/laneC-slices-4-5-6",
+      "tip": "9e1c74f",
+      "note": "roadmap 4-6: oversight/enterprise/public",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/server-side-golf-api-course-sync",
+      "tip": "e919f78",
+      "note": "course-sync + provider key removal",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/b2b-server-authoritative-contract-cancel",
+      "tip": "2830eca",
+      "note": "hardening: cancelB2BContract",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/b2b-server-authoritative-incident-report",
+      "tip": "8f21e84",
+      "note": "hardening: reportPlayerIncident",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-escrow-resolve",
+      "tip": "bb24f9f",
+      "note": "hardening: resolveEscrow",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-moderation-strike",
+      "tip": "8e5e0fe",
+      "note": "hardening: applyModerationStrike",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-manual-override",
+      "tip": "a1b9f2a",
+      "note": "hardening: adminOverrideUser",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-b2b-partners",
+      "tip": "04cec31",
+      "note": "hardening: adminManagePartner",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-hr-status",
+      "tip": "99449dd",
+      "note": "hardening: setEmployeeStatus",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/laneC-hardening-batch2",
+      "tip": "db816c1",
+      "note": "hardening: logPlatformExpense/drawRaffleWinner/checkInFlight",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/laneC-hardening-batch3",
+      "tip": "00dcc46",
+      "note": "hardening: resolvePhotoValidation/updateFulfillmentOrder/manageTournamentOps",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    }
+  ],
+  "note": "Superseded branches are folded into the candidate by CONTENT via deterministic assembly (not git-merge) for the 13 hardening callables. Do not merge or restore them."
+}

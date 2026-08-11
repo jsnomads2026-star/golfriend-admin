@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Generated Lane C integration-prep artifact (run `npm run map:routes`)
+route-capability-map.json
