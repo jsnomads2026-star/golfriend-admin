@@ -26,6 +26,7 @@ const AUTOMATED = [
   ['verify:guards', 'scripts/route-guard-verify.mjs', 'every privileged route behind the resolver'],
   ['verify:courseops', 'scripts/course-ops-journey-verify.mjs', 'course-ops commissioning journey under synthetic V2'],
   ['verify:seed', 'scripts/lanec-seed-conformance-verify.mjs', 'clean-V2 course/role/portal seed & journey conformance; zero-V1; non-financial'],
+  ['verify:precommission', 'scripts/precommission-boundary-verify.mjs', 'precommission mode is demo-*/emulator-only/dev-only/fail-closed — production endpoints unreachable'],
 ];
 
 // Externally-run controls this commit (npm build/test + optional Lane B check).
