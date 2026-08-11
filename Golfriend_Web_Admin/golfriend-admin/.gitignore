@@ -26,3 +26,8 @@ dist-ssr
 
 # Generated Lane C integration-prep artifact (run `npm run map:routes`)
 route-capability-map.json
+
+# local precommission emulator (untracked)
+.emulator-local/
+firebase.emulator.local.json
+.env.local
