@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "gate:authority": "node scripts/authority-gate.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
