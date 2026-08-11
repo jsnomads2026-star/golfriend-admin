@@ -46,7 +46,7 @@ assert(envBypass.length === 0, `no process.env God-Mode/bypass identifier (found
 // ---- 4. Approved retained callables authorize via the server-owned module ----
 const RETAINED = [
   'manageTeeTimeSlot', 'respondBooking', 'cancelBooking', 'sendBookingMessage',
-  'adminResolveBooking', 'applyModerationStrike', 'syncCoursesFromProvider',
+  'adminResolveBooking', 'applyModerationStrike', 'syncCoursesFromProvider', 'setManualCourseCoordinates',
 ];
 // Strip line/block comments so code-pattern scans never trip on documentation prose
 // (a quarantine comment may legitimately name the "chips"/"transactions" it removed).

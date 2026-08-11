@@ -14,7 +14,7 @@ const SRC = new URL('../src', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/
 const AUTH_COLLECTIONS = [
   'users', 'transactions', 'b2b_partners', 'admin_users', 'tee_time_slots',
   'bookings', 'course_operators', 'enterprise_staff', 'moderation_incidents',
-  'blacklist', 'games', 'fulfillment_orders',
+  'blacklist', 'games', 'fulfillment_orders', 'courses',
 ];
 // Authoritative fields that must never be client-written via increment/assignment.
 const AUTH_FIELDS = ['chips', 'reliability_score', 'tier', 'priceChips'];

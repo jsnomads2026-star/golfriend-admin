@@ -9,6 +9,7 @@ import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./co
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
+import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -1088,6 +1089,53 @@ export const syncCoursesFromProvider = onCall(
     return { success: true, mode, processed: results.length, summary, results };
   }
 );
+
+export const setManualCourseCoordinates = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'You must be logged in.');
+  const callerUid = request.auth.uid;
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
+    throw new HttpsError('permission-denied', 'Only active platform staff can correct course coordinates.');
+  }
+
+  let correction;
+  try { correction = normalizeManualCourseCorrection(request.data); }
+  catch { throw new HttpsError('invalid-argument', 'Enter a valid course identifier and coordinates.'); }
+
+  await db.runTransaction(async (tx) => {
+    const ref = db.collection('courses').doc(correction.courseId);
+    const fresh = await tx.get(ref);
+    if (!fresh.exists) throw new HttpsError('not-found', 'Course record not found.');
+    const current = fresh.data() || {};
+    const before = {
+      latitude: current.latitude ?? current.lat ?? null,
+      longitude: current.longitude ?? current.lng ?? null,
+      gpsSource: current.gpsSource ?? null,
+    };
+    tx.set(ref, {
+      latitude: correction.latitude,
+      longitude: correction.longitude,
+      lat: correction.latitude,
+      lng: correction.longitude,
+      gpsSource: 'manual',
+      manualLock: true,
+      trusted: true,
+      requiresManualGPS: false,
+      manualCorrectedAt: new Date().toISOString(),
+      updatedByUid: callerUid,
+    }, { merge: true });
+    tx.set(db.collection('course_sync_audit').doc(), {
+      courseId: correction.courseId,
+      source: 'manual',
+      updatedByUid: callerUid,
+      before,
+      after: { latitude: correction.latitude, longitude: correction.longitude, gpsSource: 'manual' },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true, courseId: correction.courseId, source: 'manual', locked: true };
+});
 
 // ==========================================
 // 💳 B2B CONTRACT CANCELLATION (Server-Authoritative Downgrade)

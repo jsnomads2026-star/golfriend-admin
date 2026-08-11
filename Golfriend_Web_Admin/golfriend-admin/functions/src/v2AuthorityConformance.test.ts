@@ -38,7 +38,7 @@ check('no process.env God-Mode/bypass identifier anywhere', () => {
 });
 
 // ---- RETAINED (approved V2): must authorize via server-owned module ----
-const RETAINED_STAFF = ['manageTeeTimeSlot', 'respondBooking', 'cancelBooking', 'sendBookingMessage', 'adminResolveBooking', 'syncCoursesFromProvider'];
+const RETAINED_STAFF = ['manageTeeTimeSlot', 'respondBooking', 'cancelBooking', 'sendBookingMessage', 'adminResolveBooking', 'syncCoursesFromProvider', 'setManualCourseCoordinates'];
 const RETAINED_DIRECTOR = ['applyModerationStrike'];
 
 for (const name of RETAINED_STAFF) {

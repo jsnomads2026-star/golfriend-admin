@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../firebaseConfig';
 
 export default function CourseSeeder() {
@@ -23,10 +24,13 @@ export default function CourseSeeder() {
       const healedData = {
         latitude: exactLat, longitude: exactLng, lat: exactLat, lng: exactLng,
         requiresManualGPS: false, // 🔥 Lifts the quarantine!
-        lastHealAttempt: new Date().toISOString()
+        gpsSource: 'manual',
+        manualLock: true,
+        trusted: true,
       };
       
-      await setDoc(doc(db, "courses", course.courseID), healedData, { merge: true });
+      const setManualCoordinates = httpsCallable(getFunctions(), 'setManualCourseCoordinates');
+      await setManualCoordinates({ courseId: course.courseID, latitude: exactLat, longitude: exactLng });
       
       setSecuredCourses(prev => prev.map(c => 
         c.courseID === course.courseID ? { ...c, ...healedData } : c
@@ -173,7 +177,7 @@ export default function CourseSeeder() {
             cachedAt: new Date().toISOString()
           };
 
-          await setDoc(doc(db, "courses", courseId), healedData, { merge: true });
+          throw new Error(SERVER_SYNC_NOTICE);
           fixedCount++;
 
           // 🔥 LIVE UI UPDATE: Visually drop the broken count instantly
@@ -184,7 +188,7 @@ export default function CourseSeeder() {
           addLog(`   ✅ Fixed: Injected [${exactLat}, ${exactLng}]`);
         } else {
           // 🛑 QUARANTINE: Mark as un-healable
-          await setDoc(doc(db, "courses", courseId), { requiresManualGPS: true }, { merge: true });
+          throw new Error(SERVER_SYNC_NOTICE);
           setSecuredCourses(prev => prev.map(course => 
             course.courseID === courseId ? { ...course, requiresManualGPS: true } : course
           ));
@@ -192,7 +196,7 @@ export default function CourseSeeder() {
         }
       } catch (error) {
         // Also quarantine on hard crash
-        await setDoc(doc(db, "courses", courseId), { requiresManualGPS: true }, { merge: true });
+        throw new Error(SERVER_SYNC_NOTICE);
         setSecuredCourses(prev => prev.map(course => 
           course.courseID === courseId ? { ...course, requiresManualGPS: true } : course
         ));
@@ -242,7 +246,7 @@ export default function CourseSeeder() {
             lastHealAttempt: new Date().toISOString()
           };
 
-          await setDoc(doc(db, "courses", c.courseID), healedData, { merge: true });
+          throw new Error(SERVER_SYNC_NOTICE);
           
           setSecuredCourses(prev => prev.map(course => 
             course.courseID === c.courseID ? { ...course, ...healedData } : course
@@ -370,7 +374,7 @@ export default function CourseSeeder() {
             console.error("GolfAPI Fetch error:", apiErr);
           }
 
-          const mergedCourse = {
+          void {
             courseID: courseId,
             clubID: club.clubID || club.id || "unknown",
             clubName: club.clubName || club.name || "Unknown Club",
@@ -394,7 +398,7 @@ export default function CourseSeeder() {
           };
 
           // Inject to Firebase using merge to safely overwrite bad data
-          await setDoc(doc(db, "courses", mergedCourse.courseID), mergedCourse, { merge: true });
+          throw new Error(SERVER_SYNC_NOTICE);
           injectedCount++;
           
           // 1.5-second throttle to prevent GolfAPI rate limiting
@@ -417,7 +421,7 @@ export default function CourseSeeder() {
   return (
     <div style={{ padding: '20px', border: '1px solid #333', borderRadius: '8px', margin: '20px', backgroundColor: '#1e1e1e', color: '#fff' }}>
       <h2 style={{ color: '#d4af37', marginTop: 0 }}>Golfriend Local Injector</h2>
-      <p style={{ fontSize: '14px', color: '#aaa' }}>Target: Firebase Direct Write Bypass & Live API Engine</p>
+      <p style={{ fontSize: '14px', color: '#aaa' }}>Target: server-authoritative course inventory and audited corrections</p>
       
       {/* 📊 SYSTEM HEALTH MONITOR HUD */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', marginTop: '15px' }}>

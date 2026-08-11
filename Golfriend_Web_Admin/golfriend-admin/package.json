@@ -14,6 +14,7 @@
     "gate:godmode": "node scripts/functions-godmode-gate.mjs",
     "gate:clientcallable": "node scripts/client-callable-gate.mjs",
     "gate:fnexport": "node scripts/functions-export-gate.mjs",
+    "gate:coursewrites": "node scripts/course-write-authority-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
@@ -25,7 +26,7 @@
     "verify:precommission": "node scripts/precommission-boundary-verify.mjs",
     "check:laneb": "node scripts/laneb-rules-contract-check.mjs",
     "precommission": "node scripts/precommission-evidence.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run gate:fnauth && npm run gate:godmode && npm run gate:clientcallable && npm run gate:fnexport && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops && npm run verify:seed && npm run verify:nav && npm run verify:precommission",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run gate:fnauth && npm run gate:godmode && npm run gate:clientcallable && npm run gate:fnexport && npm run gate:coursewrites && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops && npm run verify:seed && npm run verify:nav && npm run verify:precommission",
     "lint": "eslint .",
     "preview": "vite preview"
   },
