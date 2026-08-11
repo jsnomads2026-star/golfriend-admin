@@ -1,8 +1,8 @@
 {
   "lane": "C",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "da8c751",
-  "generated_at": "2026-08-11T03:21:19.709Z",
+  "candidate_head": "5b70736",
+  "generated_at": "2026-08-11T03:48:24.162Z",
   "automated_controls": [
     {
       "control": "gate:authority",
@@ -38,6 +38,13 @@
       "status": "pass",
       "proves": "syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass",
       "detail": "✅ functions-authority gate passed: syncCoursesFromProvider authorizes via server-owned active staff only; no email God-Mode / env bypass; authority core fail-cl"
+    },
+    {
+      "control": "gate:godmode",
+      "type": "automated",
+      "status": "pass",
+      "proves": "repository-wide: no admin@golfriend.co/caller-email/env God-Mode; retained callables use server-owned authority; quarantined callables fail-closed",
+      "detail": "✅ functions-godmode gate passed: repository-wide — no admin@golfriend.co / caller-email / env God-Mode authority; 7 retained callables use server-owned staff/Di"
     },
     {
       "control": "verify:booking",
@@ -159,8 +166,8 @@
   "manifest_hashes_ref": "MANIFEST_HASHES.json",
   "ledger_ref": "LANEC_LEDGER.json",
   "summary": {
-    "automated_total": 11,
-    "automated_pass": 11,
+    "automated_total": 12,
+    "automated_pass": 12,
     "automated_fail": 0,
     "manual_blocked": 6
   }

@@ -2,11 +2,19 @@
   "lane": "C",
   "repo": "jsnomads2026-star/golfriend-admin",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "da8c751",
-  "candidate_head_full": "da8c75136321b091b7faa7a2618b511c705068dd",
+  "candidate_head": "5b70736",
+  "candidate_head_full": "5b70736fe615fb148bce2297d176f49284af5958",
   "accepted_gate_sha": "ca2d6db",
-  "generated_at": "2026-08-11T03:21:12.652Z",
+  "generated_at": "2026-08-11T03:48:23.406Z",
   "included_commits": [
+    {
+      "hash": "5b70736",
+      "subject": "feat(laneC-security): remove admin@golfriend.co God-Mode lane-wide; classify + quarantine prohibited callables"
+    },
+    {
+      "hash": "f344b9a",
+      "subject": "chore(laneC): refreeze evidence after clean-V2 seed conformance slice (11 automated controls)"
+    },
     {
       "hash": "da8c751",
       "subject": "feat(laneC-seed): clean-V2 course/role/portal seed fixture + journey conformance verifier"

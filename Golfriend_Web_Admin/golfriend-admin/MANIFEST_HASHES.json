@@ -1,12 +1,12 @@
 {
-  "candidate_head": "da8c751",
-  "generated_at": "2026-08-11T03:20:59.753Z",
+  "candidate_head": "5b70736",
+  "generated_at": "2026-08-11T03:48:23.406Z",
   "algorithm": "sha256",
   "files": [
     {
       "file": "package.json",
-      "sha256": "b54db53560389b83b0be8befe1586bbb7d043e572e050f05f0a9aec5af261de5",
-      "bytes": 2203
+      "sha256": "33014a79d787ef6b9b9765e9c56caac9abddf723f586daae3ae7e7bc42d2dd51",
+      "bytes": 2291
     },
     {
       "file": ".firebaserc",
@@ -15,13 +15,13 @@
     },
     {
       "file": "functions/package.json",
-      "sha256": "afe51ba01210163ce89d617077b866b019f7a284faed62ccc0d6ec435dd88894",
-      "bytes": 1241
+      "sha256": "7719ba192bf24eb6bc0f9140bcf25248730e66f94b72b839b23a5b2719b34609",
+      "bytes": 1359
     },
     {
       "file": "functions/src/index.ts",
-      "sha256": "f22f10cac508972f1977b737d19d343454a5dc2442cce00469cb13f93e381736",
-      "bytes": 109590
+      "sha256": "4c667891b80577ae68ad76a4fc5f0be9551ac50fff107f4c655e7d07bf026eff",
+      "bytes": 83955
     },
     {
       "file": "functions/src/courseSync.ts",
@@ -105,8 +105,8 @@
     },
     {
       "file": "LANEC_LEDGER.json",
-      "sha256": "992deaa8e28aaf7a4da3536ed883f58b95db6bd157d276506e3db4fae4d0dc3f",
-      "bytes": 6265
+      "sha256": "212beb88973fb4d95ca93037f5b2447c3d725d826fdf37ed0d8b228c88b4cd1e",
+      "bytes": 7107
     },
     {
       "file": "LANEB_DEPENDENCY_PIN.json",
@@ -125,8 +125,23 @@
     },
     {
       "file": "scripts/precommission-evidence.mjs",
-      "sha256": "fb66ba367580cb0cda7c9baa8208bf2694fee2ed6e05f902ebb8ae08e62511d8",
-      "bytes": 6058
+      "sha256": "c6895f70916b7fac1d235e1b87d22882a79acbf32f5125e82720407fb64f6c12",
+      "bytes": 6266
+    },
+    {
+      "file": "functions/src/v2AuthorityConformance.test.ts",
+      "sha256": "fdafe0d3f239c61b5e1410d4af37a3be7e0b9aaaba5d61aff0894796e1dfcc4c",
+      "bytes": 4848
+    },
+    {
+      "file": "scripts/functions-godmode-gate.mjs",
+      "sha256": "16e4c4b53264e380b1097c1b022c851a650785aeb35fdca0c5bdadef6969eff6",
+      "bytes": 5526
+    },
+    {
+      "file": "docs/V2_CALLABLE_AUTHORITY_CLASSIFICATION.md",
+      "sha256": "e6790b659cb4457d8d3d0d998742b6273b0b2cdd19272abf6fa365f95acb65aa",
+      "bytes": 6018
     }
   ]
 }

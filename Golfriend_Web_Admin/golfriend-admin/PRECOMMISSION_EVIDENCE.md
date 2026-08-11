@@ -1,8 +1,8 @@
 # Precommission Evidence — Lane C
 
-- **Candidate:** `feat/laneC-consolidated` @ `da8c751`
-- **Generated:** 2026-08-11T03:21:19.709Z
-- **Automated controls:** 11/11 pass, 0 fail
+- **Candidate:** `feat/laneC-consolidated` @ `5b70736`
+- **Generated:** 2026-08-11T03:48:24.162Z
+- **Automated controls:** 12/12 pass, 0 fail
 - **Manual/provider controls:** 6 BLOCKED (autoApproval:false)
 
 ## Automated controls (run by this tool)
@@ -13,6 +13,7 @@
 | `gate:v2` | ✅ pass | v2-preview fail-closed; zero-V1 |
 | `gate:a11y` | ✅ pass | portal state screens accessible; no God-Mode/TV-bypass/raw error |
 | `gate:fnauth` | ✅ pass | syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass |
+| `gate:godmode` | ✅ pass | repository-wide: no admin@golfriend.co/caller-email/env God-Mode; retained callables use server-owned authority; quarantined callables fail-closed |
 | `verify:booking` | ✅ pass | non-financial booking journey |
 | `verify:v2` | ✅ pass | synthetic V2 non-financial journey; zero V1 |
 | `verify:roles` | ✅ pass | cross-role journey matrix; server-owned derivation |
