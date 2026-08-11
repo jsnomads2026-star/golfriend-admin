@@ -1,8 +1,8 @@
 {
   "lane": "C",
   "candidate_branch": "feat/laneC-consolidated",
-  "candidate_head": "5b70736",
-  "generated_at": "2026-08-11T03:48:24.162Z",
+  "candidate_head": "453f8e4",
+  "generated_at": "2026-08-11T04:07:50.809Z",
   "automated_controls": [
     {
       "control": "gate:authority",
@@ -45,6 +45,20 @@
       "status": "pass",
       "proves": "repository-wide: no admin@golfriend.co/caller-email/env God-Mode; retained callables use server-owned authority; quarantined callables fail-closed",
       "detail": "✅ functions-godmode gate passed: repository-wide — no admin@golfriend.co / caller-email / env God-Mode authority; 7 retained callables use server-owned staff/Di"
+    },
+    {
+      "control": "gate:clientcallable",
+      "type": "automated",
+      "status": "pass",
+      "proves": "no reachable client surface invokes any quarantined/unresolved callable; prohibited consoles unreachable",
+      "detail": "✅ client-callable gate passed: no reachable surface invokes any of the 9 quarantined callables; 9 prohibited consoles unreachable; approved journeys intact."
+    },
+    {
+      "control": "verify:nav",
+      "type": "automated",
+      "status": "pass",
+      "proves": "quarantined console tabs render PolicyUnavailable; approved journeys remain mounted",
+      "detail": "✅ nav reachability verify passed: all quarantined/unresolved console tabs render PolicyUnavailable; no prohibited console is mounted; approved booking/availabil"
     },
     {
       "control": "verify:booking",
@@ -166,8 +180,8 @@
   "manifest_hashes_ref": "MANIFEST_HASHES.json",
   "ledger_ref": "LANEC_LEDGER.json",
   "summary": {
-    "automated_total": 12,
-    "automated_pass": 12,
+    "automated_total": 14,
+    "automated_pass": 14,
     "automated_fail": 0,
     "manual_blocked": 6
   }

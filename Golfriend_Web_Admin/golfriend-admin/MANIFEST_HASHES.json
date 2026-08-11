@@ -1,12 +1,12 @@
 {
-  "candidate_head": "5b70736",
-  "generated_at": "2026-08-11T03:48:23.406Z",
+  "candidate_head": "453f8e4",
+  "generated_at": "2026-08-11T04:07:49.882Z",
   "algorithm": "sha256",
   "files": [
     {
       "file": "package.json",
-      "sha256": "33014a79d787ef6b9b9765e9c56caac9abddf723f586daae3ae7e7bc42d2dd51",
-      "bytes": 2291
+      "sha256": "5877a91019668b665e169bcdaed13093a23dd1af430f005ff26e7c6079b8ea46",
+      "bytes": 2476
     },
     {
       "file": ".firebaserc",
@@ -40,8 +40,8 @@
     },
     {
       "file": "src/App.tsx",
-      "sha256": "e96a48095d5e498d3c2bc5f839f88e7c6afa3bd231e61e62855111ad3b7244b8",
-      "bytes": 19469
+      "sha256": "0595d0a7dd6ee6652fa77fec8c91cf99b31d599d3bc6e4dcb1533420eec2d048",
+      "bytes": 20867
     },
     {
       "file": "src/firebaseConfig.ts",
@@ -105,8 +105,8 @@
     },
     {
       "file": "LANEC_LEDGER.json",
-      "sha256": "212beb88973fb4d95ca93037f5b2447c3d725d826fdf37ed0d8b228c88b4cd1e",
-      "bytes": 7107
+      "sha256": "c3b90196d4b584e29f1b7bd2e5f4db1bd91a489bbdc9f377d4b8b47822ab4243",
+      "bytes": 7426
     },
     {
       "file": "LANEB_DEPENDENCY_PIN.json",
@@ -125,8 +125,8 @@
     },
     {
       "file": "scripts/precommission-evidence.mjs",
-      "sha256": "c6895f70916b7fac1d235e1b87d22882a79acbf32f5125e82720407fb64f6c12",
-      "bytes": 6266
+      "sha256": "15e562026d5365f5e6bca210d01a6aeb9e05febb926eabdb934d4585ce128d4e",
+      "bytes": 6581
     },
     {
       "file": "functions/src/v2AuthorityConformance.test.ts",
@@ -140,8 +140,28 @@
     },
     {
       "file": "docs/V2_CALLABLE_AUTHORITY_CLASSIFICATION.md",
-      "sha256": "e6790b659cb4457d8d3d0d998742b6273b0b2cdd19272abf6fa365f95acb65aa",
-      "bytes": 6018
+      "sha256": "7c49694410636b4af6ce5b496d93ed2dc86036ebb4b6547dc6c03d3d863293fa",
+      "bytes": 7236
+    },
+    {
+      "file": "src/components/common/PolicyUnavailable.tsx",
+      "sha256": "fa72493cd26936a44f483f66a60f2053a280b472f6358bdb9d0ba02d001eda40",
+      "bytes": 2444
+    },
+    {
+      "file": "scripts/client-callable-gate.mjs",
+      "sha256": "fbe69167814cb5cac430589a7c714f87361d548c19d83c73636e6987d91df017",
+      "bytes": 4640
+    },
+    {
+      "file": "scripts/nav-reachability-verify.mjs",
+      "sha256": "9d68f8ae61297022a283c3929c15babeb31304fb7cb950580ac1b629960b0fd1",
+      "bytes": 4454
+    },
+    {
+      "file": "docs/V2_SCHEDULED_JOBS_CLASSIFICATION.md",
+      "sha256": "a33009e6cb496cb3868ff798ec724f74c3d78826fb745bb04d683c43e9bef0c8",
+      "bytes": 3411
     }
   ]
 }
