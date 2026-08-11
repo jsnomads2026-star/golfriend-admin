@@ -14,7 +14,9 @@
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
     "verify:roles": "node scripts/role-journey-verify.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run verify:booking && npm run verify:v2 && npm run verify:roles",
+    "verify:guards": "node scripts/route-guard-verify.mjs",
+    "verify:courseops": "node scripts/course-ops-journey-verify.mjs",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops",
     "lint": "eslint .",
     "preview": "vite preview"
   },
