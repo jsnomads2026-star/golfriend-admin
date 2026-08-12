@@ -95,7 +95,7 @@ export const stripeB2BWebhook = onRequest({
 
     // 🔥 1. Pull the EXACT partner ID we injected into the frontend URL (Fallback to email just in case)
     const partnerId = session.client_reference_id || session.customer_details?.email;
-    
+
     // 🔥 2. Extract Metadata from the Payment Link
     const metadata = session.metadata || {};
     const tier = metadata.tier || "small_business";
@@ -105,13 +105,13 @@ export const stripeB2BWebhook = onRequest({
       try {
         const now = new Date();
         const contractStartDate = now.toISOString();
-        
+
         // 🔥 3. DATE ENGINE: Mathematically calculating the exact expiration
         const expDate = new Date(now);
         if (duration === "6_months") expDate.setMonth(expDate.getMonth() + 6);
         else if (duration === "1_year") expDate.setFullYear(expDate.getFullYear() + 1);
         else expDate.setMonth(expDate.getMonth() + 1); // Default to Monthly
-        
+
         const contractEndDate = expDate.toISOString();
 
         // 🔥 4. BADGE ENGINE
