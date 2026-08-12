@@ -287,10 +287,17 @@ export default function BookingMessageComposer({ booking, onDismiss }: Props) {
         </div>
       )}
 
-      {/* ── Error notice ── */}
+      {/* ── Error notice with explicit retry ── */}
       {sendState === 'error' && (
-        <div role="alert" style={{ padding: '10px 14px', backgroundColor: `${V2Theme.errorRed}18`, border: `1px solid ${V2Theme.errorRed}44`, borderRadius: V2Theme.radiusMd, fontSize: '12px', color: V2Theme.errorRed }}>
-          ⚠️ {sendError}
+        <div role="alert" style={{ padding: '10px 14px', backgroundColor: `${V2Theme.errorRed}18`, border: `1px solid ${V2Theme.errorRed}44`, borderRadius: V2Theme.radiusMd, fontSize: '12px', color: V2Theme.errorRed, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <span>⚠️ {sendError}</span>
+          <button
+            onClick={() => setSendState('idle')}
+            aria-label="Try sending again"
+            style={{ background: 'none', border: `1px solid ${V2Theme.errorRed}`, color: V2Theme.errorRed, borderRadius: V2Theme.radiusMd, padding: '3px 10px', cursor: 'pointer', fontWeight: 700, fontSize: '11px', whiteSpace: 'nowrap' }}
+          >
+            Try again
+          </button>
         </div>
       )}
 

@@ -43,6 +43,7 @@ export default function BookingExceptionQueue({ onFollowUp }: Props) {
   const [rows, setRows] = useState<QueueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [streamErr, setStreamErr] = useState(false);
+  const [retryCount, setRetryCount] = useState(0); // increment to re-trigger the stream
 
   // UI controls
   const [uiLocale, setUiLocale] = useState<QueueLocale>('en');
@@ -88,7 +89,7 @@ export default function BookingExceptionQueue({ onFollowUp }: Props) {
       () => { setStreamErr(true); setLoading(false); },
     );
     return () => unsub();
-  }, []);
+  }, [retryCount]);
 
   // Classified rows with deterministic exception kind.
   const classified = useMemo(() => rows.map((r) => ({
@@ -263,7 +264,7 @@ export default function BookingExceptionQueue({ onFollowUp }: Props) {
         <div role="alert" aria-live="assertive" style={{ ...stateBox, color: V2Theme.errorRed, borderColor: `${V2Theme.errorRed}44` }}>
           <span>⚠️</span> {L.error}
           <button
-            onClick={() => { setStreamErr(false); setLoading(true); }}
+            onClick={() => setRetryCount((c) => c + 1)}
             aria-label={L.retry}
             style={{ marginLeft: '12px', background: 'none', border: `1px solid ${V2Theme.errorRed}`, color: V2Theme.errorRed, borderRadius: V2Theme.radiusMd, padding: '4px 12px', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
           >

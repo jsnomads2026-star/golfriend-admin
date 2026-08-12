@@ -57,6 +57,8 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
   const [msgErr, setMsgErr] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
   const threadEnd = useRef<HTMLDivElement>(null);
+  const closeRef  = useRef<HTMLButtonElement>(null);
+  const panelRef  = useRef<HTMLDivElement>(null);
 
   // Stream audit history for this booking (newest-first, bounded 50).
   useEffect(() => {
@@ -104,11 +106,28 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
     threadEnd.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  // Escape key closes the panel.
+  // Focus close button on open; restore focus on close.
+  useEffect(() => { closeRef.current?.focus(); }, []);
+
+  // Focus trap: keep keyboard focus inside the panel while open.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    const trap = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (!focusable.length) return;
+      if (e.shiftKey && document.activeElement === focusable[0]) {
+        e.preventDefault(); focusable[focusable.length - 1].focus();
+      } else if (!e.shiftKey && document.activeElement === focusable[focusable.length - 1]) {
+        e.preventDefault(); focusable[0].focus();
+      }
+    };
+    document.addEventListener('keydown', trap);
+    return () => document.removeEventListener('keydown', trap);
   }, [onClose]);
 
   return (
@@ -127,6 +146,7 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
       {/* Side panel — slides from right */}
       <div
         role="document"
+      ref={panelRef}
         style={{
           width: '100%', maxWidth: '620px',
           backgroundColor: V2Theme.surfaceDark,
@@ -152,6 +172,7 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
             </p>
           </div>
           <button
+            ref={closeRef}
             onClick={onClose}
             aria-label="Close booking communications panel"
             style={{

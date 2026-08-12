@@ -1,6 +1,35 @@
 @import "tailwindcss";
 
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
-  background-color: #111827; 
+  background-color: #111827;
   margin: 0;
+  /* Prevent horizontal scroll on narrow viewports */
+  overflow-x: hidden;
+}
+
+/* Responsive layout helpers for V2 public/portal shell */
+@media (max-width: 640px) {
+  /* Public landing: stack nav links vertically */
+  nav [style*="flex"] { flex-wrap: wrap; }
+  /* Admin/portal sidebars: collapse to top bar */
+  [style*="width: 280px"],
+  [style*="width: 260px"] {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid #2A4A3A;
+  }
+  /* Pricing grid: single column */
+  [style*="1 1 360px"] { flex-basis: 100% !important; }
+}
+
+/* Respect reduced-motion: suppress CSS keyframe animations site-wide */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .gf-o { animation: none !important; }
 }

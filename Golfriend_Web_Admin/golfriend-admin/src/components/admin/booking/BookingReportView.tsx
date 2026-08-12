@@ -212,6 +212,7 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
   const [rawBookings, setRawBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading]   = useState(true);
   const [streamErr, setErr]      = useState(false);
+  const [retryCount, setRetryCount] = useState(0); // increment to re-trigger the stream
   const [locale, setLocale]      = useState<RLocale>('en');
   const [windowPreset, setPreset] = useState<WindowPreset>('last7');
   const [customStart, setCustomStart] = useState('');
@@ -254,7 +255,7 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
       () => { setErr(true); setLoading(false); },
     );
     return () => unsub();
-  }, []);
+  }, [retryCount]);
 
   // Resolve window.
   const { windowStart, windowEnd, rangeError } = useMemo(() => {
@@ -366,7 +367,7 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
       {loading && <StateBox role="status" aria-live="polite" aria-busy>{L.loading}</StateBox>}
       {!loading && streamErr && (
         <StateBox role="alert" error>
-          {L.error} <button onClick={() => { setErr(false); setLoading(true); }} style={retryBtn}>{L.retry}</button>
+          {L.error} <button onClick={() => setRetryCount((c) => c + 1)} style={retryBtn}>{L.retry}</button>
         </StateBox>
       )}
       {!loading && !streamErr && rawBookings.length === 0 && <StateBox>{L.empty}</StateBox>}
