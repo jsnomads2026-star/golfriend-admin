@@ -70,12 +70,12 @@ export const hourlyTreasurySweep = onSchedule({
 // 💳 STRIPE B2B PAYMENT WEBHOOK
 // ==========================================
 
-export const stripeB2BWebhook = onRequest({ 
+export const stripeB2BWebhook = onRequest({
   cors: true,
   secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET]
 }, async (req, res) => {
   const stripe = new Stripe(STRIPE_SECRET_KEY.value(), {
-    apiVersion: "2026-06-24.dahlia" as any, 
+    apiVersion: "2026-06-24.dahlia" as any,
   });
   const endpointSecret = STRIPE_WEBHOOK_SECRET.value();
 
@@ -92,7 +92,7 @@ export const stripeB2BWebhook = onRequest({
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    
+
     // 🔥 1. Pull the EXACT partner ID we injected into the frontend URL (Fallback to email just in case)
     const partnerId = session.client_reference_id || session.customer_details?.email;
     
