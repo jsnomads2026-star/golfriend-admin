@@ -13,6 +13,7 @@ import { V2Theme } from '../../theme/v2Theme';
 import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
 import BookingDetailPanel from './booking/BookingDetailPanel';
 import BookingExceptionQueue from './booking/BookingExceptionQueue';
+import BookingReportView from './booking/BookingReportView';
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
 type Decision = 'confirm' | 'reject' | 'cancel';
@@ -40,8 +41,8 @@ export default function BookingOversight() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [detailBooking, setDetailBooking] = useState<BookingRow | null>(null);
-  // C2C: view toggle — 'table' preserves all existing oversight behavior exactly.
-  const [activeView, setActiveView] = useState<'table' | 'queue'>('table');
+  // C2C/C2D: view toggle — 'table' mode leaves all existing oversight behaviour unchanged.
+  const [activeView, setActiveView] = useState<'table' | 'queue' | 'report'>('table');
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNotification({ msg, type });
@@ -134,7 +135,7 @@ export default function BookingOversight() {
 
       {/* C2C: view toggle — 'table' mode leaves all existing oversight behaviour unchanged */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }} role="group" aria-label="Oversight view">
-        {([['table', '📋 All Bookings'], ['queue', '⚠️ Exception Queue']] as const).map(([v, label]) => (
+        {([['table', '📋 All Bookings'], ['queue', '⚠️ Exception Queue'], ['report', '📊 Operations Report']] as const).map(([v, label]) => (
           <button
             key={v}
             onClick={() => setActiveView(v)}
@@ -152,6 +153,14 @@ export default function BookingOversight() {
           </button>
         ))}
       </div>
+
+      {/* C2D: operations report view */}
+      {activeView === 'report' && (
+        <BookingReportView
+          onDrillStatus={(st) => { setStatusFilter(st as typeof statusFilter); setActiveView('table'); }}
+          onDrillQueue={() => setActiveView('queue')}
+        />
+      )}
 
       {/* C2C: exception queue view */}
       {activeView === 'queue' && (
