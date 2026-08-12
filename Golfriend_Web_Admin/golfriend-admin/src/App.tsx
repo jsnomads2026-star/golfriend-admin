@@ -42,6 +42,7 @@ import V2AdminShell from './components/admin/v2/V2AdminShell';
 import V2AdminOverview from './components/admin/v2/V2AdminOverview';
 import V2AdminReports from './components/admin/v2/V2AdminReports';
 import V2CourseOperations from './components/admin/v2/V2CourseOperations';
+import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -233,7 +234,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <><PartnerVault /><HRManagement /></>}
-    {activeArea === 'marketing' && <><EventGenesisConsole /><LiveAutomationLog /></>}
+    {activeArea === 'marketing' && <V2MarketingLibrary />}
     {activeArea === 'advertising' && <SponsorDashboard />}
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
     {activeArea === 'reports' && <V2AdminReports />}
