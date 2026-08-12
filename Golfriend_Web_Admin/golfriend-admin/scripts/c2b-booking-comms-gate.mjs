@@ -53,14 +53,22 @@ if (!exists(COMPOSER)) {
   pass('CHECK 2: BookingMessageComposer.tsx present');
 }
 
-// ---- CHECK 3: All 8 locale codes exported ----
+// ---- CHECK 3: Exact canonical locale set — en, th, ko, ja, zh, es, fr, de ----
 if (exists(COMPOSER)) {
   const c = read(COMPOSER);
-  const expectedLocales = ['en', 'th', 'ja', 'zh', 'ko', 'es', 'ar', 'fr'];
-  const missingLocales = expectedLocales.filter((l) => !new RegExp(`'${l}'`).test(c));
-  missingLocales.length === 0
-    ? pass(`CHECK 3: all 8 locales defined (${expectedLocales.join(', ')})`)
-    : fail(`CHECK 3: locales MISSING: ${missingLocales.join(', ')}`);
+  const CANONICAL = ['en', 'th', 'ko', 'ja', 'zh', 'es', 'fr', 'de'];
+  const missing  = CANONICAL.filter((l) => !new RegExp(`'${l}'`).test(c));
+  const forbidden = ['ar'];  // Arabic is not in the Golfriend canonical 8-locale set
+  const present  = forbidden.filter((l) => new RegExp(`'${l}':\\s*['"]`).test(c));
+  missing.length === 0 && present.length === 0
+    ? pass(`CHECK 3: canonical locale set exact — ${CANONICAL.join(', ')}`)
+    : fail(`CHECK 3: locale contract violation — missing: [${missing.join(',')}]  forbidden present: [${present.join(',')}]`);
+  // Strict equality: array literal must match exactly
+  const arrayLiteral = c.match(/LOCALES\s*=\s*\[([^\]]+)\]/)?.[1] ?? '';
+  const localesInArray = arrayLiteral.match(/'([a-z]{2})'/g)?.map((s) => s.replace(/'/g, '')) ?? [];
+  JSON.stringify(localesInArray) === JSON.stringify(CANONICAL)
+    ? pass('CHECK 3: LOCALES array order matches canonical contract (en, th, ko, ja, zh, es, fr, de)')
+    : fail(`CHECK 3: LOCALES array order mismatch — got [${localesInArray.join(',')}] expected [${CANONICAL.join(',')}]`);
 }
 
 // ---- CHECK 4: All 5 template categories present ----
@@ -98,11 +106,12 @@ if (exists(COMPOSER)) {
     : fail('CHECK 8: send-unavailable notice MISSING');
 }
 
-// ---- CHECK 9: RTL for Arabic ----
+// ---- CHECK 9: No Arabic-exclusive RTL logic remaining ----
 if (exists(COMPOSER)) {
-  /dir=.*rtl|isRTL/.test(read(COMPOSER))
-    ? pass('CHECK 9: RTL direction handling present for Arabic locale')
-    : fail('CHECK 9: RTL direction MISSING for Arabic locale');
+  const stripped = read(COMPOSER).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  /locale\s*===\s*['"]ar['"]/.test(stripped)
+    ? fail("CHECK 9: Arabic-locale guard (locale === 'ar') still present — remove C2B-exclusive RTL logic")
+    : pass("CHECK 9: No Arabic-exclusive locale guard remaining in BookingMessageComposer");
 }
 
 // ---- CHECK 10: Close button has aria-label ----
@@ -172,6 +181,27 @@ try {
     : fail('CHECK 15: v2Theme.ts has been modified — out of C2B scope');
 } catch {
   pass('CHECK 15: v2Theme.ts diff check skipped (git unavailable)');
+}
+
+// ---- CHECK 16: German templates contain all required placeholders ----
+if (exists(COMPOSER)) {
+  const c = read(COMPOSER);
+  // Extract only the MESSAGE_TEMPLATES block, then find all de: '...' entries
+  const templatesBlock = c.match(/MESSAGE_TEMPLATES[\s\S]*?^};/m)?.[0] ?? c;
+  const deTemplates = [...templatesBlock.matchAll(/\bde:\s*'([^']+)'/g)].map((m) => m[1]);
+  if (deTemplates.length === 0) {
+    fail('CHECK 16: No German (de) template strings found inside MESSAGE_TEMPLATES');
+  } else {
+    const PLACEHOLDERS = ['{courseName}', '{date}', '{time}'];
+    const gaps = [];
+    deTemplates.forEach((tpl, i) => {
+      const missing = PLACEHOLDERS.filter((p) => !tpl.includes(p));
+      if (missing.length > 0) gaps.push(`de[${i}] missing: ${missing.join(',')}`);
+    });
+    gaps.length === 0
+      ? pass(`CHECK 16: all ${deTemplates.length} German templates contain {courseName}, {date}, {time}`)
+      : fail(`CHECK 16: German template placeholder gaps — ${gaps.join('; ')}`);
+  }
 }
 
 // ---- REPORT ----

@@ -16,18 +16,18 @@ import type { BookingRowSlim } from './BookingDetailPanel';
 
 // ── Locale definitions ──────────────────────────────────────────────────────
 
-export const LOCALES = ['en', 'th', 'ja', 'zh', 'ko', 'es', 'ar', 'fr'] as const;
+export const LOCALES = ['en', 'th', 'ko', 'ja', 'zh', 'es', 'fr', 'de'] as const;
 export type Locale = typeof LOCALES[number];
 
 const LOCALE_LABELS: Record<Locale, string> = {
   en: 'English',
   th: 'ภาษาไทย',
+  ko: '한국어',
   ja: '日本語',
   zh: '中文',
-  ko: '한국어',
   es: 'Español',
-  ar: 'العربية',
   fr: 'Français',
+  de: 'Deutsch',
 };
 
 // ── Template definitions (5 categories × 8 locales) ──────────────────────
@@ -47,52 +47,52 @@ export const MESSAGE_TEMPLATES: Record<TemplateKey, Record<Locale, string>> = {
   confirmed: {
     en: 'Your booking at {courseName} on {date} at {time} is confirmed. Please arrive 15 minutes before your tee time. We look forward to seeing you.',
     th: 'การจองของคุณที่ {courseName} วันที่ {date} เวลา {time} ได้รับการยืนยันแล้ว กรุณาเดินทางมาถึงก่อนเวลาออกรอบ 15 นาที ยินดีต้อนรับ',
+    ko: '{courseName}의 {date} {time} 예약이 확정되었습니다. 티오프 15분 전에 도착해 주세요. 만나 뵙기를 기대합니다.',
     ja: '{courseName} の {date} {time} のご予約が確定しました。スタート時間の15分前にお越しください。お待ちしております。',
     zh: '您在 {courseName} 于 {date} {time} 的预订已确认。请在开球时间前15分钟到达。期待您的光临。',
-    ko: '{courseName}의 {date} {time} 예약이 확정되었습니다. 티오프 15분 전에 도착해 주세요. 만나 뵙기를 기대합니다.',
     es: 'Su reserva en {courseName} el {date} a las {time} ha sido confirmada. Por favor llegue 15 minutos antes de su hora de salida. Le esperamos.',
-    ar: 'تم تأكيد حجزك في {courseName} بتاريخ {date} الساعة {time}. يرجى الحضور قبل 15 دقيقة من موعد انطلاقك. نتطلع إلى رؤيتك.',
     fr: 'Votre réservation au {courseName} le {date} à {time} est confirmée. Veuillez arriver 15 minutes avant votre départ. Au plaisir de vous accueillir.',
+    de: 'Ihre Reservierung bei {courseName} am {date} um {time} Uhr ist bestätigt. Bitte erscheinen Sie 15 Minuten vor Ihrem Abschlag. Wir freuen uns auf Sie.',
   },
   pending: {
     en: 'Thank you for your booking request at {courseName} on {date} at {time}. Your request is under review and we will notify you of the decision shortly.',
     th: 'ขอบคุณสำหรับคำขอจองที่ {courseName} วันที่ {date} เวลา {time} คำขอของคุณอยู่ระหว่างการพิจารณา เราจะแจ้งผลให้ทราบในเร็วๆ นี้',
+    ko: '{courseName}의 {date} {time} 예약 요청에 감사드립니다. 검토 중이며 곧 결과를 알려드리겠습니다.',
     ja: '{courseName} の {date} {time} へのご予約リクエストをいただきありがとうございます。現在確認中です。近日中にご連絡いたします。',
     zh: '感谢您在 {courseName} 于 {date} {time} 的预订申请。您的申请正在审核中，我们将尽快通知您结果。',
-    ko: '{courseName}의 {date} {time} 예약 요청에 감사드립니다. 검토 중이며 곧 결과를 알려드리겠습니다.',
     es: 'Gracias por su solicitud de reserva en {courseName} el {date} a las {time}. Está siendo revisada y le notificaremos pronto.',
-    ar: 'شكراً لطلب الحجز في {courseName} بتاريخ {date} الساعة {time}. طلبك قيد المراجعة وسنخطرك بالنتيجة قريباً.',
     fr: "Merci pour votre demande de réservation au {courseName} le {date} à {time}. Elle est en cours d'examen et nous vous informerons prochainement.",
+    de: 'Vielen Dank für Ihre Buchungsanfrage bei {courseName} am {date} um {time} Uhr. Ihre Anfrage wird geprüft und wir werden Sie in Kürze über die Entscheidung informieren.',
   },
   rejected: {
     en: 'We regret that your booking request at {courseName} on {date} at {time} could not be accommodated at this time. We invite you to try a different time slot or contact us for assistance.',
     th: 'เราขออภัยที่ไม่สามารถรองรับคำขอจองที่ {courseName} วันที่ {date} เวลา {time} ได้ในขณะนี้ ขอเชิญคุณลองเวลาอื่นหรือติดต่อเราเพื่อขอความช่วยเหลือ',
+    ko: '{courseName}의 {date} {time} 예약 요청을 수용하지 못해 죄송합니다. 다른 시간대를 시도하시거나 저희에게 문의해 주세요.',
     ja: '{courseName} の {date} {time} のご予約リクエストにお応えすることができませんでした。別の時間帯をお試しいただくか、お気軽にお問い合わせください。',
     zh: '很遗憾，您在 {courseName} 于 {date} {time} 的预订申请目前无法受理。我们邀请您尝试其他时间段或联系我们寻求帮助。',
-    ko: '{courseName}의 {date} {time} 예약 요청을 수용하지 못해 죄송합니다. 다른 시간대를 시도하시거나 저희에게 문의해 주세요.',
     es: 'Lamentamos no poder aceptar su solicitud de reserva en {courseName} el {date} a las {time}. Le invitamos a intentar otro horario o contactarnos.',
-    ar: 'نأسف لعدم تمكننا من استيعاب طلب حجزك في {courseName} بتاريخ {date} الساعة {time}. ندعوك لتجربة موعد مختلف أو التواصل معنا.',
     fr: "Nous regrettons de ne pas avoir pu honorer votre demande de réservation au {courseName} le {date} à {time}. Nous vous invitons à essayer un autre créneau ou à nous contacter.",
+    de: 'Wir bedauern, dass Ihre Buchungsanfrage bei {courseName} am {date} um {time} Uhr derzeit nicht berücksichtigt werden konnte. Bitte versuchen Sie es mit einem anderen Zeitfenster oder kontaktieren Sie uns.',
   },
   cancelled: {
     en: 'Your booking at {courseName} on {date} at {time} has been cancelled. Your seat has been released. For further assistance, please contact the golf course directly.',
     th: 'การจองของคุณที่ {courseName} วันที่ {date} เวลา {time} ถูกยกเลิกแล้ว ที่นั่งของคุณได้รับการปล่อยแล้ว หากต้องการความช่วยเหลือเพิ่มเติม กรุณาติดต่อสนามกอล์ฟโดยตรง',
+    ko: '{courseName}의 {date} {time} 예약이 취소되었습니다. 자리가 해제되었습니다. 추가 도움이 필요하시면 골프장에 직접 문의해 주세요.',
     ja: '{courseName} の {date} {time} のご予約がキャンセルされました。お席は解放されました。詳細はコースに直接お問い合わせください。',
     zh: '您在 {courseName} 于 {date} {time} 的预订已取消，您的位置已被释放。如需进一步帮助，请直接联系球场。',
-    ko: '{courseName}의 {date} {time} 예약이 취소되었습니다. 자리가 해제되었습니다. 추가 도움이 필요하시면 골프장에 직접 문의해 주세요.',
     es: 'Su reserva en {courseName} el {date} a las {time} ha sido cancelada. Su plaza ha sido liberada. Para más ayuda, contacte directamente al campo de golf.',
-    ar: 'تم إلغاء حجزك في {courseName} بتاريخ {date} الساعة {time}. تم تحرير مقعدك. للمزيد من المساعدة، يرجى التواصل مع الملعب مباشرة.',
     fr: 'Votre réservation au {courseName} le {date} à {time} a été annulée. Votre place a été libérée. Pour toute aide supplémentaire, contactez directement le parcours.',
+    de: 'Ihre Reservierung bei {courseName} am {date} um {time} Uhr wurde storniert. Ihr Platz wurde freigegeben. Für weitere Fragen wenden Sie sich bitte direkt an den Golfplatz.',
   },
   info_needed: {
     en: 'To complete your booking at {courseName} for {date} at {time}, we need some additional information. Please reply with your handicap index and a contact phone number at your earliest convenience.',
     th: 'เพื่อดำเนินการจองที่ {courseName} วันที่ {date} เวลา {time} ให้สมบูรณ์ เราต้องการข้อมูลเพิ่มเติม กรุณาตอบกลับพร้อมระบุ Handicap Index และเบอร์โทรศัพท์ของคุณ',
+    ko: '{courseName}의 {date} {time} 예약을 완료하려면 추가 정보가 필요합니다. 핸디캡 인덱스와 연락처 전화번호를 최대한 빨리 회신해 주세요.',
     ja: '{courseName} の {date} {time} のご予約を完了するために、追加情報が必要です。ハンディキャップインデックスと連絡先電話番号を折り返しご返信ください。',
     zh: '为完成您在 {courseName} 于 {date} {time} 的预订，我们需要一些额外信息。请回复您的差点指数和联系电话，以便我们尽快处理。',
-    ko: '{courseName}의 {date} {time} 예약을 완료하려면 추가 정보가 필요합니다. 핸디캡 인덱스와 연락처 전화번호를 최대한 빨리 회신해 주세요.',
     es: 'Para completar su reserva en {courseName} el {date} a las {time}, necesitamos información adicional. Por favor responda con su índice de hándicap y un teléfono de contacto.',
-    ar: 'لاستكمال حجزك في {courseName} بتاريخ {date} الساعة {time}، نحتاج بعض المعلومات الإضافية. يرجى الرد بمؤشر الهانديكاب ورقم هاتف للتواصل في أقرب وقت.',
     fr: "Pour finaliser votre réservation au {courseName} le {date} à {time}, nous avons besoin d'informations complémentaires. Veuillez répondre avec votre indice de handicap et un numéro de téléphone.",
+    de: 'Um Ihre Buchung bei {courseName} für den {date} um {time} Uhr abzuschließen, benötigen wir einige zusätzliche Informationen. Bitte antworten Sie mit Ihrem Handicap-Index und einer Kontakttelefonnummer.',
   },
 };
 
@@ -121,7 +121,6 @@ export default function BookingMessageComposer({ booking, onDismiss }: Props) {
 
   const canSend = ACTIVE_STATUSES.has(booking.status);
   const draftText = fillTemplate(MESSAGE_TEMPLATES[templateKey][locale], booking);
-  const isRTL = locale === 'ar';
 
   const handleCopy = async () => {
     try {
@@ -245,7 +244,7 @@ export default function BookingMessageComposer({ booking, onDismiss }: Props) {
         <p style={{ ...fieldLabel, marginBottom: '6px' }}>Preview</p>
         <div
           id="c2b-message-preview"
-          dir={isRTL ? 'rtl' : 'ltr'}
+          dir="ltr"
           aria-label="Message preview"
           aria-readonly="true"
           tabIndex={0}
@@ -259,8 +258,8 @@ export default function BookingMessageComposer({ booking, onDismiss }: Props) {
             lineHeight: 1.65,
             minHeight: '80px',
             userSelect: 'text',
-            fontFamily: isRTL ? 'Arial, sans-serif' : V2Theme.fontFamily,
-            textAlign: isRTL ? 'right' : 'left',
+            fontFamily: V2Theme.fontFamily,
+            textAlign: 'left',
           }}
         >
           {draftText}
