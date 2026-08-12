@@ -41,6 +41,7 @@ import BuyerCustomerCRM from './components/admin/oem/BuyerCustomerCRM';
 import V2AdminShell from './components/admin/v2/V2AdminShell';
 import V2AdminOverview from './components/admin/v2/V2AdminOverview';
 import V2AdminReports from './components/admin/v2/V2AdminReports';
+import V2CourseOperations from './components/admin/v2/V2CourseOperations';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -229,7 +230,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
 
   return <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
-    {activeArea === 'courses' && <><CourseSeeder /><TeeTimeInventory /><CourseSyncConsole /><CourseTeeSheet /></>}
+    {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <><PartnerVault /><HRManagement /></>}
     {activeArea === 'marketing' && <><EventGenesisConsole /><LiveAutomationLog /></>}
