@@ -24,6 +24,8 @@ const service=fs.readFileSync(new URL('../src/components/admin/v2/courseOperatio
 const app=fs.readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 assert.match(app,/activeArea === 'courses' && <V2CourseOperations/);
 assert.match(ui,/confirm_preview/); assert.match(ui,/mode:'preview'/); assert.match(ui,/confirm_apply/); assert.match(ui,/mode:'apply'/);
+assert.match(ui,/preview\?\.results\.filter\(\(row\)=>row\.result==='updated'\)/); assert.match(ui,/mode:'apply',courseIds/);
+assert.doesNotMatch(ui,/service\.sync\(\{mode:'apply',limit\}\)/);
 assert.match(ui,/runState==='confirm_preview'[\s\S]*onClick=\{\(\)=>void runPreview\(\)\}/);
 assert.match(ui,/runState==='confirm_apply'[\s\S]*onClick=\{\(\)=>void runApply\(\)\}/);
 assert.match(ui,/loadState==='loading'/); assert.match(ui,/loadState==='error'/); assert.match(ui,/visible.length===0/); assert.match(ui,/runState==='partial'/); assert.match(ui,/runState==='error'/); assert.match(ui,/quotaUnknown/); assert.match(ui,/growthBlocked/);
@@ -31,4 +33,4 @@ assert.match(service,/httpsCallable\(functions, 'syncCoursesFromProvider'\)/);
 assert.doesNotMatch(ui+service,/GOLF_API_KEY|golfapi\.io|Authorization\s*:|Bearer\s+/i);
 assert.doesNotMatch(service,/fetch\s*\(/);
 for(const locale of ['en','th','ko','ja','zh','es','fr','de']) assert.match(ui,new RegExp(`\\n  ${locale}:`));
-console.log('Course operations verification PASS: 30 catalogue, health, filter, preview, confirmation, state, quota, locale, route, and secret-boundary assertions.');
+console.log('Course operations verification PASS: catalogue, health, filter, preview-bound apply, confirmation, state, quota, locale, route, and secret-boundary assertions.');

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAdminLocale } from './AdminLocaleContext';
 import type { AdminLocale } from './adminNavigation';
 import { courseOperationsService, type CourseOperationsService } from './courseOperationsService';
@@ -25,11 +25,11 @@ export default function V2CourseOperations({ service = courseOperationsService }
   const [courses, setCourses] = useState<CourseView[]>([]); const [loadState,setLoadState]=useState<'loading'|'ready'|'error'>('loading');
   const [query,setQuery]=useState(''); const [filter,setFilter]=useState<Filter>('all'); const [selected,setSelected]=useState<CourseView|null>(null);
   const [limit,setLimit]=useState(10); const [runState,setRunState]=useState<RunState>('idle'); const [preview,setPreview]=useState<ReturnType<typeof normalizeSyncResult>|null>(null);
-  const load = async () => { setLoadState('loading'); try { const rows=await service.loadCourses(); setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data)))); setLoadState('ready'); } catch { setLoadState('error'); } };
-  useEffect(()=>{void load();},[service]);
+  const load = useCallback(async () => { setLoadState('loading'); try { const rows=await service.loadCourses(); setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data)))); setLoadState('ready'); } catch { setLoadState('error'); } },[service]);
+  useEffect(()=>{const request=service.loadCourses();void request.then((rows)=>{setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data))));setLoadState('ready');},()=>setLoadState('error'));},[service]);
   const summary=useMemo(()=>summarizeCourses(courses),[courses]); const visible=useMemo(()=>filterCourses(courses,query,filter),[courses,query,filter]);
   const runPreview=async()=>{setRunState('running');try{const result=normalizeSyncResult(await service.sync({mode:'preview',limit}));setPreview(result);const rejected=(result.summary.conflict||0)+(result.summary.missing||0)+(result.summary.error||0);setRunState(rejected>0?'partial':'success');}catch{setRunState('error');}};
-  const runApply=async()=>{setRunState('applying');try{await service.sync({mode:'apply',limit});setRunState('success');await load();}catch{setRunState('error');}};
+  const runApply=async()=>{const courseIds=preview?.results.filter((row)=>row.result==='updated').map((row)=>row.courseId).filter((id):id is string=>Boolean(id))||[];if(courseIds.length===0){setRunState('error');return;}setRunState('applying');try{await service.sync({mode:'apply',courseIds});setRunState('success');await load();}catch{setRunState('error');}};
   const metric=(label:string,value:string|number)=><article><span>{label}</span><strong>{value}</strong></article>;
   const count=(key:string)=>preview?.summary[key] ?? '—'; const rejected=preview?(preview.summary.conflict||0)+(preview.summary.missing||0)+(preview.summary.error||0):'—';
   const filterLabel=(item:Filter)=>item==='all'?copy.all:item==='missing_coordinates'?copy.missing:item==='duplicate'?copy.duplicates:item==='incomplete'?copy.incomplete:item==='stale'?copy.stale:copy.healthy;
