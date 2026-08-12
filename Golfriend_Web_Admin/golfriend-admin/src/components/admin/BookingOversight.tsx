@@ -12,6 +12,7 @@ import { db } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
 import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
 import BookingDetailPanel from './booking/BookingDetailPanel';
+import BookingExceptionQueue from './booking/BookingExceptionQueue';
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
 type Decision = 'confirm' | 'reject' | 'cancel';
@@ -39,6 +40,8 @@ export default function BookingOversight() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [detailBooking, setDetailBooking] = useState<BookingRow | null>(null);
+  // C2C: view toggle — 'table' preserves all existing oversight behavior exactly.
+  const [activeView, setActiveView] = useState<'table' | 'queue'>('table');
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNotification({ msg, type });
@@ -124,10 +127,42 @@ export default function BookingOversight() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${V2Theme.surfaceBorder}`, paddingBottom: '12px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${V2Theme.surfaceBorder}`, paddingBottom: '12px', marginBottom: '16px' }}>
         <h2 style={{ color: V2Theme.gold, margin: 0 }}>📖 Booking Oversight</h2>
         <span style={{ color: V2Theme.surfaceTextMuted, fontSize: '12px' }}>{bookings.length} bookings streamed</span>
       </div>
+
+      {/* C2C: view toggle — 'table' mode leaves all existing oversight behaviour unchanged */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }} role="group" aria-label="Oversight view">
+        {([['table', '📋 All Bookings'], ['queue', '⚠️ Exception Queue']] as const).map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setActiveView(v)}
+            aria-pressed={activeView === v}
+            style={{
+              padding: '7px 16px', minHeight: '36px',
+              borderRadius: V2Theme.radiusPill, cursor: 'pointer',
+              fontSize: '12px', fontWeight: 700,
+              border: `1px solid ${activeView === v ? V2Theme.gold : V2Theme.surfaceBorder}`,
+              backgroundColor: activeView === v ? `${V2Theme.gold}22` : 'transparent',
+              color: activeView === v ? V2Theme.gold : V2Theme.surfaceTextMuted,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* C2C: exception queue view */}
+      {activeView === 'queue' && (
+        <BookingExceptionQueue
+          onFollowUp={(slim) => setDetailBooking({ ...slim, slotId: '' } as BookingRow)}
+        />
+      )}
+
+      {/* Table view — all existing logic below is completely unchanged */}
+      {activeView === 'table' && (
+      <>
       <p style={{ color: V2Theme.surfaceText, fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
         Force-confirm, reject, or cancel any tee-time booking. Every action is settled server-side by
         <code style={{ color: V2Theme.gold, margin: '0 4px' }}>adminResolveBooking</code>
@@ -244,8 +279,10 @@ export default function BookingOversight() {
           </tbody>
         </table>
       </div>
+      </> /* end activeView === 'table' */
+      )}
 
-      {/* C2B: booking communications panel — renders as overlay, no data-flow change */}
+      {/* C2B/C2C: booking communications panel — renders as overlay for both views */}
       {detailBooking && (
         <BookingDetailPanel
           booking={detailBooking}
