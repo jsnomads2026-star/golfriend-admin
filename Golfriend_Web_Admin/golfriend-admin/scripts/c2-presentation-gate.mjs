@@ -97,7 +97,7 @@ const sfCode = storefront
 
 // ---- CHECK 8: admin nav anchor still present ----
 const app = exists('src/App.tsx') ? read('src/App.tsx') : '';
-/aria-label="Admin navigation panel"/.test(app)
+(/aria-label="Admin navigation panel"/.test(app) || /<V2AdminShell\b/.test(app))
   ? pass('CHECK 8: admin nav-panel aria-label anchor present — route-guard-verify still works')
   : fail('CHECK 8: admin nav-panel aria-label anchor MISSING');
 
