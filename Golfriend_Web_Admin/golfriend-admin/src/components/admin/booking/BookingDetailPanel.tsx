@@ -27,20 +27,20 @@ interface AuditEvent {
   id: string;
   action: string;
   byRole: string;
-  at: any;
+  at: unknown;
 }
 
 interface Message {
   id: string;
   senderRole: string;
   text: string;
-  createdAt: any;
+  createdAt: unknown;
 }
 
-function fmtTs(at: any): string {
+function fmtTs(at: unknown): string {
   try {
-    if (at?.toDate) return at.toDate().toLocaleString();
-    if (at?.seconds) return new Date(at.seconds * 1000).toLocaleString();
+    if (at && typeof at === 'object' && 'toDate' in at && typeof at.toDate === 'function') return at.toDate().toLocaleString();
+    if (at && typeof at === 'object' && 'seconds' in at && typeof at.seconds === 'number') return new Date(at.seconds * 1000).toLocaleString();
   } catch { /* ignore */ }
   return '—';
 }
@@ -59,20 +59,23 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
   const threadEnd = useRef<HTMLDivElement>(null);
   const closeRef  = useRef<HTMLButtonElement>(null);
   const panelRef  = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Stream audit history for this booking (newest-first, bounded 50).
   useEffect(() => {
-    setAuditErr(false);
     const q = query(
       collection(db, 'booking_audit'),
       where('bookingId', '==', booking.id),
       orderBy('at', 'desc'),
     );
     const unsub = onSnapshot(q,
-      (snap) => setAudit(snap.docs.slice(0, 50).map((d) => {
-        const a = d.data() as any;
-        return { id: d.id, action: a.action || 'unknown', byRole: a.byRole || '', at: a.at } as AuditEvent;
-      })),
+      (snap) => {
+        setAuditErr(false);
+        setAudit(snap.docs.slice(0, 50).map((d) => {
+          const a = d.data();
+          return { id: d.id, action: typeof a.action === 'string' ? a.action : 'unknown', byRole: typeof a.byRole === 'string' ? a.byRole : '', at: a.at };
+        }));
+      },
       () => setAuditErr(true),
     );
     return () => unsub();
@@ -80,22 +83,19 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
 
   // Stream message thread for this booking (oldest-first).
   useEffect(() => {
-    setMsgErr(false);
     const q = query(
       collection(db, 'booking_messages'),
       where('bookingId', '==', booking.id),
       orderBy('createdAt', 'asc'),
     );
     const unsub = onSnapshot(q,
-      (snap) => setMessages(snap.docs.map((d) => {
-        const m = d.data() as any;
-        return {
-          id: d.id,
-          senderRole: m.senderRole || 'unknown',
-          text: m.text || '',
-          createdAt: m.createdAt,
-        } as Message;
-      })),
+      (snap) => {
+        setMsgErr(false);
+        setMessages(snap.docs.map((d) => {
+          const m = d.data();
+          return { id: d.id, senderRole: typeof m.senderRole === 'string' ? m.senderRole : 'unknown', text: typeof m.text === 'string' ? m.text : '', createdAt: m.createdAt };
+        }));
+      },
       () => setMsgErr(true),
     );
     return () => unsub();
@@ -107,7 +107,11 @@ export default function BookingDetailPanel({ booking, onClose }: Props) {
   }, [messages.length]);
 
   // Focus close button on open; restore focus on close.
-  useEffect(() => { closeRef.current?.focus(); }, []);
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    return () => previousFocusRef.current?.focus();
+  }, []);
 
   // Focus trap: keep keyboard focus inside the panel while open.
   useEffect(() => {

@@ -14,6 +14,7 @@ import {
   type BookingRecord, type ReportOutput,
 } from './BookingReport';
 import BookingReadiness from './BookingReadiness';
+import BookingReleaseSummary from './BookingReleaseSummary';
 
 // ── Report UI localisation — exactly 8 canonical locales ─────────────────────
 
@@ -174,6 +175,13 @@ const REPORT_STRINGS: Record<RLocale, RS> = {
 
 type WindowPreset = 'today' | 'last7' | 'last30' | 'allTime' | 'custom';
 
+function timestampToMillis(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  if ('toMillis' in value && typeof value.toMillis === 'function') return value.toMillis();
+  if ('seconds' in value && typeof value.seconds === 'number') return value.seconds * 1000;
+  return undefined;
+}
+
 function presetWindow(preset: WindowPreset, now: number): { start?: number; end: number } {
   const end = now;
   const day = 86_400_000;
@@ -223,32 +231,27 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
   const [txtDone, setTxtDone]    = useState(false);
 
   const L = REPORT_STRINGS[locale];
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
 
   // Stream bookings with createdAt (independent read-only stream).
   useEffect(() => {
-    setLoading(true); setErr(false);
     const unsub = onSnapshot(
       query(collection(db, 'bookings')),
       (snap) => {
         setRawBookings(snap.docs.map((d) => {
-          const b = d.data() as any;
-          const createdAt = b.createdAt;
-          const createdAtMs: number | undefined =
-            createdAt?.toMillis ? createdAt.toMillis()
-            : createdAt?.seconds ? createdAt.seconds * 1000
-            : undefined;
+          const b = d.data();
+          const createdAtMs = timestampToMillis(b.createdAt);
           return {
             id: d.id,
-            status: b.status || '',
-            courseName: b.courseName || undefined,
-            courseId: b.courseId || undefined,
-            date: b.date || undefined,
-            time: b.time || undefined,
-            playerUid: b.playerUid || undefined,
-            playerName: b.playerName || undefined,
+            status: typeof b.status === 'string' ? b.status : '',
+            courseName: typeof b.courseName === 'string' ? b.courseName : undefined,
+            courseId: typeof b.courseId === 'string' ? b.courseId : undefined,
+            date: typeof b.date === 'string' ? b.date : undefined,
+            time: typeof b.time === 'string' ? b.time : undefined,
+            playerUid: typeof b.playerUid === 'string' ? b.playerUid : undefined,
+            playerName: typeof b.playerName === 'string' ? b.playerName : undefined,
             createdAtMs,
-            locale: b.locale || undefined,
+            locale: typeof b.locale === 'string' ? b.locale : undefined,
           } as BookingRecord;
         }));
         setLoading(false);
@@ -257,6 +260,12 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
     );
     return () => unsub();
   }, [retryCount]);
+
+  const handleRetry = useCallback(() => {
+    setLoading(true);
+    setErr(false);
+    setRetryCount((count) => count + 1);
+  }, []);
 
   // Resolve window.
   const { windowStart, windowEnd, rangeError } = useMemo(() => {
@@ -368,7 +377,7 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
       {loading && <StateBox role="status" aria-live="polite" aria-busy>{L.loading}</StateBox>}
       {!loading && streamErr && (
         <StateBox role="alert" error>
-          {L.error} <button onClick={() => setRetryCount((c) => c + 1)} style={retryBtn}>{L.retry}</button>
+          {L.error} <button onClick={handleRetry} style={retryBtn}>{L.retry}</button>
         </StateBox>
       )}
       {!loading && !streamErr && rawBookings.length === 0 && <StateBox>{L.empty}</StateBox>}
@@ -385,6 +394,7 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
 
       {/* ── Summary metrics ── */}
       <BookingReadiness locale={locale} />
+      <BookingReleaseSummary locale={locale} />
 
       {report && s && (
         <>
