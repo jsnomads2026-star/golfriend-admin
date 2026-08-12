@@ -28,6 +28,14 @@ assert.ok(COMMISSIONING_CONTRACTS.filter((contract) => ['marketing.asset-storage
 assert.deepEqual(Object.keys(DEFAULT_COMMISSIONING_ADAPTERS), expectedIds);
 assert.ok(Object.values(DEFAULT_COMMISSIONING_ADAPTERS).every((adapter) => adapter === null));
 assert.deepEqual(validateCommissioningRegistry(), []);
+const duplicateRegistry = [...COMMISSIONING_REGISTRY.slice(0, -1), COMMISSIONING_REGISTRY[0]];
+assert.deepEqual(validateCommissioningRegistry(duplicateRegistry), ['Duplicate capability ID','Capability set mismatch']);
+const unsupportedRegistry = COMMISSIONING_REGISTRY.map((entry, index) => index === 0 ? { ...entry, currentState:'future_state' } : entry);
+assert.match(validateCommissioningRegistry(unsupportedRegistry).join(' '), /unsupported readiness state/);
+const missingEvidenceRegistry = COMMISSIONING_REGISTRY.map((entry, index) => index === 0 ? { ...entry, sourceEvidence:'' } : entry);
+assert.match(validateCommissioningRegistry(missingEvidenceRegistry).join(' '), /lacks source evidence/);
+const falselyCommissionedRegistry = COMMISSIONING_REGISTRY.map((entry, index) => index === 0 ? { ...entry, currentState:'commissioned' } : entry);
+assert.match(validateCommissioningRegistry(falselyCommissionedRegistry).join(' '), /lacks commissioned evidence/);
 assert.ok(COMMISSIONING_REGISTRY.every((entry) => entry.currentState !== 'commissioned'));
 assert.ok(COMMISSIONING_REGISTRY.every((entry) => entry.lastVerifiedBuild === 'B5-R9@5785be1'));
 assert.ok(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'partners.decision-submit').blockedActions.includes('Approve or decline'));

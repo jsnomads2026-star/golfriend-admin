@@ -132,12 +132,20 @@ const deepFreeze = <T>(value: T): T => {
 deepFreeze(COMMISSIONING_CONTRACTS);
 deepFreeze(COMMISSIONING_REGISTRY);
 
-export const validateCommissioningRegistry = (): readonly string[] => {
+const READINESS_STATES: readonly ReadinessState[] = ['unavailable', 'local_preview', 'contract_ready', 'commissioned', 'degraded'];
+
+export const validateCommissioningRegistry = (
+  entries: readonly CommissioningReadiness[] = COMMISSIONING_REGISTRY,
+  adapters: Readonly<Partial<Record<CapabilityId, unknown>>> = DEFAULT_COMMISSIONING_ADAPTERS,
+): readonly string[] => {
   const errors: string[] = [];
-  const ids = COMMISSIONING_REGISTRY.map((entry) => entry.capabilityId);
-  if (new Set(ids).size !== CAPABILITY_IDS.length || CAPABILITY_IDS.some((id) => !ids.includes(id))) errors.push('Capability set mismatch');
-  for (const entry of COMMISSIONING_REGISTRY) {
-    if (entry.currentState === 'commissioned' && DEFAULT_COMMISSIONING_ADAPTERS[entry.capabilityId] === null) errors.push(`${entry.capabilityId} lacks commissioned evidence`);
+  const ids = entries.map((entry) => entry.capabilityId);
+  if (new Set(ids).size !== ids.length) errors.push('Duplicate capability ID');
+  if (ids.length !== CAPABILITY_IDS.length || CAPABILITY_IDS.some((id) => !ids.includes(id))) errors.push('Capability set mismatch');
+  for (const entry of entries) {
+    if (!READINESS_STATES.includes(entry.currentState)) errors.push(`${entry.capabilityId} has unsupported readiness state`);
+    if (!entry.sourceEvidence.trim()) errors.push(`${entry.capabilityId} lacks source evidence`);
+    if (entry.currentState === 'commissioned' && !adapters[entry.capabilityId]) errors.push(`${entry.capabilityId} lacks commissioned evidence`);
   }
   return errors;
 };

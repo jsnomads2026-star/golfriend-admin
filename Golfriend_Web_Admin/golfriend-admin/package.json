@@ -16,6 +16,7 @@
     "gate:fnexport": "node scripts/functions-export-gate.mjs",
     "gate:coursewrites": "node scripts/course-write-authority-gate.mjs",
     "gate:admin-v2": "npm run verify:admin-shell && npm run verify:course-operations && npm run verify:marketing-library && npm run verify:partner-operations && npm run verify:reports-foundation && npm run verify:commissioning-readiness && node scripts/admin-v2-quality-gate.mjs",
+    "gate:admin-release": "node scripts/admin-release-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
