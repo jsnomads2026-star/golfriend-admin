@@ -11,6 +11,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
 import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
+import BookingDetailPanel from './booking/BookingDetailPanel';
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
 type Decision = 'confirm' | 'reject' | 'cancel';
@@ -37,6 +38,7 @@ export default function BookingOversight() {
   const [textFilter, setTextFilter] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [detailBooking, setDetailBooking] = useState<BookingRow | null>(null);
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNotification({ msg, type });
@@ -204,6 +206,13 @@ export default function BookingOversight() {
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
+                        onClick={() => setDetailBooking(b)}
+                        style={actionBtn(V2Theme.fairwayLight, false)}
+                        aria-label={`View details for booking ${b.id}`}
+                      >
+                        Details
+                      </button>
+                      <button
                         onClick={() => resolve(b.id, 'confirm')}
                         disabled={busy || !canConfirm}
                         style={actionBtn(V2Theme.successGreen, busy || !canConfirm)}
@@ -235,6 +244,14 @@ export default function BookingOversight() {
           </tbody>
         </table>
       </div>
+
+      {/* C2B: booking communications panel — renders as overlay, no data-flow change */}
+      {detailBooking && (
+        <BookingDetailPanel
+          booking={detailBooking}
+          onClose={() => setDetailBooking(null)}
+        />
+      )}
     </div>
   );
 }
