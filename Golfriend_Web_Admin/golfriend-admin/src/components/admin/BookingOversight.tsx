@@ -9,6 +9,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
+import { V2Theme } from '../../theme/v2Theme';
+import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
 type Decision = 'confirm' | 'reject' | 'cancel';
@@ -28,16 +30,6 @@ interface BookingRow {
 const STATUS_FILTERS: Array<'all' | BookingStatus> = [
   'all', 'pending', 'confirmed', 'rejected', 'cancelled',
 ];
-
-const statusColor = (s: BookingStatus): string => {
-  switch (s) {
-    case 'confirmed': return '#4CAF50';
-    case 'pending': return '#FFC107';
-    case 'rejected': return '#ff4444';
-    case 'cancelled': return '#888';
-    default: return '#888';
-  }
-};
 
 export default function BookingOversight() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -116,12 +108,13 @@ export default function BookingOversight() {
   }, [bookings]);
 
   return (
-    <div style={{ padding: '24px', color: '#fff' }}>
+    <div style={{ padding: '24px', color: V2Theme.warmWhite }}>
       {notification && (
         <div
           style={{
             position: 'fixed', top: '20px', right: '20px', padding: '16px 24px', zIndex: 1000,
-            backgroundColor: notification.type === 'error' ? '#ff4444' : '#4CAF50', borderRadius: '8px', fontWeight: 'bold',
+            backgroundColor: notification.type === 'error' ? V2Theme.errorRed : V2Theme.successGreen,
+            borderRadius: V2Theme.radiusMd, fontWeight: 'bold',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
           }}
         >
@@ -129,18 +122,17 @@ export default function BookingOversight() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '12px', marginBottom: '20px' }}>
-        <h2 style={{ color: '#d4af37', margin: 0 }}>📖 Booking Oversight</h2>
-        <span style={{ color: '#666', fontSize: '12px' }}>{bookings.length} bookings streamed</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${V2Theme.surfaceBorder}`, paddingBottom: '12px', marginBottom: '20px' }}>
+        <h2 style={{ color: V2Theme.gold, margin: 0 }}>📖 Booking Oversight</h2>
+        <span style={{ color: V2Theme.surfaceTextMuted, fontSize: '12px' }}>{bookings.length} bookings streamed</span>
       </div>
-      <p style={{ color: '#aaa', fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
+      <p style={{ color: V2Theme.surfaceText, fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
         Force-confirm, reject, or cancel any tee-time booking. Every action is settled server-side by
-        <code style={{ color: '#d4af37', margin: '0 4px' }}>adminResolveBooking</code>
+        <code style={{ color: V2Theme.gold, margin: '0 4px' }}>adminResolveBooking</code>
         — seats are never written from this client.
       </p>
 
-      {/* FILTER BAR */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '18px' }}>
+      <V2ControlRow>
         {STATUS_FILTERS.map((s) => {
           const active = statusFilter === s;
           const label = s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1);
@@ -150,30 +142,36 @@ export default function BookingOversight() {
               key={s}
               onClick={() => setStatusFilter(s)}
               style={{
-                padding: '6px 14px', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: 700,
-                border: `1px solid ${active ? '#d4af37' : '#333'}`,
-                backgroundColor: active ? 'rgba(212,175,55,0.15)' : 'transparent',
-                color: active ? '#d4af37' : '#aaa',
+                padding: '6px 14px', borderRadius: V2Theme.radiusPill, cursor: 'pointer',
+                fontSize: '12px', fontWeight: 700, minHeight: '36px',
+                border: `1px solid ${active ? V2Theme.gold : V2Theme.surfaceBorder}`,
+                backgroundColor: active ? `${V2Theme.gold}22` : 'transparent',
+                color: active ? V2Theme.gold : V2Theme.surfaceTextMuted,
               }}
             >
-              {label} <span style={{ color: '#666' }}>({badge})</span>
+              {label} <span style={{ color: active ? V2Theme.goldHover : V2Theme.surfaceMuted }}>({badge})</span>
             </button>
           );
         })}
         <input
           type="text"
           placeholder="Filter by course or player…"
+          aria-label="Filter bookings"
           value={textFilter}
           onChange={(e) => setTextFilter(e.target.value)}
-          style={{ marginLeft: 'auto', minWidth: '240px', padding: '8px 12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: '#fff', borderRadius: '6px', boxSizing: 'border-box' }}
+          style={{
+            marginLeft: 'auto', minWidth: '220px', padding: '8px 12px',
+            backgroundColor: V2Theme.surfaceCard, border: `1px solid ${V2Theme.surfaceBorder}`,
+            color: V2Theme.warmWhite, borderRadius: V2Theme.radiusMd,
+            boxSizing: 'border-box', fontFamily: V2Theme.fontFamily,
+          }}
         />
-      </div>
+      </V2ControlRow>
 
-      {/* TABLE */}
-      <div style={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+      <div style={{ border: `1px solid ${V2Theme.surfaceBorder}`, borderRadius: V2Theme.radiusMd, overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', minWidth: '580px' }}>
           <thead>
-            <tr style={{ backgroundColor: '#1a1a1a', color: '#888', borderBottom: '2px solid #333' }}>
+            <tr style={{ backgroundColor: V2Theme.surfaceCard, color: V2Theme.surfaceTextMuted, borderBottom: `2px solid ${V2Theme.surfaceBorder}` }}>
               <th style={thStyle}>Player</th>
               <th style={thStyle}>Course</th>
               <th style={thStyle}>Date / Time</th>
@@ -183,34 +181,32 @@ export default function BookingOversight() {
           </thead>
           <tbody>
             {visible.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: '28px', textAlign: 'center', color: '#555' }}>No bookings match the current filters.</td></tr>
+              <tr><td colSpan={5} style={{ padding: '28px', textAlign: 'center', color: V2Theme.surfaceMuted }}>No bookings match the current filters.</td></tr>
             ) : (
               visible.map((b) => {
                 const busy = busyId === b.id;
                 const canConfirm = b.status === 'pending';
-                const canReject = b.status === 'pending';
-                const canCancel = b.status === 'pending' || b.status === 'confirmed';
+                const canReject  = b.status === 'pending';
+                const canCancel  = b.status === 'pending' || b.status === 'confirmed';
                 return (
-                  <tr key={b.id} style={{ borderBottom: '1px solid #222' }}>
+                  <tr key={b.id} style={{ borderBottom: `1px solid ${V2Theme.surfaceBorder}` }}>
                     <td style={tdStyle}>
-                      <div style={{ color: '#fff', fontWeight: 600 }}>{b.playerName}</div>
-                      <div style={{ fontFamily: 'monospace', color: '#555', fontSize: '11px' }}>{b.playerUid}</div>
+                      <div style={{ color: V2Theme.warmWhite, fontWeight: 600 }}>{b.playerName}</div>
+                      <div style={{ fontFamily: V2Theme.fontMono, color: V2Theme.surfaceMuted, fontSize: '11px' }}>{b.playerUid}</div>
                     </td>
                     <td style={tdStyle}>{b.courseName}</td>
                     <td style={tdStyle}>
                       <span>{b.date}</span>{' '}
-                      <span style={{ color: '#fff', fontWeight: 'bold' }}>{b.time}</span>
+                      <span style={{ color: V2Theme.warmWhite, fontWeight: 'bold' }}>{b.time}</span>
                     </td>
                     <td style={tdStyle}>
-                      <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: `${statusColor(b.status)}22`, color: statusColor(b.status) }}>
-                        {b.status}
-                      </span>
+                      <V2Badge status={b.status} />
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
                         onClick={() => resolve(b.id, 'confirm')}
                         disabled={busy || !canConfirm}
-                        style={actionBtn('#4CAF50', busy || !canConfirm)}
+                        style={actionBtn(V2Theme.successGreen, busy || !canConfirm)}
                         title={canConfirm ? 'Force confirm this booking' : 'Only pending bookings can be confirmed'}
                       >
                         {busy ? '…' : 'Force Confirm'}
@@ -218,7 +214,7 @@ export default function BookingOversight() {
                       <button
                         onClick={() => resolve(b.id, 'reject')}
                         disabled={busy || !canReject}
-                        style={actionBtn('#ff4444', busy || !canReject)}
+                        style={actionBtn(V2Theme.errorRed, busy || !canReject)}
                         title={canReject ? 'Reject this booking and release the seat' : 'Only pending bookings can be rejected'}
                       >
                         {busy ? '…' : 'Reject'}
@@ -226,7 +222,7 @@ export default function BookingOversight() {
                       <button
                         onClick={() => resolve(b.id, 'cancel')}
                         disabled={busy || !canCancel}
-                        style={actionBtn('#d4af37', busy || !canCancel)}
+                        style={actionBtn(V2Theme.gold, busy || !canCancel)}
                         title={canCancel ? 'Cancel this booking and release the seat' : 'This booking cannot be cancelled'}
                       >
                         {busy ? '…' : 'Cancel'}
@@ -243,16 +239,17 @@ export default function BookingOversight() {
   );
 }
 
-const thStyle = { padding: '12px 14px', fontSize: '11px', fontWeight: 700 as const, textTransform: 'uppercase' as const };
-const tdStyle = { padding: '12px 14px', color: '#ccc', verticalAlign: 'top' as const };
-const actionBtn = (color: string, disabled: boolean) => ({
+const thStyle: React.CSSProperties = { padding: '12px 14px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' };
+const tdStyle: React.CSSProperties = { padding: '12px 14px', color: V2Theme.surfaceText, verticalAlign: 'top' };
+const actionBtn = (color: string, disabled: boolean): React.CSSProperties => ({
   marginLeft: '6px',
   background: 'transparent',
-  border: `1px solid ${disabled ? '#333' : color}`,
-  color: disabled ? '#555' : color,
-  borderRadius: '4px',
+  border: `1px solid ${disabled ? V2Theme.surfaceBorder : color}`,
+  color: disabled ? V2Theme.surfaceMuted : color,
+  borderRadius: V2Theme.radiusSm,
   padding: '6px 12px',
+  minHeight: '36px',
   cursor: disabled ? 'not-allowed' : 'pointer',
-  fontWeight: 700 as const,
+  fontWeight: 700,
   fontSize: '11px',
 });

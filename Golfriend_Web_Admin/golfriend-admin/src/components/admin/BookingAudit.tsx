@@ -8,6 +8,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { V2Theme } from '../../theme/v2Theme';
+import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
 
 interface AuditRow {
   id: string;
@@ -20,15 +22,9 @@ interface AuditRow {
 
 const ACTIONS = ['all', 'requested', 'confirmed', 'rejected', 'cancelled', 'admin_confirmed', 'admin_rejected', 'admin_cancelled'];
 
-const actionColor = (a: string): string => {
-  if (a.includes('confirm')) return '#4CAF50';
-  if (a.includes('reject')) return '#ff4444';
-  if (a.includes('cancel')) return '#1E88E5';
-  if (a === 'requested') return '#FFC107';
-  return '#888';
-};
-
-const roleColor = (r: string): string => (r === 'staff' ? '#d4af37' : r === 'operator' ? '#8A2BE2' : '#aaa');
+const roleColor = (r: string): string => (
+  r === 'staff' ? V2Theme.gold : r === 'operator' ? '#8A2BE2' : V2Theme.surfaceText
+);
 
 export default function BookingAudit() {
   const [rows, setRows] = useState<AuditRow[]>([]);
@@ -82,43 +78,58 @@ export default function BookingAudit() {
         Immutable record of every booking state change (request / confirm / reject / cancel), stamped server-side. Non-financial — no amounts, no wallet.
       </p>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '16px' }}>
+      <V2ControlRow>
         {ACTIONS.map((a) => {
           const active = actionFilter === a;
           return (
             <button key={a} onClick={() => setActionFilter(a)}
-              style={{ padding: '6px 12px', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: 700,
-                border: `1px solid ${active ? '#d4af37' : '#333'}`, backgroundColor: active ? 'rgba(212,175,55,0.15)' : 'transparent',
-                color: active ? '#d4af37' : '#aaa' }}>
+              style={{
+                padding: '6px 12px', borderRadius: V2Theme.radiusPill, cursor: 'pointer',
+                fontSize: '12px', fontWeight: 700, minHeight: '36px',
+                border: `1px solid ${active ? V2Theme.gold : V2Theme.surfaceBorder}`,
+                backgroundColor: active ? `${V2Theme.gold}22` : 'transparent',
+                color: active ? V2Theme.gold : V2Theme.surfaceTextMuted,
+              }}>
               {a === 'all' ? 'All' : a}
             </button>
           );
         })}
-        <input type="text" placeholder="Filter by booking id or actor uid…" value={text} onChange={(e) => setText(e.target.value)}
-          style={{ marginLeft: 'auto', minWidth: '260px', padding: '8px 12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: '#fff', borderRadius: '6px', boxSizing: 'border-box' }} />
-      </div>
+        <input
+          type="text"
+          placeholder="Filter by booking id or actor uid…"
+          aria-label="Filter audit events"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          style={{
+            marginLeft: 'auto', minWidth: '250px', padding: '8px 12px',
+            backgroundColor: V2Theme.surfaceCard, border: `1px solid ${V2Theme.surfaceBorder}`,
+            color: V2Theme.warmWhite, borderRadius: V2Theme.radiusMd,
+            boxSizing: 'border-box', fontFamily: V2Theme.fontFamily,
+          }}
+        />
+      </V2ControlRow>
 
-      {error && <div role="alert" style={{ color: '#ff4444', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
+      {error && <div role="alert" style={{ color: V2Theme.errorRed, marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
 
-      <div style={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+      <div style={{ border: `1px solid ${V2Theme.surfaceBorder}`, borderRadius: V2Theme.radiusMd, overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', minWidth: '560px' }}>
           <thead>
-            <tr style={{ backgroundColor: '#1a1a1a', color: '#888', borderBottom: '2px solid #333' }}>
+            <tr style={{ backgroundColor: V2Theme.surfaceCard, color: V2Theme.surfaceTextMuted, borderBottom: `2px solid ${V2Theme.surfaceBorder}` }}>
               <th style={th}>When</th><th style={th}>Action</th><th style={th}>Booking</th><th style={th}>Actor</th><th style={th}>Role</th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: '28px', textAlign: 'center', color: '#555' }}>No audit events match the current filters.</td></tr>
+              <tr><td colSpan={5} style={{ padding: '28px', textAlign: 'center', color: V2Theme.surfaceMuted }}>No audit events match the current filters.</td></tr>
             ) : (
               visible.map((r) => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #222' }}>
-                  <td style={{ ...td, color: '#aaa', whiteSpace: 'nowrap' }}>{fmt(r.at)}</td>
+                <tr key={r.id} style={{ borderBottom: `1px solid ${V2Theme.surfaceBorder}` }}>
+                  <td style={{ ...td, color: V2Theme.surfaceText, whiteSpace: 'nowrap' }}>{fmt(r.at)}</td>
                   <td style={td}>
-                    <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: actionColor(r.action), backgroundColor: `${actionColor(r.action)}22` }}>{r.action}</span>
+                    <V2Badge status={r.action} label={r.action} />
                   </td>
-                  <td style={{ ...td, fontFamily: 'monospace', color: '#ccc' }}>{r.bookingId}</td>
-                  <td style={{ ...td, fontFamily: 'monospace', color: '#888' }}>{r.byUid}</td>
+                  <td style={{ ...td, fontFamily: V2Theme.fontMono, color: V2Theme.surfaceText }}>{r.bookingId}</td>
+                  <td style={{ ...td, fontFamily: V2Theme.fontMono, color: V2Theme.surfaceTextMuted }}>{r.byUid}</td>
                   <td style={{ ...td, color: roleColor(r.byRole), fontWeight: 'bold' }}>{r.byRole}</td>
                 </tr>
               ))
@@ -130,5 +141,5 @@ export default function BookingAudit() {
   );
 }
 
-const th = { padding: '12px 14px', fontSize: '11px', fontWeight: 700 as const, textTransform: 'uppercase' as const };
-const td = { padding: '11px 14px', color: '#ccc' };
+const th: React.CSSProperties = { padding: '12px 14px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' };
+const td: React.CSSProperties = { padding: '11px 14px', color: V2Theme.surfaceText };
