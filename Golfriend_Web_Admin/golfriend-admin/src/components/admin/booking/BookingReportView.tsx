@@ -13,6 +13,7 @@ import {
   aggregate, exportCSV, exportTXT, reconcile,
   type BookingRecord, type ReportOutput,
 } from './BookingReport';
+import BookingReadiness from './BookingReadiness';
 
 // ── Report UI localisation — exactly 8 canonical locales ─────────────────────
 
@@ -383,6 +384,8 @@ export default function BookingReportView({ onDrillStatus, onDrillQueue }: Props
       )}
 
       {/* ── Summary metrics ── */}
+      <BookingReadiness locale={locale} />
+
       {report && s && (
         <>
           <SectionLabel>{L.summary}</SectionLabel>
