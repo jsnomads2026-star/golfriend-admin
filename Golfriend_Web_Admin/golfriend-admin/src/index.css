@@ -1,6 +1,73 @@
 @import "tailwindcss";
 
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
-  background-color: #111827; 
+  background-color: #111827;
   margin: 0;
+  /* Prevent horizontal scroll on narrow viewports */
+  overflow-x: hidden;
+}
+
+/* Responsive layout helpers for V2 public/portal shell */
+@media (max-width: 640px) {
+  /* Public landing: stack nav links vertically */
+  nav [style*="flex"] { flex-wrap: wrap; }
+  /* Admin/portal sidebars: collapse to top bar */
+  [style*="width: 280px"],
+  [style*="width: 260px"] {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid #2A4A3A;
+  }
+  /* Pricing grid: single column */
+  [style*="1 1 360px"] { flex-basis: 100% !important; }
+}
+
+/* Respect reduced-motion: suppress CSS keyframe animations site-wide */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .gf-o { animation: none !important; }
+}
+
+.c3a-readiness { margin: 0 0 20px; padding: 16px; border: 1px solid #2A4A3A; border-radius: 12px; background: #14221c; }
+.c3a-readiness-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.c3a-readiness h3 { margin: 0; color: #d9b55a; font-size: 16px; }
+.c3a-readiness h4 { margin: 0 0 6px; font-size: 13px; text-transform: capitalize; }
+.c3a-readiness p { margin: 5px 0; color: #aebbb4; font-size: 12px; line-height: 1.5; }
+.c3a-readiness button { min-width: 44px; min-height: 44px; padding: 8px 14px; border: 1px solid #d9b55a; border-radius: 8px; background: transparent; color: #d9b55a; font-weight: 700; cursor: pointer; }
+.c3a-readiness button:focus-visible { outline: 3px solid #f4d77d; outline-offset: 3px; }
+.c3a-readiness-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin: 12px 0 0; }
+.c3a-readiness-meta div, .c3a-readiness-grid article { min-width: 0; padding: 10px; border: 1px solid #2A4A3A; border-radius: 8px; background: #101c17; }
+.c3a-readiness dt { color: #82948a; font-size: 10px; text-transform: uppercase; }
+.c3a-readiness dd { margin: 4px 0 0; color: #edf3ef; overflow-wrap: anywhere; }
+.c3a-readiness-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-top: 12px; }
+.c3a-readiness-grid[hidden] { display: none; }
+@media (max-width: 390px) {
+  .c3a-readiness { padding: 12px; }
+  .c3a-readiness-header, .c3a-readiness button { width: 100%; }
+  .c3a-readiness-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.c3b-release-readiness { margin: 0 0 20px; padding: 16px; border: 1px solid #2A4A3A; border-radius: 12px; background: #111f19; color: #edf3ef; }
+.c3b-release-readiness h3 { margin: 0; color: #d9b55a; font-size: 17px; }
+.c3b-release-readiness h4 { margin: 0 0 8px; color: #d9b55a; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.c3b-release-truth { margin: 6px 0 12px; color: #f4d77d; font-size: 12px; line-height: 1.5; }
+.c3b-release-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.c3b-release-counts > div { min-width: 0; padding: 10px; border: 1px solid #2A4A3A; border-radius: 8px; background: #14221c; }
+.c3b-release-counts span { display: block; color: #82948a; font-size: 10px; text-transform: uppercase; }
+.c3b-release-counts strong { display: block; margin-top: 4px; font-size: 22px; }
+.c3b-release-classifications { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.c3b-release-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.c3b-release-details article { min-width: 0; padding: 12px; border: 1px solid #2A4A3A; border-radius: 8px; background: #0d1814; }
+.c3b-release-details strong { color: #edf3ef; font-size: 12px; text-transform: capitalize; }
+.c3b-release-details p, .c3b-release-details li { color: #aebbb4; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.c3b-release-details ul { margin: 5px 0 10px; padding-left: 18px; }
+@media (max-width: 390px) {
+  .c3b-release-readiness { padding: 12px; }
+  .c3b-release-counts, .c3b-release-details { grid-template-columns: minmax(0, 1fr); }
 }
