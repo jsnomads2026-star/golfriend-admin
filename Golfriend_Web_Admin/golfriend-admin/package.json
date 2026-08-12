@@ -30,9 +30,10 @@
     "verify:admin-shell": "node scripts/admin-shell-verify.mjs",
     "verify:course-operations": "node scripts/course-operations-verify.mjs",
     "verify:marketing-library": "node scripts/marketing-library-verify.mjs",
+    "verify:partner-operations": "node scripts/partner-operations-verify.mjs",
     "check:laneb": "node scripts/laneb-rules-contract-check.mjs",
     "precommission": "node scripts/precommission-evidence.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run gate:fnauth && npm run gate:godmode && npm run gate:clientcallable && npm run gate:fnexport && npm run gate:coursewrites && npm run test:golfapi-preflight && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops && npm run verify:coursepreview && npm run verify:course-operations && npm run verify:marketing-library && npm run verify:seed && npm run verify:nav && npm run verify:precommission",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run gate:fnauth && npm run gate:godmode && npm run gate:clientcallable && npm run gate:fnexport && npm run gate:coursewrites && npm run test:golfapi-preflight && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops && npm run verify:coursepreview && npm run verify:course-operations && npm run verify:marketing-library && npm run verify:partner-operations && npm run verify:seed && npm run verify:nav && npm run verify:precommission",
     "lint": "eslint .",
     "preview": "vite preview"
   },
