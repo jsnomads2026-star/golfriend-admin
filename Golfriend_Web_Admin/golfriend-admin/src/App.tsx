@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
@@ -38,6 +38,10 @@ import VendorControlSystem from './components/admin/oem/VendorControlSystem';
 import OemProductForge from './components/admin/oem/OemProductForge';
 // OrderFulfillmentHub removed from navigation (updateFulfillmentOrder quarantined — fail-closed).
 import BuyerCustomerCRM from './components/admin/oem/BuyerCustomerCRM';
+import V2AdminShell from './components/admin/v2/V2AdminShell';
+import V2AdminOverview from './components/admin/v2/V2AdminOverview';
+import V2AdminReports from './components/admin/v2/V2AdminReports';
+import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
   return (
@@ -87,6 +91,10 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [authError, setAuthError] = useState('');
 
   const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'bookingaudit' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedArea = searchParams.get('area');
+  const activeArea: AdminArea = isAdminArea(requestedArea) ? requestedArea : 'overview';
+  const setActiveArea = (area: AdminArea) => setSearchParams(area === 'overview' ? {} : { area });
 
   // CORE AUTH LISTENER — access is derived ONLY from server-owned role docs.
   useEffect(() => {
@@ -218,6 +226,17 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
       </div>
     );
   }
+
+  return <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
+    {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
+    {activeArea === 'courses' && <><CourseSeeder /><TeeTimeInventory /><CourseSyncConsole /><CourseTeeSheet /></>}
+    {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
+    {activeArea === 'partners' && <><PartnerVault /><HRManagement /></>}
+    {activeArea === 'marketing' && <><EventGenesisConsole /><LiveAutomationLog /></>}
+    {activeArea === 'advertising' && <SponsorDashboard />}
+    {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
+    {activeArea === 'reports' && <V2AdminReports />}
+  </V2AdminShell>;
 
   return (
     <div style={styles.masterContainer}>
