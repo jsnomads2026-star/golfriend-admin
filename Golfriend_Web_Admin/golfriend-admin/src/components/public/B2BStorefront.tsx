@@ -4,6 +4,18 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
 
+// Retained for a future separately approved financial slice. No current UI or
+// lifecycle path calls this router.
+function _preservedRouteToStripe_doNotCall(uid: string, tier: string, cycle: string) {
+  const links: Record<string, Record<string, string>> = {
+    'Small Business': { monthly: 'https://buy.stripe.com/test_aFa6oI4OKdUa3ecfOQ6Na03', '6_months': 'https://buy.stripe.com/test_4gw00c0yuaHYcOMfOQ6Na04', '1_year': 'https://buy.stripe.com/test_3cTdtAa2GcGYe820fOQ6Na05' },
+    Enterprise: { monthly: 'https://buy.stripe.com/test_bJe28s2GC4jA5mkauw6Na06', '6_months': 'https://buy.stripe.com/test_9B028s95017ocOMfOQ6Na07', '1_year': 'https://buy.stripe.com/test_5kQdRa5SOdUag0YbyA6Na08' },
+  };
+  const safeTier = tier === 'Enterprise' ? 'Enterprise' : 'Small Business';
+  window.location.href = `${links[safeTier]?.[cycle] ?? links['Small Business'].monthly}?client_reference_id=${uid}`;
+}
+void _preservedRouteToStripe_doNotCall;
+
 function SubscriptionUnavailable() {
   return <div role="status" aria-live="polite" data-policy-unavailable="non-financial-precommission" style={styles.unavailable}>
     <strong style={{ color: V2Theme.gold }}>Pre-commission build</strong>
