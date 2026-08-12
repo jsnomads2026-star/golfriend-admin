@@ -1,0 +1,187 @@
+{
+  "candidate_head": "967e3c8",
+  "generated_at": "2026-08-11T05:29:36.390Z",
+  "algorithm": "sha256",
+  "files": [
+    {
+      "file": "package.json",
+      "sha256": "7e7441723f8e84770ebd2b2e250b26d91a78eb8e8d8422003a8296f271f54da4",
+      "bytes": 2565
+    },
+    {
+      "file": ".firebaserc",
+      "sha256": "db3104c9ef39435da97743bbfdfb67f5fc71feefa4239dd77ef7a3e1d9bc8028",
+      "bytes": 59
+    },
+    {
+      "file": "functions/package.json",
+      "sha256": "20c4cbd9804f234194af18f25d347298d5b597c36f45617534b19f48161ee221",
+      "bytes": 1453
+    },
+    {
+      "file": "functions/src/index.ts",
+      "sha256": "a2a89a7fa70f357330ea7fe2c75e999e16138a65780ce3524a643b4f63393c80",
+      "bytes": 79320
+    },
+    {
+      "file": "functions/src/courseSync.ts",
+      "sha256": "5e05798bfa09f361b531b798385823f14eaac7b4035ddb41fbbeefae760cf951",
+      "bytes": 4663
+    },
+    {
+      "file": "functions/src/bookingLogic.ts",
+      "sha256": "07837f4a3bb14c117bec1018dad1114bae54a4688731eb96f537fada1e55702f",
+      "bytes": 3208
+    },
+    {
+      "file": "functions/src/authority.ts",
+      "sha256": "d55da07bae7f3dc7092644858c5caed1028633b5daaee735062b860c5d1cdf3b",
+      "bytes": 1439
+    },
+    {
+      "file": "src/App.tsx",
+      "sha256": "0595d0a7dd6ee6652fa77fec8c91cf99b31d599d3bc6e4dcb1533420eec2d048",
+      "bytes": 20867
+    },
+    {
+      "file": "src/firebaseConfig.ts",
+      "sha256": "225966bf1fa6a159822cd689f9f3aea35fb190db6525007537970a65c4cc07e1",
+      "bytes": 1429
+    },
+    {
+      "file": "src/firebaseTarget.js",
+      "sha256": "736bd6698e5a1ab68b321f0a54ff465f19a41d3ec023e07eef9ac8c8550cfeb5",
+      "bytes": 3720
+    },
+    {
+      "file": "src/auth/roleJourney.js",
+      "sha256": "46eecf4c26398625a4285d2ea0a859d3d5f8eb21de9f4a1e20e0d174bce00591",
+      "bytes": 3552
+    },
+    {
+      "file": "src/components/admin/BookingAudit.tsx",
+      "sha256": "f08d5fed8ec9c36cdf7f6e2fd99fccf9f710ac54ce95234f8b2da0696715b5b3",
+      "bytes": 6426
+    },
+    {
+      "file": "AUTHORITY_MANIFEST.md",
+      "sha256": "044fb85e3832153d4eee50f6ad7d06f3a3597434998f8e4ebea7214a78bf5a6c",
+      "bytes": 4329
+    },
+    {
+      "file": "docs/LANEB_RULES_HANDOFF.md",
+      "sha256": "4f592ff91927d7cba35d309abe8901a1d41745a8563eeb784b47219a95c2d57a",
+      "bytes": 18293
+    },
+    {
+      "file": "docs/BLANK_PROJECT_MANIFEST.md",
+      "sha256": "fd9ff0f26b76b52c4a72a5177c74ff1eee0d078923ab0a73dfa6204dd6349ccd",
+      "bytes": 6710
+    },
+    {
+      "file": "docs/FIREBASE_V1V2_INVENTORY.md",
+      "sha256": "0b4c1b1a026579aee27aedcf7a6049140b18f56c2e1ba71989874cbcbbcc4694",
+      "bytes": 9373
+    },
+    {
+      "file": "docs/V2_MIGRATION_CHECKLIST.md",
+      "sha256": "0465ebcb9512032da5d92440d73a032a1d21a49e0045cc681499deb1a2017cb2",
+      "bytes": 2892
+    },
+    {
+      "file": "docs/PORTAL_AUTH_JOURNEY.md",
+      "sha256": "c85b0e9c88acace73a2ce37c1419ded33a6dfd61f265cd345088de34bf0b28ac",
+      "bytes": 4911
+    },
+    {
+      "file": "docs/COURSE_OPS_COMMISSIONING.md",
+      "sha256": "bcbc71df1713f8f8e99d9effea5107e73ea55b0ef6b848c42f67269bb64a8be4",
+      "bytes": 2699
+    },
+    {
+      "file": "scripts/functions-authority-gate.mjs",
+      "sha256": "b3eac05371a523eb78d26111b40fca98e17a064d602498ab4a7861e9ce081dd3",
+      "bytes": 3028
+    },
+    {
+      "file": "LANEC_LEDGER.json",
+      "sha256": "39308e68686dfafb883797bf5f8b6fff08ea5ee4857f3621ccd45ff460e87ccd",
+      "bytes": 8323
+    },
+    {
+      "file": "LANEB_DEPENDENCY_PIN.json",
+      "sha256": "48b7858b59d0900af27305404d3cfdfe9775c119a48d2ff6a9043a1339fb46ba",
+      "bytes": 1772
+    },
+    {
+      "file": "fixtures/lanec-clean-v2-seed.json",
+      "sha256": "f0ef422b4aae1e6bd867362314ef95db436f58382e0228fdeadf816b35e237e5",
+      "bytes": 16288
+    },
+    {
+      "file": "scripts/lanec-seed-conformance-verify.mjs",
+      "sha256": "a759d6106aebd8a9304dec60dd3c3ed6e0674c46d602c8a8aa1560d333c55c0f",
+      "bytes": 29941
+    },
+    {
+      "file": "scripts/precommission-evidence.mjs",
+      "sha256": "b505e6c60340e2a116cda969afe39400265b5a32d9a8a5a889ff441b1a50971c",
+      "bytes": 6777
+    },
+    {
+      "file": "functions/src/v2AuthorityConformance.test.ts",
+      "sha256": "fdafe0d3f239c61b5e1410d4af37a3be7e0b9aaaba5d61aff0894796e1dfcc4c",
+      "bytes": 4848
+    },
+    {
+      "file": "scripts/functions-godmode-gate.mjs",
+      "sha256": "16e4c4b53264e380b1097c1b022c851a650785aeb35fdca0c5bdadef6969eff6",
+      "bytes": 5526
+    },
+    {
+      "file": "docs/V2_CALLABLE_AUTHORITY_CLASSIFICATION.md",
+      "sha256": "7c49694410636b4af6ce5b496d93ed2dc86036ebb4b6547dc6c03d3d863293fa",
+      "bytes": 7236
+    },
+    {
+      "file": "src/components/common/PolicyUnavailable.tsx",
+      "sha256": "fa72493cd26936a44f483f66a60f2053a280b472f6358bdb9d0ba02d001eda40",
+      "bytes": 2444
+    },
+    {
+      "file": "scripts/client-callable-gate.mjs",
+      "sha256": "fbe69167814cb5cac430589a7c714f87361d548c19d83c73636e6987d91df017",
+      "bytes": 4640
+    },
+    {
+      "file": "scripts/nav-reachability-verify.mjs",
+      "sha256": "9d68f8ae61297022a283c3929c15babeb31304fb7cb950580ac1b629960b0fd1",
+      "bytes": 4454
+    },
+    {
+      "file": "docs/V2_SCHEDULED_JOBS_CLASSIFICATION.md",
+      "sha256": "a33009e6cb496cb3868ff798ec724f74c3d78826fb745bb04d683c43e9bef0c8",
+      "bytes": 3411
+    },
+    {
+      "file": "functions/src/janitorLogic.ts",
+      "sha256": "bb50280b6ff4814215ff66abbfc434f4a58f6e9fe30859ce498f38bc174b24f4",
+      "bytes": 5718
+    },
+    {
+      "file": "functions/src/janitorLogic.test.ts",
+      "sha256": "15f1010fa40d5c1c6a08035a5a952c665bf5e8ddef869c88e7905840a417e519",
+      "bytes": 4795
+    },
+    {
+      "file": "scripts/functions-export-gate.mjs",
+      "sha256": "62bd59c42d28d57efa2821472701e452fb198e1a4ed1e87482d1ba76a7c03dae",
+      "bytes": 4391
+    },
+    {
+      "file": "docs/QUARANTINED_LEGACY_FINANCIAL_JOBS.md",
+      "sha256": "810c06bcf62e7a62353a485f0dd38085ddd0bd52eeecb6f95f438c1c929e5fee",
+      "bytes": 7438
+    }
+  ]
+}

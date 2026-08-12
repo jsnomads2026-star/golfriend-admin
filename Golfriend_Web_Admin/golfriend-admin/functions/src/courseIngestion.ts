@@ -2,6 +2,7 @@ import {defineSecret} from "firebase-functions/params";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import {isActiveStaff} from "./authority.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -64,8 +65,7 @@ function normaliseCandidates(payload: any): Candidate[] {
 
 async function requireCoordinator(uid: string): Promise<void> {
   const adminUser = await db.collection("admin_users").doc(uid).get();
-  const role = adminUser.data()?.role;
-  if (!adminUser.exists || !["Director", "Manager", "Coordinator"].includes(role)) {
+  if (!adminUser.exists || !isActiveStaff(adminUser.data())) {
     throw new HttpsError("permission-denied", "Course ingestion requires an authorised coordinator.");
   }
 }

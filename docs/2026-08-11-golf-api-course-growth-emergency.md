@@ -1,6 +1,6 @@
 # Golf API course growth emergency decision
 
-Date: 2026-08-11  
+Date: 2026-08-11
 Owner: Golfriend Admin
 
 ## Decision

@@ -1,0 +1,195 @@
+{
+  "lane": "C",
+  "candidate_branch": "feat/laneC-consolidated",
+  "candidate_head": "967e3c8",
+  "generated_at": "2026-08-11T05:29:37.266Z",
+  "automated_controls": [
+    {
+      "control": "gate:authority",
+      "type": "automated",
+      "status": "pass",
+      "proves": "no client authoritative writes (12 collections)",
+      "detail": "✅ Authority gate passed: no client authoritative writes across 12 collections (allowlist: 2 quarantined files)."
+    },
+    {
+      "control": "gate:dead-route",
+      "type": "automated",
+      "status": "pass",
+      "proves": "quarantined components unrouted/guarded; no superseded financial booking",
+      "detail": "✅ Dead-route gate passed: quarantined components stay unrouted + guarded; no superseded financial booking restored."
+    },
+    {
+      "control": "gate:v2",
+      "type": "automated",
+      "status": "pass",
+      "proves": "v2-preview fail-closed; zero-V1",
+      "detail": "✅ v2 zero-V1 gate passed: v2-preview is fail-closed and resolves no golfriend-v1 identity/target."
+    },
+    {
+      "control": "gate:a11y",
+      "type": "automated",
+      "status": "pass",
+      "proves": "portal state screens accessible; no God-Mode/TV-bypass/raw error",
+      "detail": "GATE PASSED: all checks green."
+    },
+    {
+      "control": "gate:fnauth",
+      "type": "automated",
+      "status": "pass",
+      "proves": "syncCoursesFromProvider authorizes via server-owned staff; no email God-Mode/env bypass",
+      "detail": "✅ functions-authority gate passed: syncCoursesFromProvider authorizes via server-owned active staff only; no email God-Mode / env bypass; authority core fail-cl"
+    },
+    {
+      "control": "gate:godmode",
+      "type": "automated",
+      "status": "pass",
+      "proves": "repository-wide: no admin@golfriend.co/caller-email/env God-Mode; retained callables use server-owned authority; quarantined callables fail-closed",
+      "detail": "✅ functions-godmode gate passed: repository-wide — no admin@golfriend.co / caller-email / env God-Mode authority; 7 retained callables use server-owned staff/Di"
+    },
+    {
+      "control": "gate:clientcallable",
+      "type": "automated",
+      "status": "pass",
+      "proves": "no reachable client surface invokes any quarantined/unresolved callable; prohibited consoles unreachable",
+      "detail": "✅ client-callable gate passed: no reachable surface invokes any of the 9 quarantined callables; 9 prohibited consoles unreachable; approved journeys intact."
+    },
+    {
+      "control": "gate:fnexport",
+      "type": "automated",
+      "status": "pass",
+      "proves": "hourlyTreasurySweep + stripeB2BWebhook cannot enter the clean-V2 bundle; weeklyVaultJanitor is lock-safe/fail-closed via the pure core",
+      "detail": "✅ functions-export gate passed: hourlyTreasurySweep + stripeB2BWebhook cannot enter the clean-V2 bundle; weeklyVaultJanitor routes through the hardened lock-saf"
+    },
+    {
+      "control": "verify:nav",
+      "type": "automated",
+      "status": "pass",
+      "proves": "quarantined console tabs render PolicyUnavailable; approved journeys remain mounted",
+      "detail": "✅ nav reachability verify passed: all quarantined/unresolved console tabs render PolicyUnavailable; no prohibited console is mounted; approved booking/availabil"
+    },
+    {
+      "control": "verify:booking",
+      "type": "automated",
+      "status": "pass",
+      "proves": "non-financial booking journey",
+      "detail": "✅ Booking journey verified: 11/11 checks passed (strictly non-financial)."
+    },
+    {
+      "control": "verify:v2",
+      "type": "automated",
+      "status": "pass",
+      "proves": "synthetic V2 non-financial journey; zero V1",
+      "detail": "✅ synthetic V2 verification passed: non-financial journey (requested → messaged → confirmed → cancelled → audit) runs under injected V2 identities with zero V1 "
+    },
+    {
+      "control": "verify:roles",
+      "type": "automated",
+      "status": "pass",
+      "proves": "cross-role journey matrix; server-owned derivation",
+      "detail": "OK: every journey state reachable; server-owned derivation + zero-V1 verified."
+    },
+    {
+      "control": "verify:guards",
+      "type": "automated",
+      "status": "pass",
+      "proves": "every privileged route behind the resolver",
+      "detail": "✅ ROUTE-GUARD VERIFY PASSED — all 14 checks green. Every privileged route/surface is behind the server-owned resolver."
+    },
+    {
+      "control": "verify:courseops",
+      "type": "automated",
+      "status": "pass",
+      "proves": "course-ops commissioning journey under synthetic V2",
+      "detail": "✅ course-ops commissioning journey passed under synthetic v2-preview: sync(dry-run/validation/manual-lock/audit) → inventory/availability → operator assignment "
+    },
+    {
+      "control": "verify:seed",
+      "type": "automated",
+      "status": "pass",
+      "proves": "clean-V2 course/role/portal seed & journey conformance; zero-V1; non-financial",
+      "detail": "✅ Lane C seed/journey conformance PASSED under synthetic v2-preview: authority + projections + journeys + media + invariants; zero V1. Evidence: SEED_CONFORMANC"
+    }
+  ],
+  "externally_run_automated": [
+    {
+      "control": "build:web",
+      "command": "npm run build",
+      "proves": "tsc -b && vite build",
+      "type": "automated",
+      "status": "run-separately-this-commit"
+    },
+    {
+      "control": "build:functions",
+      "command": "npm --prefix functions run build",
+      "proves": "functions tsc",
+      "type": "automated",
+      "status": "run-separately-this-commit"
+    },
+    {
+      "control": "test:functions",
+      "command": "npm --prefix functions test",
+      "proves": "courseSync + bookingLogic (22/22)",
+      "type": "automated",
+      "status": "run-separately-this-commit"
+    },
+    {
+      "control": "check:laneb",
+      "command": "LANEB_DIR=<checkout> npm run check:laneb",
+      "proves": "Lane B v2-preview rules/index match published contract (skips without LANEB_DIR)",
+      "type": "automated",
+      "status": "run-separately-this-commit"
+    }
+  ],
+  "manual_provider_controls": [
+    {
+      "control": "seed-first-director",
+      "owner": "human/infra",
+      "note": "write admin_users/{uid} Director out-of-band (server-owned admin; no email God-Mode)",
+      "autoApproval": false,
+      "status": "BLOCKED"
+    },
+    {
+      "control": "firestore-rules-deploy",
+      "owner": "Lane B I1-B + deploy approval",
+      "note": "author + deploy rules from the published contract",
+      "autoApproval": false,
+      "status": "BLOCKED"
+    },
+    {
+      "control": "v2-provider-appcheck",
+      "owner": "issue #21 / infra",
+      "note": "V2 project, App Check, provider identities",
+      "autoApproval": false,
+      "status": "BLOCKED"
+    },
+    {
+      "control": "emulator-auth-and-runs",
+      "owner": "infra/founder",
+      "note": "emulator authorization + runs",
+      "autoApproval": false,
+      "status": "BLOCKED"
+    },
+    {
+      "control": "deploy-hosting-functions",
+      "owner": "founder/infra",
+      "note": "production deployment",
+      "autoApproval": false,
+      "status": "BLOCKED"
+    },
+    {
+      "control": "ci-status",
+      "owner": "CI",
+      "note": "workflow runs (none currently reported)",
+      "autoApproval": false,
+      "status": "BLOCKED"
+    }
+  ],
+  "manifest_hashes_ref": "MANIFEST_HASHES.json",
+  "ledger_ref": "LANEC_LEDGER.json",
+  "summary": {
+    "automated_total": 15,
+    "automated_pass": 15,
+    "automated_fail": 0,
+    "manual_blocked": 6
+  }
+}

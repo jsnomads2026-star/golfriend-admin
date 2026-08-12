@@ -1,0 +1,28 @@
+{
+  "run": "authorized visible precommission — Web/Admin/SB-Portal/Enterprise-Portal",
+  "notFullTest": true,
+  "mode": { "VITE_FIREBASE_PROJECT": "precommission", "projectId": "demo-golfriend-v2-canonical", "usingEmulators": true },
+  "emulatorPorts": { "auth": 19701, "firestore": 19711, "functions": 5203, "storage": 19721, "host": "127.0.0.1" },
+  "authProof": { "authEmulatorConfig": { "host": "127.0.0.1", "port": 19701, "protocol": "http" }, "authApiKey": "demo-precommission-emulator-key" },
+  "seed": { "source": "fixtures/lanec-clean-v2-seed.json (Lane C-owned slice)", "authUsers": 10, "firestoreDocs": 43 },
+  "surfaces": [
+    { "surface": "web", "port": 5180, "firebaseCalls": 0, "external_nonlocal": [], "result": "renders (static landing); no Firebase calls" },
+    { "surface": "admin", "port": 5181, "firebaseCallsLocalhost": 5, "external_nonlocal": [],
+      "sample": [
+        "http://127.0.0.1:19701/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-precommission-emulator-key",
+        "http://127.0.0.1:19701/identitytoolkit.googleapis.com/v1/accounts:lookup?key=demo-precommission-emulator-key",
+        "http://127.0.0.1:19711/google.firestore.v1.Firestore/Listen/channel?database=projects/demo-golfriend-v2-canonical/databases/(default)"
+      ],
+      "journeys": { "bookingAudit": "2 events", "bookingOversight": "1 booking", "hrStaff": "5 staff incl negatives", "teeTimeInventory": "3 slots", "courseVault": "BLOCKED permission-denied (courses)" } },
+    { "surface": "small-business-portal", "port": 5182, "firebaseCallsLocalhost": 5, "external_nonlocal": [],
+      "journeys": { "operatorAuth": "OK ex_operator_evan (emulator)", "dashboard": "BLOCKED permission-denied (b2b_partners @ L134)" } },
+    { "surface": "enterprise-portal", "port": 5183, "external_nonlocal": [],
+      "journeys": { "enterpriseAuth": "OK ex_enterprise_erin (emulator)", "dashboard": "BLOCKED permission-denied (b2b_partners)" } }
+  ],
+  "boundaryVerdict": "Every Firebase request on every surface targeted 127.0.0.1 emulator ports; zero requests reached any production / googleapis / golfriend-v1 endpoint.",
+  "blockedFlows": [
+    "b2b_partners read permission-denied under v2-preview rules → both portal dashboards blocked (auth works)",
+    "courses read permission-denied → admin course vault / tee-time course dropdown empty",
+    "full cross-lane canonical dataset (auth 23 / firestore 149 / storage 66 + Lane A media) not loaded — Lane B orchestrator dependency"
+  ]
+}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../firebaseConfig';
 
@@ -34,11 +34,27 @@ export default function CourseSeeder() {
   const [location, setLocation] = useState('12.9236, 100.8825');
   const [radiusKm, setRadiusKm] = useState('50');
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [working, setWorking] = useState<'preview' | 'commit' | null>(null);
+  const [working, setWorking] = useState<'preview' | 'commit' | 'manual' | null>(null);
   const [search, setSearch] = useState('');
   const [manualGps, setManualGps] = useState<Record<string, string>>({});
 
   const addLog = (message: string) => setLogs((current) => [...current, message]);
+
+  // Retained fail-closed compatibility boundaries for the superseded browser-side
+  // provider operations. Regional discovery and ingestion now run only through
+  // authenticated Cloud Functions with the provider key held server-side.
+  const healBrokenVault = async () => {
+    return;
+  };
+  const executeMassRescue = async () => {
+    return;
+  };
+  const fetchLiveCourse = async () => {
+    return;
+  };
+  void healBrokenVault;
+  void executeMassRescue;
+  void fetchLiveCourse;
 
   const fetchVault = async () => {
     const snapshot = await getDocs(collection(db, 'courses'));
@@ -110,49 +126,43 @@ export default function CourseSeeder() {
       addLog(`Invalid manual coordinates for ${course.clubName || course.name}.`);
       return;
     }
-    await setDoc(doc(db, 'courses', course.docId || courseId), {
-      latitude, longitude, lat: latitude, lng: longitude,
-      requiresCoordinatorReview: false,
-      requiresManualGPS: false,
-      manuallyCorrected: true,
-      lastManualCorrectionAt: new Date().toISOString(),
-    }, {merge: true});
-    setManualGps((current) => ({...current, [courseId]: ''}));
-    addLog(`Saved coordinator coordinates for ${course.clubName || course.name}.`);
-    await fetchVault();
+    setWorking('manual');
+    try {
+      const setManualCoordinates = httpsCallable(getFunctions(), 'setManualCourseCoordinates');
+      await setManualCoordinates({courseId, latitude, longitude});
+      setManualGps((current) => ({...current, [courseId]: ''}));
+      addLog(`Saved audited coordinator coordinates for ${course.clubName || course.name}.`);
+      await fetchVault();
+    } catch (error: any) {
+      addLog(`Manual coordinate correction failed: ${error.message}`);
+    } finally {
+      setWorking(null);
+    }
   };
 
   return (
     <div style={{padding: 20, margin: 20, color: '#fff', background: '#171a1d', border: '1px solid #34513e', borderRadius: 12}}>
       <h2 style={{marginTop: 0, color: '#d4af37'}}>Golf Course Data Operations</h2>
       <p style={{color: '#bbb'}}>Firebase first. Preview before commit. Golf API credentials remain server-side.</p>
-
       <div style={{display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18}}>
-        <strong>Firebase courses: {health.total}</strong>
-        <span>Coordinator review: {health.review}</span>
-        <span>Missing GPS: {health.missingGps}</span>
+        <strong>Firebase courses: {health.total}</strong><span>Coordinator review: {health.review}</span><span>Missing GPS: {health.missingGps}</span>
       </div>
-
       <div style={{padding: 16, background: '#0f1214', borderRadius: 8, marginBottom: 18}}>
         <h3 style={{marginTop: 0}}>Regional growth batch</h3>
         <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
           <input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="latitude, longitude" style={{minWidth: 230, padding: 9}} />
           <input type="number" min="1" max="200" value={radiusKm} onChange={(event) => setRadiusKm(event.target.value)} style={{width: 90, padding: 9}} />
-          <button onClick={previewImport} disabled={working !== null} style={{padding: '9px 15px'}}> {working === 'preview' ? 'Checking…' : 'Preview missing courses'} </button>
+          <button onClick={previewImport} disabled={working !== null} style={{padding: '9px 15px'}}>{working === 'preview' ? 'Checking…' : 'Preview missing courses'}</button>
         </div>
-
         {preview && (
           <div style={{marginTop: 14, padding: 14, border: '1px solid #d4af37', borderRadius: 8}}>
             <div>{preview.discovered} discovered · {preview.alreadyInFirebase} already cached · {preview.newCoursesReady} ready to add</div>
             {preview.remainingAfterBatch > 0 && <div>{preview.remainingAfterBatch} remain for the next controlled batch.</div>}
             <ul>{preview.courses.map((course) => <li key={course.courseID}>{course.clubName} — {course.name} {course.country ? `(${course.country})` : ''}</li>)}</ul>
-            <button onClick={commitImport} disabled={working !== null || preview.newCoursesReady === 0} style={{padding: '9px 15px', background: '#1f6d42', color: '#fff'}}>
-              {working === 'commit' ? 'Importing…' : `Approve and add ${preview.newCoursesReady}`}
-            </button>
+            <button onClick={commitImport} disabled={working !== null || preview.newCoursesReady === 0} style={{padding: '9px 15px', background: '#1f6d42', color: '#fff'}}>{working === 'commit' ? 'Importing…' : `Approve and add ${preview.newCoursesReady}`}</button>
           </div>
         )}
       </div>
-
       <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Firebase courses" style={{width: '100%', boxSizing: 'border-box', padding: 9, marginBottom: 10}} />
       <div style={{maxHeight: 320, overflowY: 'auto'}}>
         {filtered.map((course) => {
@@ -163,14 +173,13 @@ export default function CourseSeeder() {
               {!hasCoordinates(course) && (
                 <div style={{display: 'flex', gap: 8, marginTop: 7}}>
                   <input value={manualGps[courseId] || ''} onChange={(event) => setManualGps((current) => ({...current, [courseId]: event.target.value}))} placeholder="latitude, longitude" />
-                  <button onClick={() => saveManualCoordinates(course)}>Save verified GPS</button>
+                  <button onClick={() => saveManualCoordinates(course)} disabled={working !== null}>Save verified GPS</button>
                 </div>
               )}
             </div>
           );
         })}
       </div>
-
       <div style={{marginTop: 18, padding: 12, background: '#080909', maxHeight: 220, overflowY: 'auto', fontFamily: 'monospace', fontSize: 12}}>
         {logs.length ? logs.map((log, index) => <div key={`${index}-${log}`}>{log}</div>) : 'Ready for a dry-run preview.'}
       </div>

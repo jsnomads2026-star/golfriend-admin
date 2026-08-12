@@ -1,0 +1,268 @@
+{
+  "lane": "C",
+  "repo": "jsnomads2026-star/golfriend-admin",
+  "candidate_branch": "feat/laneC-consolidated",
+  "candidate_head": "967e3c8",
+  "candidate_head_full": "967e3c8181e1f5df8ebbf4345d6c3d9dc7af7a75",
+  "accepted_gate_sha": "ca2d6db",
+  "generated_at": "2026-08-11T05:29:36.390Z",
+  "included_commits": [
+    {
+      "hash": "967e3c8",
+      "subject": "fix(laneC-media): exclude unverifiable portal-media bytes (Lane B BLOCKED_MEDIA_BYTES 5249119891)"
+    },
+    {
+      "hash": "6df4fb4",
+      "subject": "chore(laneC): refreeze after canonical projection extension (v1.1.0)"
+    },
+    {
+      "hash": "1df39a9",
+      "subject": "feat(laneC-projection): lossless canonical projection extension (Director 5248925370)"
+    },
+    {
+      "hash": "7b0005c",
+      "subject": "chore(laneC): refreeze evidence after scheduled-job authority slice (15 automated controls)"
+    },
+    {
+      "hash": "704f3ed",
+      "subject": "feat(laneC-jobs): harden weeklyVaultJanitor; quarantine hourlyTreasurySweep + stripeB2BWebhook from the V2 bundle"
+    },
+    {
+      "hash": "1474890",
+      "subject": "chore(laneC): refreeze evidence after client-surface reconciliation (14 automated controls)"
+    },
+    {
+      "hash": "453f8e4",
+      "subject": "feat(laneC-client): reconcile client surfaces to quarantined/unresolved callables"
+    },
+    {
+      "hash": "c7f9cd4",
+      "subject": "chore(laneC): refreeze evidence after lane-wide God-Mode removal (12 automated controls)"
+    },
+    {
+      "hash": "5b70736",
+      "subject": "feat(laneC-security): remove admin@golfriend.co God-Mode lane-wide; classify + quarantine prohibited callables"
+    },
+    {
+      "hash": "f344b9a",
+      "subject": "chore(laneC): refreeze evidence after clean-V2 seed conformance slice (11 automated controls)"
+    },
+    {
+      "hash": "da8c751",
+      "subject": "feat(laneC-seed): clean-V2 course/role/portal seed fixture + journey conformance verifier"
+    },
+    {
+      "hash": "2578759",
+      "subject": "chore(laneC): refreeze evidence after break-glass removal (10 automated controls)"
+    },
+    {
+      "hash": "25bba8f",
+      "subject": "feat(laneC-security): remove admin@golfriend.co break-glass from syncCoursesFromProvider"
+    },
+    {
+      "hash": "cef6530",
+      "subject": "chore(laneC): refresh freeze evidence to current HEAD (ledger/hashes/precommission)"
+    },
+    {
+      "hash": "386182b",
+      "subject": "chore(laneC): drift re-verify Lane B pin c259a1c→db478ba (PASS 13/13)"
+    },
+    {
+      "hash": "67e9ea4",
+      "subject": "feat(laneC): Booking Audit viewer — completes the approved \"audit\" capability"
+    },
+    {
+      "hash": "2ee1bfe",
+      "subject": "chore(laneC): drift re-verify Lane B dependency pin 442afaa→c259a1c (PASS 13/13)"
+    },
+    {
+      "hash": "f24ed0d",
+      "subject": "chore(laneC): C Phase 2 candidate freeze + Phase 3 automated precommission"
+    },
+    {
+      "hash": "8c3d510",
+      "subject": "feat(laneC): LUNCH SPRINT — course-ops commissioning journey + route-guard verify"
+    },
+    {
+      "hash": "81800f1",
+      "subject": "feat(laneC): V2 Portal Authentication & Role Journey (server-owned, fail-closed)"
+    },
+    {
+      "hash": "47d65c3",
+      "subject": "docs(laneC): add GET-vs-LIST read-access safety model to Lane B rules handoff"
+    },
+    {
+      "hash": "b951fd4",
+      "subject": "feat(laneC): C-V2 Commissioning Handoff — fail-closed v2-preview + handoff/manifest + synthetic verify"
+    },
+    {
+      "hash": "ba5b35f",
+      "subject": "docs(laneC): V2 Firebase migration checklist (completes I1-C config abstraction/checklist)"
+    },
+    {
+      "hash": "cd94ef2",
+      "subject": "chore(laneC): C-Integration Prep — ledger, inventory, route map, gates, V2 config"
+    },
+    {
+      "hash": "ca2d6db",
+      "subject": "chore(laneC): authority manifest + fail-closed source gate"
+    },
+    {
+      "hash": "38e6328",
+      "subject": "feat(booking): non-financial frontend + source tests + reporting/ledger cleanup"
+    },
+    {
+      "hash": "3f2f7b3",
+      "subject": "feat(booking): non-financial booking lifecycle + quarantine SponsorWizard (backend)"
+    },
+    {
+      "hash": "c718188",
+      "subject": "chore(laneC): consolidate approved Lane C work into one branch"
+    },
+    {
+      "hash": "54c4fdd",
+      "subject": "Merge branch 'feat/server-side-golf-api-course-sync' into feat/laneC-consolidated"
+    },
+    {
+      "hash": "e919f78",
+      "subject": "fix(security): remove exposed Google Maps key from CourseSeeder client"
+    },
+    {
+      "hash": "9e1c74f",
+      "subject": "feat(laneC): admin booking oversight, enterprise portal, public web (slices 4-6)"
+    },
+    {
+      "hash": "cfdc087",
+      "subject": "feat(course-sync): server-side Golf-API sync with validation & audit"
+    },
+    {
+      "hash": "723fcb5",
+      "subject": "feat(booking): request -> confirm/reject lifecycle (roadmap slice 3)"
+    },
+    {
+      "hash": "1b67e5b",
+      "subject": "feat(sb-portal): course onboarding + availability & pricing (roadmap slice 2)"
+    },
+    {
+      "hash": "1e1cfdd",
+      "subject": "feat(admin): tee-time inventory management (roadmap slice 1)"
+    },
+    {
+      "hash": "d2f1d31",
+      "subject": "Chore: End of day sync to align with mobile Phase 4 economy updates."
+    },
+    {
+      "hash": "66d80e1",
+      "subject": "End of day backup: CourseTeeSheet injected and B2B partner routing secured"
+    },
+    {
+      "hash": "e3b59df",
+      "subject": "refactor(ui): complete B2B Admin dashboard transition and partner vault"
+    },
+    {
+      "hash": "9b89cc5",
+      "subject": "init: spin up Vite/React admin dashboard, clear JSX strict errors, and wire Event Genesis Console to Firestore"
+    }
+  ],
+  "superseded_branches": [
+    {
+      "branch": "feat/admin-tee-time-inventory",
+      "tip": "1e1cfdd",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/sbportal-course-onboarding-availability",
+      "tip": "1b67e5b",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/booking-request-confirm-lifecycle",
+      "tip": "723fcb5",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/laneC-slices-4-5-6",
+      "tip": "9e1c74f",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/server-side-golf-api-course-sync",
+      "tip": "e919f78",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/b2b-server-authoritative-contract-cancel",
+      "tip": "2830eca",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/b2b-server-authoritative-incident-report",
+      "tip": "8f21e84",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-escrow-resolve",
+      "tip": "bb24f9f",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-moderation-strike",
+      "tip": "8e5e0fe",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-manual-override",
+      "tip": "a1b9f2a",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-b2b-partners",
+      "tip": "04cec31",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/admin-server-authoritative-hr-status",
+      "tip": "99449dd",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/laneC-hardening-batch2",
+      "tip": "db816c1",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    },
+    {
+      "branch": "feat/laneC-hardening-batch3",
+      "tip": "00dcc46",
+      "status": "superseded_folded_in",
+      "do_not_merge": true,
+      "do_not_restore": true
+    }
+  ],
+  "note": "Superseded branches folded by CONTENT (deterministic assembly). Do not merge/restore."
+}

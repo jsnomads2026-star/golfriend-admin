@@ -47,6 +47,13 @@ export default function LedgerWatchtower() {
   };
 
   const executeEconomicOverride = async () => {
+    // 🔒 QUARANTINED (Director gate): this dead/unrouted component performed
+    // client-side wallet (chips) + reliability writes. Authoritative wallet
+    // adjustments must go through the adminOverrideUser Cloud Function (see
+    // ManualOverride). Decommissioned — no client write fires.
+    addLog('🔒 Decommissioned: use the Tactical Override (server-authoritative).');
+    return;
+    // eslint-disable-next-line no-unreachable
     if (!targetUser) return;
     // 🔥 SHIELD: Prevent NaN database corruption from empty admin inputs
     const chipsToAdjust = parseInt(chipAdjustment) || 0;
@@ -102,6 +109,11 @@ export default function LedgerWatchtower() {
 
 // 🔥 INJECTED: B2B Commercial Partner Promotion & 10k Chip Bundle
   const executeCommercialUpgrade = async () => {
+    // 🔒 QUARANTINED (Director gate): client-side tier grant + 10k chip mint.
+    // Use adminManagePartner (B2B Partner Command Center). Decommissioned.
+    addLog('🔒 Decommissioned: use the B2B Partner Command Center (server-authoritative).');
+    return;
+    // eslint-disable-next-line no-unreachable
     if (!targetUser) return;
     if (!window.confirm(`Are you sure you want to upgrade ${targetUser.nickname} to Commercial Tier and issue 10,000 Chips?`)) return;
 
