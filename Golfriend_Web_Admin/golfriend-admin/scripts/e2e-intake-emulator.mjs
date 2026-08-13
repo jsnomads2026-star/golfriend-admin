@@ -74,6 +74,10 @@ const validPayload = (locale = 'th') => ({
   const crossRead = await fsGet(`partner_submissions/${other.uid}`, applicant.idToken);
   ok('rules: applicant cannot read another submission → denied', crossRead.http === 403, `(http ${crossRead.http})`);
 
+  // --- Rules: client LIST of the collection is denied ---
+  const listRead = await fsGet('partner_submissions', applicant.idToken);
+  ok('rules: client list of partner_submissions → denied', listRead.http === 403, `(http ${listRead.http})`);
+
   // --- Rules: applicant CANNOT write partner_submissions directly ---
   const directWrite = await fsClientWrite(`partner_submissions/${applicant.uid}`, applicant.idToken);
   ok('rules: applicant direct write → denied', directWrite === 403, `(http ${directWrite})`);
