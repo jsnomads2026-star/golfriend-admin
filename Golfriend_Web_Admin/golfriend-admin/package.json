@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:partner-vertical-slice": "node scripts/partner-vertical-slice-verify.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "gate:authority": "node scripts/authority-gate.mjs",
