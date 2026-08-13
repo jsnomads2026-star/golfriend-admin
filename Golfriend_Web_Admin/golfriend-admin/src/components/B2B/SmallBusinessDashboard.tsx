@@ -13,7 +13,13 @@ import PolicyUnavailable from '../common/PolicyUnavailable';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
 import BookingRequests from './BookingRequests';
+import PartnerDocuments from './PartnerDocuments';
 import GolfText from '../common/GolfText';
+import { useLocale } from '../../i18n/hooks.ts';
+import { translate } from '../../i18n/core.ts';
+import { DOCUMENTS } from '../../i18n/partner/documents.ts';
+import { COURSE_AVAILABILITY } from '../../i18n/partner/courseAvailability.ts';
+import { BOOKING_REQUESTS } from '../../i18n/partner/bookingRequests.ts';
 
 const MasterInventory = ({ onLaunchClick, onEditClick, isLimitReached, partnerUid }: { onLaunchClick: () => void, onEditClick: (item: any) => void, isLimitReached: boolean, partnerUid: string }) => {
   const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
@@ -451,7 +457,8 @@ interface PartnerDashboardProps {
 }
 
 export default function SmallBusinessDashboard({ partnerData }: PartnerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability' | 'bookings'>('adhub');
+  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability' | 'bookings' | 'documents'>('adhub');
+  const navLocale = useLocale();
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -517,10 +524,13 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
         
         <div style={styles.sectionHeader}>CORE OPERATIONS</div>
         <button style={{...styles.navBtn, ...(activeTab === 'availability' ? styles.activeBtn : {})}} onClick={() => setActiveTab('availability')}>
-          ⛳ Course & Availability
+          ⛳ {translate(COURSE_AVAILABILITY, navLocale, 'title')}
         </button>
         <button style={{...styles.navBtn, ...(activeTab === 'bookings' ? styles.activeBtn : {})}} onClick={() => setActiveTab('bookings')}>
-          📅 Booking Requests
+          📅 {translate(BOOKING_REQUESTS, navLocale, 'title')}
+        </button>
+        <button style={{...styles.navBtn, ...(activeTab === 'documents' ? styles.activeBtn : {})}} onClick={() => setActiveTab('documents')}>
+          📄 {translate(DOCUMENTS, navLocale, 'title')}
         </button>
         <button style={{...styles.navBtn, ...(activeTab === 'genesis' ? styles.activeBtn : {})}} onClick={() => setActiveTab('genesis')}>
           🏗️ Event Genesis
@@ -551,6 +561,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
       <div style={styles.content}>
         {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
         {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
+        {activeTab === 'documents' && <PartnerDocuments partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
         {activeTab === 'tournaments' && <PolicyUnavailable feature="Tournament Operations" category="unresolved-policy" callable="manageTournamentOps" />}
