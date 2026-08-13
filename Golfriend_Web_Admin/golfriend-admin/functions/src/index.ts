@@ -12,6 +12,9 @@ import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDecision, type SubmissionStatus } from "./partnerIntakeLogic.js";
+// Modular FieldValue — robust under the Functions emulator, whose admin stub can
+// drop the `admin.firestore.FieldValue` static. Used by the partner-intake callables.
+import { FieldValue } from "firebase-admin/firestore";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 
 // Initialize Firebase Admin
@@ -1837,10 +1840,10 @@ export const submitPartnerApplication = onCall({ memory: "256MiB" }, async (requ
         locale,
         // Binary files are NOT accepted yet (no Storage). Attestation only.
         fileUploadAvailable: false,
-        submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        submittedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       };
-      if (!snap.exists) payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+      if (!snap.exists) payload.createdAt = FieldValue.serverTimestamp();
       tx.set(ref, payload, { merge: true });
       return { status: statusOnSubmit() };
     });
@@ -1890,8 +1893,8 @@ export const reviewPartnerSubmission = onCall({ memory: "256MiB" }, async (reque
         status: outcome.status,
         reviewNote: typeof reviewNote === 'string' ? reviewNote.trim().slice(0, 2000) : '',
         reviewedBy: callerUid,
-        reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        reviewedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       };
       // Provisioning HANDOFF only — approval does not assign partner status here.
       if (outcome.readyForProvisioning) {
