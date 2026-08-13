@@ -33,6 +33,7 @@ import PartnerVault from './components/admin/PartnerVault';
 // B2BPartners removed from navigation (adminManagePartner quarantined — fail-closed).
 import HRManagement from './components/admin/HRManagement'; // 🔥 HR & Staff
 import BookingOversight from './components/admin/BookingOversight'; // 📖 Booking oversight + refund/escalation
+import PartnerIngestion from './components/admin/PartnerIngestion'; // 📥 Partner application ingestion queue
 import BookingAudit from './components/admin/BookingAudit'; // 🧾 Booking audit trail (read-only)
 
 // 🔥 B2B COMMERCE (OEM) COMPONENTS
@@ -238,6 +239,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerOperations />}
+    {activeArea === 'partners' && <PartnerIngestion />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}
     {activeArea === 'advertising' && <SponsorDashboard />}
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}

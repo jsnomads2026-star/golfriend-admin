@@ -27,6 +27,7 @@
     "gate:c3a": "node scripts/c3a-booking-commissioning-gate.mjs",
     "gate:c3b": "node scripts/c3b-booking-release-gate.mjs",
     "test:i18n": "node --test scripts/i18n/*.test.mjs",
+    "verify:intake-emulator": "node scripts/e2e-intake-emulator.mjs",
     "gate:i18n": "npm run test:i18n",
     "gate:thai-journey": "node scripts/thai-journey-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
