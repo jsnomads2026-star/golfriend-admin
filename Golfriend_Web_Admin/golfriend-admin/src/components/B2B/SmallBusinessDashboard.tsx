@@ -14,9 +14,11 @@ import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
 import BookingRequests from './BookingRequests';
 import PartnerDocuments from './PartnerDocuments';
+import PartnerOnboarding from './PartnerOnboarding';
 import GolfText from '../common/GolfText';
 import { useLocale } from '../../i18n/hooks.ts';
 import { translate } from '../../i18n/core.ts';
+import { ONBOARDING } from '../../i18n/partner/onboarding.ts';
 import { DOCUMENTS } from '../../i18n/partner/documents.ts';
 import { COURSE_AVAILABILITY } from '../../i18n/partner/courseAvailability.ts';
 import { BOOKING_REQUESTS } from '../../i18n/partner/bookingRequests.ts';
@@ -457,7 +459,7 @@ interface PartnerDashboardProps {
 }
 
 export default function SmallBusinessDashboard({ partnerData }: PartnerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability' | 'bookings' | 'documents'>('adhub');
+  const [activeTab, setActiveTab] = useState<'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'crm' | 'availability' | 'bookings' | 'documents' | 'onboarding'>('adhub');
   const navLocale = useLocale();
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -523,6 +525,9 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
         </div>
         
         <div style={styles.sectionHeader}>CORE OPERATIONS</div>
+        <button style={{...styles.navBtn, ...(activeTab === 'onboarding' ? styles.activeBtn : {})}} onClick={() => setActiveTab('onboarding')}>
+          🚀 {translate(ONBOARDING, navLocale, 'title')}
+        </button>
         <button style={{...styles.navBtn, ...(activeTab === 'availability' ? styles.activeBtn : {})}} onClick={() => setActiveTab('availability')}>
           ⛳ {translate(COURSE_AVAILABILITY, navLocale, 'title')}
         </button>
@@ -559,6 +564,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
       </div>
 
       <div style={styles.content}>
+        {activeTab === 'onboarding' && <PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} />}
         {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
         {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
         {activeTab === 'documents' && <PartnerDocuments partnerUid={authUid} />}
