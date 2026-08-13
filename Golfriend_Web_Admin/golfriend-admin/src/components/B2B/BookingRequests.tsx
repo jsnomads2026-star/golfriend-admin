@@ -9,6 +9,8 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
+import { useT } from '../../i18n/hooks.ts';
+import { BOOKING_REQUESTS } from '../../i18n/partner/bookingRequests.ts';
 
 interface Booking {
   id: string;
@@ -27,6 +29,7 @@ interface Message {
 }
 
 export default function BookingRequests({ partnerUid }: { partnerUid: string }) {
+  const t = useT(BOOKING_REQUESTS);
   const [operatedIds, setOperatedIds] = useState<string[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -96,9 +99,9 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
       const fn = httpsCallable(getFunctions(), 'respondBooking');
       const res: any = await fn({ bookingId, decision });
       if (!res?.data?.success) throw new Error('Response was not accepted.');
-      notify(`Booking ${decision === 'confirm' ? 'confirmed' : 'rejected'}.`, 'success');
-    } catch (e: any) {
-      notify(e?.message || 'Failed to respond to booking.', 'error');
+      notify(decision === 'confirm' ? t('bookingConfirmed') : t('bookingRejected'), 'success');
+    } catch {
+      notify(t('respondFailed'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -110,9 +113,9 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
       const fn = httpsCallable(getFunctions(), 'cancelBooking');
       const res: any = await fn({ bookingId });
       if (!res?.data?.success) throw new Error('Cancellation was not accepted.');
-      notify('Booking cancelled — seat released.', 'success');
-    } catch (e: any) {
-      notify(e?.message || 'Failed to cancel booking.', 'error');
+      notify(t('bookingCancelled'), 'success');
+    } catch {
+      notify(t('cancelFailed'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -127,8 +130,8 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
       const res: any = await fn({ bookingId: activeId, text });
       if (!res?.data?.success) throw new Error('Message was not sent.');
       setDraft('');
-    } catch (e: any) {
-      notify(e?.message || 'Failed to send message.', 'error');
+    } catch {
+      notify(t('sendFailed'), 'error');
     } finally {
       setSending(false);
     }
@@ -146,7 +149,9 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
       cancelled: { c: '#888', bg: 'rgba(136,136,136,0.12)' },
     };
     const s = map[status] || map.pending;
-    return <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: s.bg, color: s.c }}>{status}</span>;
+    const labelKey: Record<string, string> = { pending: 'stPending', confirmed: 'stConfirmed', rejected: 'stRejected', cancelled: 'stCancelled' };
+    const label = labelKey[status] ? t(labelKey[status]) : status;
+    return <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: s.bg, color: s.c }}>{label}</span>;
   };
 
   return (
@@ -156,14 +161,14 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
       )}
 
       <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ color: '#d4af37', margin: 0, letterSpacing: '1px' }}>Booking Requests</h2>
-        <p style={{ color: '#888', fontSize: '14px', marginTop: '5px' }}>Confirm or reject incoming tee-time bookings for your courses. Rejections and cancellations auto-release the seat.</p>
+        <h2 style={{ color: '#d4af37', margin: 0, letterSpacing: '1px' }}>{t('title')}</h2>
+        <p style={{ color: '#888', fontSize: '14px', marginTop: '5px' }}>{t('subtitle')}</p>
       </div>
 
       <div style={{ backgroundColor: '#111', border: '1px solid #d4af37', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
-        <h3 style={{ marginTop: 0, color: '#d4af37', fontSize: '14px', textTransform: 'uppercase' }}>Pending ({pending.length})</h3>
+        <h3 style={{ marginTop: 0, color: '#d4af37', fontSize: '14px', textTransform: 'uppercase' }}>{t('pending')} ({pending.length})</h3>
         {pending.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '30px', color: '#555', border: '1px dashed #333', borderRadius: '6px' }}>No pending booking requests.</div>
+          <div style={{ textAlign: 'center', padding: '30px', color: '#555', border: '1px dashed #333', borderRadius: '6px' }}>{t('noPending')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {pending.map((b) => (
@@ -174,9 +179,9 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
                 </div>
                 <div style={{ flex: 1, color: '#ccc', fontSize: '13px' }}>{b.date} <strong style={{ color: '#fff' }}>{b.time}</strong></div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => respond(b.id, 'confirm')} disabled={busyId === b.id} style={btn('#4CAF50', '#0a2a12')}>Confirm</button>
-                  <button onClick={() => respond(b.id, 'reject')} disabled={busyId === b.id} style={btn('#ff4444', '#2a0a0a')}>Reject</button>
-                  <button onClick={() => setActiveId(b.id)} style={btn('#d4af37', '#2a230a')}>Message</button>
+                  <button onClick={() => respond(b.id, 'confirm')} disabled={busyId === b.id} style={btn('#4CAF50', '#0a2a12')}>{t('confirm')}</button>
+                  <button onClick={() => respond(b.id, 'reject')} disabled={busyId === b.id} style={btn('#ff4444', '#2a0a0a')}>{t('reject')}</button>
+                  <button onClick={() => setActiveId(b.id)} style={btn('#d4af37', '#2a230a')}>{t('message')}</button>
                 </div>
               </div>
             ))}
@@ -185,14 +190,14 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
       </div>
 
       <div style={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
-        <h3 style={{ marginTop: 0, color: '#aaa', fontSize: '14px', textTransform: 'uppercase' }}>Recently Resolved</h3>
+        <h3 style={{ marginTop: 0, color: '#aaa', fontSize: '14px', textTransform: 'uppercase' }}>{t('resolved')}</h3>
         {resolved.length === 0 ? (
-          <div style={{ color: '#555', fontSize: '13px' }}>Nothing resolved yet.</div>
+          <div style={{ color: '#555', fontSize: '13px' }}>{t('nothingResolved')}</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
               <thead><tr style={{ color: '#888', borderBottom: '1px solid #333' }}>
-                <th style={th}>Player</th><th style={th}>Course</th><th style={th}>Date</th><th style={th}>Time</th><th style={th}>Status</th><th style={{ ...th, textAlign: 'right' }}>Actions</th>
+                <th style={th}>{t('colPlayer')}</th><th style={th}>{t('colCourse')}</th><th style={th}>{t('colDate')}</th><th style={th}>{t('colTime')}</th><th style={th}>{t('colStatus')}</th><th style={{ ...th, textAlign: 'right' }}>{t('colActions')}</th>
               </tr></thead>
               <tbody>
                 {resolved.map((b) => (
@@ -202,9 +207,9 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
                     <td style={td}>{statusChip(b.status)}</td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {b.status === 'confirmed' && (
-                        <button onClick={() => cancel(b.id)} disabled={busyId === b.id} style={{ ...btn('#ff4444', '#2a0a0a'), marginRight: '6px' }}>Cancel</button>
+                        <button onClick={() => cancel(b.id)} disabled={busyId === b.id} style={{ ...btn('#ff4444', '#2a0a0a'), marginRight: '6px' }}>{t('cancel')}</button>
                       )}
-                      <button onClick={() => setActiveId(b.id)} style={btn('#d4af37', '#2a230a')}>Message</button>
+                      <button onClick={() => setActiveId(b.id)} style={btn('#d4af37', '#2a230a')}>{t('message')}</button>
                     </td>
                   </tr>
                 ))}
@@ -219,19 +224,19 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
         <div style={{ backgroundColor: '#111', border: '1px solid #d4af37', borderRadius: '8px', padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, color: '#d4af37', fontSize: '14px', textTransform: 'uppercase' }}>
-              Messages — {activeBooking.playerName} · {activeBooking.courseName}
+              {t('messages')} — {activeBooking.playerName} · {activeBooking.courseName}
             </h3>
-            <button onClick={() => setActiveId(null)} style={btn('#888', '#1a1a1a')}>Close</button>
+            <button onClick={() => setActiveId(null)} style={btn('#888', '#1a1a1a')}>{t('close')}</button>
           </div>
           <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', padding: '4px', marginBottom: '12px' }}>
             {messages.length === 0 ? (
-              <div style={{ color: '#555', fontSize: '13px', textAlign: 'center', padding: '20px' }}>No messages yet.</div>
+              <div style={{ color: '#555', fontSize: '13px', textAlign: 'center', padding: '20px' }}>{t('noMessages')}</div>
             ) : (
               messages.map((m) => {
                 const mine = m.senderRole === 'operator';
                 return (
                   <div key={m.id} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '70%', backgroundColor: mine ? 'rgba(212,175,55,0.14)' : '#1a1a1a', border: `1px solid ${mine ? '#d4af37' : '#333'}`, borderRadius: '8px', padding: '8px 12px' }}>
-                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#888', marginBottom: '3px' }}>{m.senderRole}</div>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#888', marginBottom: '3px' }}>{m.senderRole === 'operator' ? t('roleOperator') : m.senderRole === 'player' ? t('rolePlayer') : m.senderRole}</div>
                     <div style={{ fontSize: '13px', color: '#fff' }}>{m.text}</div>
                   </div>
                 );
@@ -242,13 +247,14 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
               type="text"
-              placeholder="Type a message…"
+              placeholder={t('typeMessage')}
+              aria-label={t('typeMessage')}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               style={{ flex: 1, padding: '10px 12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: '#fff', borderRadius: '6px', boxSizing: 'border-box' }}
             />
-            <button onClick={send} disabled={sending || !draft.trim()} style={btn('#4CAF50', '#0a2a12')}>{sending ? '…' : 'Send'}</button>
+            <button onClick={send} disabled={sending || !draft.trim()} style={btn('#4CAF50', '#0a2a12')}>{sending ? '…' : t('send')}</button>
           </div>
         </div>
       )}
