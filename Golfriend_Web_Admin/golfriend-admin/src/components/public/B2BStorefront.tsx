@@ -3,6 +3,8 @@ import { browserSessionPersistence, getAuth, onAuthStateChanged, setPersistence,
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
+import { useT } from '../../i18n/hooks.ts';
+import { SIGN_IN } from '../../i18n/partner/signIn.ts';
 
 // Retained for a future separately approved financial slice. No current UI or
 // lifecycle path calls this router.
@@ -17,39 +19,45 @@ function _preservedRouteToStripe_doNotCall(uid: string, tier: string, cycle: str
 void _preservedRouteToStripe_doNotCall;
 
 function SubscriptionUnavailable() {
+  const t = useT(SIGN_IN);
   return <div role="status" aria-live="polite" data-policy-unavailable="non-financial-precommission" style={styles.unavailable}>
-    <strong style={{ color: V2Theme.gold }}>Pre-commission build</strong>
-    <span>New partner subscriptions are unavailable. Existing partner access is provisioned server-side.</span>
+    <strong style={{ color: V2Theme.gold }}>{t('precommission')}</strong>
+    <span>{t('subsUnavailable')}</span>
   </div>;
 }
 
 export default function B2BStorefront() {
+  const t = useT(SIGN_IN);
   const [showAuth, setShowAuth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
+  const [authFailed, setAuthFailed] = useState(false);
   useEffect(() => onAuthStateChanged(getAuth(), async (user) => {
     if (!user) return;
     try { if ((await getDoc(doc(db, 'b2b_partners', user.uid))).exists()) window.location.href = '/partner'; }
     catch { /* Remain fail-closed on the storefront. */ }
   }), []);
   const signIn = async (event: React.FormEvent) => {
-    event.preventDefault(); setAuthError('');
+    event.preventDefault(); setAuthFailed(false);
     try { await setPersistence(getAuth(), browserSessionPersistence); await signInWithEmailAndPassword(getAuth(), email, password); }
-    catch { setAuthError('Sign-in failed. Check your credentials and try again.'); }
+    catch { setAuthFailed(true); }
   };
+  const tiers: Array<{ key: string; label: string }> = [
+    { key: 'operator', label: t('tierOperator') },
+    { key: 'enterprise', label: t('tierEnterprise') },
+  ];
   if (showAuth) return <main style={styles.container}><section style={styles.card} aria-labelledby="partner-login-title">
-    <p style={{ color: V2Theme.gold, fontWeight: 800 }}>GOLFRIEND</p><h1 id="partner-login-title">Partner login</h1>
-    <form onSubmit={signIn} aria-label="Partner sign-in" style={styles.form}>
-      <label>Business email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" /></label>
-      <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>
-      {authError && <p role="alert" style={{ color: V2Theme.errorRed }}>{authError}</p>}<button type="submit">Log in</button>
-    </form><button type="button" onClick={() => setShowAuth(false)}>Back to partner information</button>
+    <p style={{ color: V2Theme.gold, fontWeight: 800 }}>GOLFRIEND</p><h1 id="partner-login-title">{t('loginTitle')}</h1>
+    <form onSubmit={signIn} aria-label={t('formAria')} style={styles.form}>
+      <label>{t('emailLabel')}<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" /></label>
+      <label>{t('passwordLabel')}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>
+      {authFailed && <p role="alert" style={{ color: V2Theme.errorRed }}>{t('signInFailed')}</p>}<button type="submit">{t('logIn')}</button>
+    </form><button type="button" onClick={() => setShowAuth(false)}>{t('backToInfo')}</button>
   </section></main>;
   return <main style={styles.container}>
-    <header style={styles.header}><a href="/">Back to Golfriend</a><h1>Golfriend Partner Portal</h1></header>
-    <section style={styles.grid} aria-label="Partner tiers">{['Golf operator partner', 'Enterprise partner'].map((tier) => <article key={tier} style={styles.card}><h2>{tier}</h2><p>Course operations, booking support, localized communication, and reporting tools.</p><SubscriptionUnavailable /></article>)}</section>
-    <button type="button" onClick={() => setShowAuth(true)}>Existing partner — log in</button>
+    <header style={styles.header}><a href="/">{t('backToGolfriend')}</a><h1>{t('portalTitle')}</h1></header>
+    <section style={styles.grid} aria-label={t('tiersAria')}>{tiers.map((tier) => <article key={tier.key} style={styles.card}><h2>{tier.label}</h2><p>{t('tierBlurb')}</p><SubscriptionUnavailable /></article>)}</section>
+    <button type="button" onClick={() => setShowAuth(true)}>{t('existingLogin')}</button>
   </main>;
 }
 

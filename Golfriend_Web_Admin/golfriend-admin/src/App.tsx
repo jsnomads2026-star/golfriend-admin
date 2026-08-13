@@ -4,6 +4,8 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { resolvePortalAccess, STATE_COPY } from './auth/roleJourney.js';
+import { useT } from './i18n/hooks.ts';
+import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
 import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
@@ -91,7 +93,8 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
+  const [authFailed, setAuthFailed] = useState(false);
+  const t = useT(ACCESS_STATES);
 
   const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'bookingaudit' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -157,12 +160,12 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError('');
+    setAuthFailed(false);
     try {
       await signInWithEmailAndPassword(getAuth(), email, password);
     } catch {
       // Honest, provider-error-free copy.
-      setAuthError('Sign-in failed. Check your credentials and try again.');
+      setAuthFailed(true);
     }
   };
 
@@ -193,17 +196,17 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     return (
       <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}} role="main">
         <div style={{backgroundColor: '#121212', padding: '40px', borderRadius: '12px', border: '1px solid #333', width: '340px'}}>
-          <h1 style={styles.logo}>GOLFRIEND ADMIN SIGN-IN</h1>
-          <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '16px'}} aria-label="Admin sign-in">
-            <input id="admin_email" name="admin_email" type="email" placeholder="Email" aria-label="Email"
+          <h1 style={styles.logo}>{t('adminTitle')}</h1>
+          <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '16px'}} aria-label={t('adminAria')}>
+            <input id="admin_email" name="admin_email" type="email" placeholder={t('email')} aria-label={t('email')}
               value={email} onChange={(e) => setEmail(e.target.value)}
               style={{padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: 'white', borderRadius: '6px'}} autoComplete="username" />
-            <input id="admin_password" name="admin_password" type="password" placeholder="Password" aria-label="Password"
+            <input id="admin_password" name="admin_password" type="password" placeholder={t('password')} aria-label={t('password')}
               value={password} onChange={(e) => setPassword(e.target.value)}
               style={{padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', color: 'white', borderRadius: '6px'}} autoComplete="current-password" />
-            {authError && <p role="alert" style={{color: '#ff4444', fontSize: '12px', textAlign: 'center', margin: 0}}>{authError}</p>}
+            {authFailed && <p role="alert" style={{color: '#ff4444', fontSize: '12px', textAlign: 'center', margin: 0}}>{t('signInFailed')}</p>}
             <button type="submit" style={{padding: '12px', backgroundColor: '#d4af37', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
-              SIGN IN
+              {t('adminSignIn')}
             </button>
           </form>
         </div>
@@ -219,11 +222,11 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     return (
       <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}
         role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'} aria-busy={isBusy}>
-        <h1 style={{...styles.logo, color: isError ? '#ff4444' : '#d4af37'}}>{copy.title}</h1>
+        <h1 style={{...styles.logo, color: isError ? '#ff4444' : '#d4af37'}}>{t(access.state)}</h1>
         {(access.state === 'unauthorized' || access.state === 'suspended' || access.state === 'error') && (
           <button onClick={executeSecureLogout}
             style={{marginTop: '16px', padding: '12px 24px', backgroundColor: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
-            {mode === 'partner' ? 'Return to Storefront' : 'Sign out'}
+            {mode === 'partner' ? t('returnStorefront') : t('signOut')}
           </button>
         )}
       </div>
