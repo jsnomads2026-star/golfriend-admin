@@ -11,6 +11,7 @@ import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from ".
 import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
+import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDecision, type SubmissionStatus } from "./partnerIntakeLogic.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 
 // Initialize Firebase Admin
@@ -1789,5 +1790,122 @@ export const photoWatchtower = functionsV1
     
   } catch (error) {
     logger.error("Watchtower AI Vision Error:", error);
+  }
+});
+
+// ==========================================
+// 📥 PARTNER APPLICATION INTAKE (metadata + checklist + consent + attestation)
+// ==========================================
+// Authority-compliant intake for the partner onboarding journey. A signed-in
+// applicant submits a partner application; SUBMITTING NEVER GRANTS PARTNER STATUS.
+// Staff review approves/rejects/requests info; approval only flags a provisioning
+// HANDOFF — staff still provision the b2b_partners account separately. Binary
+// file upload is not yet available (no Storage): intake captures the applicant's
+// attestation that they hold each document. Server-authoritative; the client may
+// only read its own partner_submissions/{uid} document.
+export const submitPartnerApplication = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+
+  const validation = validateSubmission(request.data || {});
+  if (!validation.ok || !validation.clean) {
+    throw new HttpsError('invalid-argument', validation.errors.join(' ') || 'Invalid submission.');
+  }
+  const clean = validation.clean;
+  const locale = typeof request.data?.locale === 'string' ? request.data.locale : 'en';
+
+  const ref = db.collection('partner_submissions').doc(callerUid);
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = (snap.exists ? (snap.data()?.status ?? null) : null) as SubmissionStatus | null;
+      if (!canSubmit(current)) {
+        throw new HttpsError('failed-precondition', `An application in status "${current}" cannot be resubmitted.`);
+      }
+      const payload: Record<string, unknown> = {
+        applicantUid: callerUid,
+        applicantEmail: callerEmail,
+        status: statusOnSubmit(),
+        checklist: clean.checklist,
+        missingDocuments: clean.missingDocuments,
+        consentAccepted: true,
+        attestationAccepted: true,
+        note: clean.note,
+        locale,
+        // Binary files are NOT accepted yet (no Storage). Attestation only.
+        fileUploadAvailable: false,
+        submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (!snap.exists) payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+      tx.set(ref, payload, { merge: true });
+      return { status: statusOnSubmit() };
+    });
+    logger.info(`📥 Partner application submitted by ${callerUid}.`);
+    return { success: true, status: out.status };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("📥 Partner application submit failed:", error);
+    throw new HttpsError('internal', error.message || 'Submission failed.');
+  }
+});
+
+// Staff review of a partner application. Active-staff only (server-owned
+// admin_users role; NO email/God-Mode). Approval flags a provisioning handoff
+// but NEVER creates b2b_partners or assigns partner status — provisioning stays
+// staff-controlled and separate.
+export const reviewPartnerSubmission = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const callerUid = request.auth.uid;
+  const { submissionId, decision, reviewNote } = request.data || {};
+  if (!submissionId || typeof submissionId !== 'string') {
+    throw new HttpsError('invalid-argument', 'A submissionId is required.');
+  }
+  if (!isReviewDecision(decision)) {
+    throw new HttpsError('invalid-argument', 'A valid review decision is required.');
+  }
+
+  // AUTHORIZATION: active platform staff only (server-owned admin_users role).
+  const adminSnap = await db.collection('admin_users').doc(callerUid).get();
+  if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
+    throw new HttpsError('permission-denied', 'You are not authorized to review partner applications.');
+  }
+
+  const ref = db.collection('partner_submissions').doc(submissionId);
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'Partner application not found.');
+      const current = (snap.data()?.status ?? null) as SubmissionStatus | null;
+      const outcome = applyReview(current, decision);
+      if (!outcome.ok || !outcome.status) {
+        throw new HttpsError('failed-precondition', outcome.error || 'Invalid review transition.');
+      }
+      const update: Record<string, unknown> = {
+        status: outcome.status,
+        reviewNote: typeof reviewNote === 'string' ? reviewNote.trim().slice(0, 2000) : '',
+        reviewedBy: callerUid,
+        reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      // Provisioning HANDOFF only — approval does not assign partner status here.
+      if (outcome.readyForProvisioning) {
+        update.readyForProvisioning = true;
+        update.provisioningStatus = 'pending_staff_provisioning';
+      }
+      tx.set(ref, update, { merge: true });
+      return { status: outcome.status, readyForProvisioning: !!outcome.readyForProvisioning };
+    });
+    logger.info(`🧾 Partner application ${submissionId} reviewed by staff ${callerUid} → ${out.status}.`);
+    return { success: true, status: out.status, readyForProvisioning: out.readyForProvisioning };
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("🧾 Partner application review failed:", error);
+    throw new HttpsError('internal', error.message || 'Review failed.');
   }
 });
