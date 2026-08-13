@@ -75,8 +75,10 @@ const record = (ok, label, detail = '') =>
 
 // 2. Login form inputs are labelled.
 {
-  const email = /aria-label\s*=\s*(['"`])Email\1/.test(raw);
-  const password = /aria-label\s*=\s*(['"`])Password\1/.test(raw);
+  // Accept either a literal accessible name or the localized i18n binding
+  // (t('email')/t('password')) — inputs must carry an aria-label either way.
+  const email = /aria-label\s*=\s*(['"`])Email\1/.test(raw) || /aria-label\s*=\s*\{\s*t\(\s*['"`]email['"`]\s*\)\s*\}/.test(raw);
+  const password = /aria-label\s*=\s*(['"`])Password\1/.test(raw) || /aria-label\s*=\s*\{\s*t\(\s*['"`]password['"`]\s*\)\s*\}/.test(raw);
   const formLabel = /<form[\s\S]{0,200}?aria-label/.test(raw);
   const ok = email && password && formLabel;
   record(ok, 'Login form is labelled (aria-label Email + Password + <form aria-label>)',

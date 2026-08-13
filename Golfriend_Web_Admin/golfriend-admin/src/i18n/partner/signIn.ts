@@ -1,0 +1,168 @@
+// Eight-locale strings for the partner storefront + sign-in (L1 slice 1).
+// Typed as LocaleDict so tsc enforces all 8 locales x all keys.
+import type { LocaleDict } from '../dict.ts';
+
+export type SignInKey =
+  | 'backToGolfriend'
+  | 'portalTitle'
+  | 'tiersAria'
+  | 'tierOperator'
+  | 'tierEnterprise'
+  | 'tierBlurb'
+  | 'precommission'
+  | 'subsUnavailable'
+  | 'existingLogin'
+  | 'loginTitle'
+  | 'formAria'
+  | 'emailLabel'
+  | 'passwordLabel'
+  | 'logIn'
+  | 'backToInfo'
+  | 'signInFailed';
+
+export const SIGN_IN: LocaleDict<SignInKey> = {
+  en: {
+    backToGolfriend: 'Back to Golfriend',
+    portalTitle: 'Golfriend Partner Portal',
+    tiersAria: 'Partner tiers',
+    tierOperator: 'Golf operator partner',
+    tierEnterprise: 'Enterprise partner',
+    tierBlurb: 'Course operations, booking support, localized communication, and reporting tools.',
+    precommission: 'Pre-commission build',
+    subsUnavailable: 'New partner subscriptions are unavailable. Existing partner access is provisioned server-side.',
+    existingLogin: 'Existing partner — log in',
+    loginTitle: 'Partner login',
+    formAria: 'Partner sign-in',
+    emailLabel: 'Business email',
+    passwordLabel: 'Password',
+    logIn: 'Log in',
+    backToInfo: 'Back to partner information',
+    signInFailed: 'Sign-in failed. Check your credentials and try again.',
+  },
+  th: {
+    backToGolfriend: 'กลับสู่ Golfriend',
+    portalTitle: 'พอร์ทัลพันธมิตร Golfriend',
+    tiersAria: 'ระดับพันธมิตร',
+    tierOperator: 'พันธมิตรผู้ให้บริการสนามกอล์ฟ',
+    tierEnterprise: 'พันธมิตรองค์กร',
+    tierBlurb: 'การจัดการสนาม การรองรับการจอง การสื่อสารตามภาษา และเครื่องมือรายงาน',
+    precommission: 'รุ่นก่อนเปิดใช้งาน',
+    subsUnavailable: 'ยังไม่เปิดรับสมัครพันธมิตรใหม่ สิทธิ์การเข้าถึงของพันธมิตรที่มีอยู่จัดเตรียมจากฝั่งเซิร์ฟเวอร์',
+    existingLogin: 'พันธมิตรเดิม — เข้าสู่ระบบ',
+    loginTitle: 'เข้าสู่ระบบพันธมิตร',
+    formAria: 'การเข้าสู่ระบบพันธมิตร',
+    emailLabel: 'อีเมลธุรกิจ',
+    passwordLabel: 'รหัสผ่าน',
+    logIn: 'เข้าสู่ระบบ',
+    backToInfo: 'กลับไปที่ข้อมูลพันธมิตร',
+    signInFailed: 'เข้าสู่ระบบไม่สำเร็จ โปรดตรวจสอบข้อมูลรับรองของคุณแล้วลองอีกครั้ง',
+  },
+  ko: {
+    backToGolfriend: 'Golfriend로 돌아가기',
+    portalTitle: 'Golfriend 파트너 포털',
+    tiersAria: '파트너 등급',
+    tierOperator: '골프장 운영 파트너',
+    tierEnterprise: '엔터프라이즈 파트너',
+    tierBlurb: '코스 운영, 예약 지원, 현지화된 커뮤니케이션 및 보고 도구.',
+    precommission: '사전 커미셔닝 빌드',
+    subsUnavailable: '신규 파트너 구독은 이용할 수 없습니다. 기존 파트너 접근 권한은 서버에서 부여됩니다.',
+    existingLogin: '기존 파트너 — 로그인',
+    loginTitle: '파트너 로그인',
+    formAria: '파트너 로그인',
+    emailLabel: '업무용 이메일',
+    passwordLabel: '비밀번호',
+    logIn: '로그인',
+    backToInfo: '파트너 정보로 돌아가기',
+    signInFailed: '로그인에 실패했습니다. 자격 증명을 확인하고 다시 시도하세요.',
+  },
+  ja: {
+    backToGolfriend: 'Golfriend に戻る',
+    portalTitle: 'Golfriend パートナーポータル',
+    tiersAria: 'パートナー区分',
+    tierOperator: 'ゴルフ場運営パートナー',
+    tierEnterprise: 'エンタープライズパートナー',
+    tierBlurb: 'コース運営、予約サポート、ローカライズされたコミュニケーション、レポートツール。',
+    precommission: '本番前ビルド',
+    subsUnavailable: '新規パートナーの登録は利用できません。既存パートナーのアクセスはサーバー側で付与されます。',
+    existingLogin: '既存パートナー — ログイン',
+    loginTitle: 'パートナーログイン',
+    formAria: 'パートナーサインイン',
+    emailLabel: '業務用メールアドレス',
+    passwordLabel: 'パスワード',
+    logIn: 'ログイン',
+    backToInfo: 'パートナー情報に戻る',
+    signInFailed: 'サインインに失敗しました。認証情報を確認して、もう一度お試しください。',
+  },
+  zh: {
+    backToGolfriend: '返回 Golfriend',
+    portalTitle: 'Golfriend 合作伙伴门户',
+    tiersAria: '合作伙伴等级',
+    tierOperator: '高尔夫球场运营合作伙伴',
+    tierEnterprise: '企业合作伙伴',
+    tierBlurb: '球场运营、预订支持、本地化沟通和报告工具。',
+    precommission: '上线前版本',
+    subsUnavailable: '暂不接受新的合作伙伴订阅。现有合作伙伴的访问权限由服务器端配置。',
+    existingLogin: '现有合作伙伴 — 登录',
+    loginTitle: '合作伙伴登录',
+    formAria: '合作伙伴登录',
+    emailLabel: '企业邮箱',
+    passwordLabel: '密码',
+    logIn: '登录',
+    backToInfo: '返回合作伙伴信息',
+    signInFailed: '登录失败。请检查您的凭据并重试。',
+  },
+  es: {
+    backToGolfriend: 'Volver a Golfriend',
+    portalTitle: 'Portal de socios de Golfriend',
+    tiersAria: 'Niveles de socio',
+    tierOperator: 'Socio operador de campo de golf',
+    tierEnterprise: 'Socio empresarial',
+    tierBlurb: 'Operaciones del campo, soporte de reservas, comunicación localizada y herramientas de informes.',
+    precommission: 'Versión previa a la puesta en marcha',
+    subsUnavailable: 'Las nuevas suscripciones de socios no están disponibles. El acceso de los socios existentes se aprovisiona del lado del servidor.',
+    existingLogin: 'Socio existente: iniciar sesión',
+    loginTitle: 'Inicio de sesión de socios',
+    formAria: 'Inicio de sesión de socios',
+    emailLabel: 'Correo electrónico de empresa',
+    passwordLabel: 'Contraseña',
+    logIn: 'Iniciar sesión',
+    backToInfo: 'Volver a la información para socios',
+    signInFailed: 'Error al iniciar sesión. Comprueba tus credenciales e inténtalo de nuevo.',
+  },
+  fr: {
+    backToGolfriend: 'Retour à Golfriend',
+    portalTitle: 'Portail partenaires Golfriend',
+    tiersAria: 'Niveaux de partenaire',
+    tierOperator: 'Partenaire exploitant de parcours',
+    tierEnterprise: 'Partenaire entreprise',
+    tierBlurb: 'Opérations du parcours, assistance aux réservations, communication localisée et outils de reporting.',
+    precommission: 'Version pré-mise en service',
+    subsUnavailable: 'Les nouveaux abonnements partenaires ne sont pas disponibles. L’accès des partenaires existants est provisionné côté serveur.',
+    existingLogin: 'Partenaire existant — se connecter',
+    loginTitle: 'Connexion partenaire',
+    formAria: 'Connexion partenaire',
+    emailLabel: 'E-mail professionnel',
+    passwordLabel: 'Mot de passe',
+    logIn: 'Se connecter',
+    backToInfo: 'Retour aux informations partenaires',
+    signInFailed: 'Échec de la connexion. Vérifiez vos identifiants et réessayez.',
+  },
+  de: {
+    backToGolfriend: 'Zurück zu Golfriend',
+    portalTitle: 'Golfriend Partnerportal',
+    tiersAria: 'Partnerstufen',
+    tierOperator: 'Golfplatz-Betreiberpartner',
+    tierEnterprise: 'Enterprise-Partner',
+    tierBlurb: 'Platzbetrieb, Buchungsunterstützung, lokalisierte Kommunikation und Reporting-Tools.',
+    precommission: 'Vor-Inbetriebnahme-Build',
+    subsUnavailable: 'Neue Partner-Abonnements sind nicht verfügbar. Der Zugang bestehender Partner wird serverseitig bereitgestellt.',
+    existingLogin: 'Bestehender Partner — anmelden',
+    loginTitle: 'Partner-Anmeldung',
+    formAria: 'Partner-Anmeldung',
+    emailLabel: 'Geschäftliche E-Mail',
+    passwordLabel: 'Passwort',
+    logIn: 'Anmelden',
+    backToInfo: 'Zurück zu den Partnerinformationen',
+    signInFailed: 'Anmeldung fehlgeschlagen. Überprüfen Sie Ihre Anmeldedaten und versuchen Sie es erneut.',
+  },
+};
