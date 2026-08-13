@@ -75,16 +75,22 @@ for (const comp of ['PartnerOnboarding', 'CourseAvailability', 'BookingRequests'
   check(`dashboard renders <${comp}>`, new RegExp(`<${comp}\\s`).test(dash));
 }
 
-// 4. Client-only surfaces make no authoritative writes / callables.
-for (const rel of ['src/components/B2B/PartnerDocuments.tsx', 'src/components/B2B/PartnerOnboarding.tsx']) {
-  const code = stripComments(read(rel));
-  const clean = !['httpsCallable', 'addDoc', 'setDoc', 'updateDoc', 'deleteDoc', 'getFunctions', 'uploadBytes'].some((b) => code.includes(b));
-  check(`${rel.split('/').pop()}: no authoritative writes/callables`, clean);
-}
+// 4. No CLIENT authoritative writes. Documents intake goes through the
+//    server-authoritative submitPartnerApplication callable (not a client write);
+//    onboarding stays read-only.
+const docsCode = stripComments(read('src/components/B2B/PartnerDocuments.tsx'));
+check('documents: submits via submitPartnerApplication callable (no client writes)',
+  /httpsCallable\([^,]*,\s*['"]submitPartnerApplication['"]\)/.test(docsCode)
+  && !['addDoc', 'setDoc', 'updateDoc', 'deleteDoc', 'uploadBytes'].some((b) => docsCode.includes(b)));
+check('documents: honest file-upload-unavailable state (no fabricated Storage)',
+  /fileUploadUnavailable/.test(docsCode) && !docsCode.includes('uploadBytes'));
+const onbCode = stripComments(read('src/components/B2B/PartnerOnboarding.tsx'));
+check('onboarding: read-only (no authoritative writes/callables)',
+  !['httpsCallable', 'addDoc', 'setDoc', 'updateDoc', 'deleteDoc', 'getFunctions', 'uploadBytes'].some((b) => onbCode.includes(b)));
 
-// 5. Resume is real (local draft read on both the documents and onboarding surfaces).
-check('documents: draft persisted for resume', /localStorage\.setItem/.test(read('src/components/B2B/PartnerDocuments.tsx')));
-check('onboarding: reflects saved progress for resume', /localStorage\.getItem/.test(read('src/components/B2B/PartnerOnboarding.tsx')));
+// 5. Resume is real: documents status is server-tracked; onboarding reflects saved progress.
+check('documents: application status is tracked (server-authoritative)', /partner_submissions/.test(docsCode));
+check('onboarding: reflects saved progress for resume', /localStorage\.getItem/.test(onbCode));
 
 // ---- Report ----
 const failed = results.filter((r) => !r.pass);

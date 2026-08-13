@@ -1909,3 +1909,35 @@ export const reviewPartnerSubmission = onCall({ memory: "256MiB" }, async (reque
     throw new HttpsError('internal', error.message || 'Review failed.');
   }
 });
+
+// Staff-only listing of partner applications for the Admin ingestion queue.
+// Active-staff authorization (server-owned admin_users role); Admin SDK read so
+// it does not depend on client Firestore rules. Read-only.
+export const listPartnerSubmissions = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const adminSnap = await db.collection('admin_users').doc(request.auth.uid).get();
+  if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
+    throw new HttpsError('permission-denied', 'You are not authorized to view partner applications.');
+  }
+  try {
+    const snap = await db.collection('partner_submissions').get();
+    const items = snap.docs.map((d) => {
+      const s = d.data() || {};
+      return {
+        id: d.id,
+        status: s.status || 'submitted',
+        applicantEmail: s.applicantEmail || '',
+        note: s.note || '',
+        missingDocuments: Array.isArray(s.missingDocuments) ? s.missingDocuments : [],
+        reviewNote: s.reviewNote || '',
+        readyForProvisioning: s.readyForProvisioning === true,
+      };
+    });
+    return { success: true, items };
+  } catch (error: any) {
+    logger.error("🧾 listPartnerSubmissions failed:", error);
+    throw new HttpsError('internal', error.message || 'Could not list applications.');
+  }
+});
