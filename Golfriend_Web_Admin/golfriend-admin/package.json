@@ -28,6 +28,7 @@
     "gate:c3b": "node scripts/c3b-booking-release-gate.mjs",
     "test:i18n": "node --test scripts/i18n/*.test.mjs",
     "gate:i18n": "npm run test:i18n",
+    "gate:thai-journey": "node scripts/thai-journey-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
