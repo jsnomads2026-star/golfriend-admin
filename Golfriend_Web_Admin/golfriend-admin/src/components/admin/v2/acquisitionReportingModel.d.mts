@@ -1,4 +1,4 @@
-export interface Disclosure{disclosed:boolean;value:number|null;reason:string}
+export interface Disclosure{disclosed:boolean;value:number|null;reason:string;coverage:{contributing:number;total:number};partialCoverage:boolean}
 export interface DemandRollup{attribution:string;searchInterest:Disclosure;savedCourse:Disclosure;bookingInterest:Disclosure;confirmedBookings:Disclosure;playedRounds:Disclosure}
 export interface CountryRow{country:string;prospects:number;signed:number;byStage:Record<string,number>;byContract:Record<string,number>;demand:DemandRollup}
 export interface CourseRow{[key:string]:any;prospectId:string;courseName:string;country:string;region:string;stage:string;contractState:string;commissionEffective:boolean;commissionReason:string;contactCount:number;demand:DemandRollup}

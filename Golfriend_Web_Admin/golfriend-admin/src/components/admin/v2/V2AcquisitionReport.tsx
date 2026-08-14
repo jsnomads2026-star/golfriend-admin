@@ -15,8 +15,18 @@ import {
 import "./V2AcquisitionReport.css";
 const label = (v: string) =>
   v.replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase());
-const shown = (d: { disclosed: boolean; value: number | null; reason: string }) =>
-  d.disclosed ? String(d.value) : `Withheld — ${label(d.reason)}`;
+const shown = (d: {
+  disclosed: boolean;
+  value: number | null;
+  reason: string;
+  partialCoverage: boolean;
+  coverage: { contributing: number; total: number };
+}) =>
+  !d.disclosed
+    ? `Withheld — ${label(d.reason)}`
+    : d.partialCoverage
+      ? `${d.value} (partial — ${d.coverage.contributing} of ${d.coverage.total} courses reporting)`
+      : String(d.value);
 const today = () => new Date().toISOString().slice(0, 10);
 export default function V2AcquisitionReport({
   provider = localPreviewAcquisitionProvider,

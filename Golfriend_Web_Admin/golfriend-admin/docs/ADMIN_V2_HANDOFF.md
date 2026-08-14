@@ -37,6 +37,49 @@ All default adapters are null/unavailable. No row is commissioned in this build.
 
 Golfriend Admin manages Golfriend. JHCC manages Jaidee Holding. The matrix defines only future integration boundaries: it creates no credentials, endpoints, schedules, background jobs, external writes, or commissioning claim. Golfriend does not sell tee times or process tee-time payments.
 
+## B5-R10 through B5-R12 — Enterprise course acquisition and opportunity reporting
+
+Outbound acquisition of **unsigned** courses, mounted inside the existing eight-area
+allowlist (`partners` and `reports`). No new area and no new commissioning capability
+row: the matrix above is unchanged and still has exactly eight rows.
+
+- **B5-R10 acquisition registry** — prospect/course registry with outreach stage,
+  contact history, contract/pilot visibility and a conversion handoff into the
+  recorded `partner_submissions` intake pipeline. The handoff is a preview: it grants
+  no partner status and staff provisioning stays authoritative.
+- **B5-R11 outreach and opportunity evidence** —
+  `golfriend.admin.course-opportunity-evidence.v1` v1, plus five outreach draft kinds
+  across all eight canonical locales. Drafts are generated and exportable; there is no
+  transport and the send control is permanently disabled.
+- **B5-R12 acquisition analytics and JHCC contract** —
+  `golfriend.admin.course-acquisition-report.v1` v1, transmitted under
+  `golfriend.admin.jhcc-acquisition-report-transmission.v1`. Transmitter is null.
+
+### Invariants enforced in code and asserted by the gates
+
+- An unsigned course receives opportunity evidence, never an invoice. No price,
+  currency or commission amount appears in any acquisition analytics payload.
+- A commission is reported effective only with a signed agreement, a stated effective
+  date covering the evaluation day, and verified activation. Commercial eligibility is
+  owned by the partner-onboarding domain (`golfriend.course-partner.v1`); Admin reports
+  it and can never confer it.
+- Confirmed bookings and played rounds are withheld as *not claimed* unless the demand
+  source is authoritatively attributed. A country rollup takes the weakest attribution
+  of its inputs, and a total built from a subset of courses is reported as partial.
+- Aggregates below the minimum stay suppressed even under authoritative attribution.
+- Outbound artifacts are built from a shareable projection only — no member identity,
+  internal contact detail, owner or internal note can appear.
+- JHCC delivery is fail-closed twice over: it requires an approved, effective-dated
+  authorization record, and every payload is screened for prohibited fields and
+  personal value patterns. A payload failing screening is never deliverable.
+
+Verifiers: `verify:course-acquisition`, `verify:course-opportunity`,
+`verify:acquisition-reporting`, all wired into `gate:admin-v2`.
+
+**Not claimed:** no approved acquisition data source, no outreach or handoff service,
+no JHCC authorization record, no transmitter, no delivery and no commissioning. All
+providers are labelled local preview and excluded from production totals.
+
 ## Remaining verification
 
 - Authorized deployed-environment smoke test and real data-provider integration after contracts are approved.

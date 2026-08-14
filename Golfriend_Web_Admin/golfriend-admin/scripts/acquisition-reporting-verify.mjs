@@ -54,6 +54,22 @@ assert.equal(thailand.demand.confirmedBookings.reason, 'not_authoritatively_attr
 const japan = analytics.countries.find((c) => c.country === 'Japan');
 assert.equal(japan.demand.attribution, 'authoritative');
 assert.equal(japan.demand.confirmedBookings.disclosed, true);
+// A rollup states its own coverage: a total built from a subset is reported as partial,
+// never presented as a complete figure for the group.
+const partial = acquisitionAnalytics([
+  { id: 'k1', country: 'Korea', demand: { attribution: 'authoritative', confirmedBookings: 9 } },
+  { id: 'k2', country: 'Korea', demand: { attribution: 'authoritative' } },
+], { evaluationDate: at }).countries[0].demand.confirmedBookings;
+assert.equal(partial.disclosed, true);
+assert.equal(partial.value, 9);
+assert.equal(partial.partialCoverage, true);
+assert.deepEqual(partial.coverage, { contributing: 1, total: 2 });
+const complete = analytics.countries.find((c) => c.country === 'Japan').demand.confirmedBookings;
+assert.equal(complete.partialCoverage, false);
+assert.deepEqual(complete.coverage, { contributing: 1, total: 1 });
+// A withheld metric is never labelled partial.
+assert.equal(thailand.demand.confirmedBookings.partialCoverage, false);
+
 // Low-volume rollups stay suppressed even when authoritatively attributed.
 assert.equal(acquisitionAnalytics([{ id: 'x', country: 'Korea', demand: { attribution: 'authoritative', confirmedBookings: 2 } }], { evaluationDate: at }).countries[0].demand.confirmedBookings.reason, 'suppressed_low_volume');
 
