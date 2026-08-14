@@ -14,6 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { validateFrozenAliases } from './functions-godmode-alias-contract.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, '../functions/src/index.ts');
@@ -45,7 +46,6 @@ assert(envBypass.length === 0, `no process.env God-Mode/bypass identifier (found
 
 // ---- 4. Approved retained callables authorize via the server-owned module ----
 const RETAINED = [
-  'manageTeeTimeSlot', 'respondBooking', 'cancelBooking', 'sendBookingMessage',
   'adminResolveBooking', 'applyModerationStrike', 'syncCoursesFromProvider', 'setManualCourseCoordinates',
 ];
 // Strip line/block comments so code-pattern scans never trip on documentation prose
@@ -65,6 +65,20 @@ for (const name of RETAINED) {
     assert(!/admin@golfriend\.co/.test(code), `${name}: carries no email God-Mode`);
   }
 }
+
+// ---- 4b. Frozen modular aliases resolve to exact authorized implementations ----
+const aliasFailures = validateFrozenAliases({
+  indexSource: target,
+  moduleSources: {
+    './partnerAvailabilityRuntime.js': readFileSync(resolve(HERE, '../functions/src/partnerAvailabilityRuntime.ts'), 'utf8'),
+    './partnerBookingRuntime.js': readFileSync(resolve(HERE, '../functions/src/partnerBookingRuntime.ts'), 'utf8'),
+  },
+  rulesSource: readFileSync(resolve(HERE, '../partner-onboarding.firestore.rules'), 'utf8'),
+  authorityGateSource: readFileSync(resolve(HERE, './authority-gate.mjs'), 'utf8'),
+  deadExports: ['resolveEscrow', 'adminOverrideUser', 'adminManagePartner', 'logPlatformExpense', 'resolvePhotoValidation', 'updateFulfillmentOrder', 'drawRaffleWinner', 'manageTournamentOps', 'checkInFlight'],
+});
+for (const failure of aliasFailures) assert(false, `frozen callable alias: ${failure}`);
+assert(aliasFailures.length === 0, 'four frozen callable aliases preserve identity, App Check, delegated authority and deny rules');
 
 // ---- 5. Quarantined callables stay fail-closed with no privileged/financial authority ----
 const QUARANTINED = [

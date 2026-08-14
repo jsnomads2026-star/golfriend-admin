@@ -52,7 +52,13 @@ for (const [tab, comp] of APPROVED_APP_MOUNTS) {
   assert(new RegExp(`activeTab === '${tab}' && <${comp}`).test(App), `App: approved '${tab}' still mounts <${comp}>`);
 }
 // Enterprise/SB approved surfaces preserved.
-assert(/activeTab === 'teesheet' && <CourseTeeSheet/.test(Ent), `EnterpriseDashboard: approved 'teesheet' preserved`);
+const teeSheetBranch = Ent.match(/activeTab === 'teesheet' && <>([\s\S]*?)<\/?>/)?.[1] || '';
+assert(
+  teeSheetBranch.includes('<PlayBookingLifecycleV2 />') &&
+  teeSheetBranch.includes('<BookingOperationsReportV2 />') &&
+  teeSheetBranch.includes('<CourseTeeSheet />'),
+  `EnterpriseDashboard: approved 'teesheet' lifecycle, reporting and tee sheet preserved`,
+);
 assert(/CourseAvailability/.test(SB), `SmallBusinessDashboard: approved availability surface preserved`);
 
 // The approved flight sheet stays, but its check-in control no longer calls the callable.
