@@ -18,6 +18,8 @@ import { FieldValue } from "firebase-admin/firestore";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,uploadMarketingAssetVersion,transitionMarketingAsset,getMarketingAssetDownload} from "./marketingAssetRuntime.js";
 export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2} from "./partnerOnboardingRuntime.js";
+export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin} from "./partnerActivationRuntime.js";
+export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -249,7 +251,8 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 // availability/pricing (see manageTeeTimeSlot). Operator assignment is a role
 // grant, so it is server-owned: the client cannot self-assign, claim a course
 // that does not exist, or seize a course already operated by someone else.
-export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) => {
+// const legacyClaimCourseOperator is intentionally not exported; retained below for migration comparison.
+const _legacyClaimCourseOperator = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -319,6 +322,7 @@ export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) 
     throw new HttpsError('internal', error.message || 'Course claim failed.');
   }
 });
+void _legacyClaimCourseOperator;
 
 // ==========================================
 // ⛳ TEE-TIME INVENTORY (Server-Authoritative Supply)

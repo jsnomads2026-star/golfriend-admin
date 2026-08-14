@@ -15,6 +15,7 @@ import CourseAvailability from './CourseAvailability';
 import BookingRequests from './BookingRequests';
 import PartnerDocuments from './PartnerDocuments';
 import PartnerOnboarding from './PartnerOnboarding';
+import PartnerAuthorityConsole from './PartnerAuthorityConsole';
 import GolfText from '../common/GolfText';
 import { useLocale } from '../../i18n/hooks.ts';
 import { translate } from '../../i18n/core.ts';
@@ -564,7 +565,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
       </div>
 
       <div style={styles.content}>
-        {activeTab === 'onboarding' && <PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} />}
+        {activeTab === 'onboarding' && <><PartnerAuthorityConsole /><PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} /></>}
         {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
         {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
         {activeTab === 'documents' && <PartnerDocuments partnerUid={authUid} />}
