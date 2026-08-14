@@ -16,6 +16,7 @@ import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDec
 // drop the `admin.firestore.FieldValue` static. Used by the partner-intake callables.
 import { FieldValue } from "firebase-admin/firestore";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
+export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,uploadMarketingAssetVersion,transitionMarketingAsset,getMarketingAssetDownload} from "./marketingAssetRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
