@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";import {countryCode,deterministicRetryJobId,projectCountryGrowth,projectQuota,retryableStatus,retryCandidates} from "./courseOperationsProjection.js";
+let passed=0;const check=(name:string,fn:()=>void)=>{fn();passed++;console.log(`  ✓ ${name}`)};
+check("country code validates",()=>assert.equal(countryCode("th"),"TH"));check("authoritative country names remain distinct",()=>assert.equal(countryCode("Thailand"),"THAILAND"));check("unknown country is explicit",()=>assert.equal(countryCode(""),"ZZ"));
+check("current totals count server records",()=>assert.equal(projectCountryGrowth([{country:"TH"},{country:"TH"},{country:"US"}],[])[0].total,2));
+check("receipt growth aggregates by country",()=>assert.deepEqual(projectCountryGrowth([],[{status:"completed",createdAt:"2026-08-14T00:00:00Z",result:{countryBreakdown:{TH:{added:2,updated:1,failed:3}}}}])[0],{country:"TH",total:0,added:2,updated:1,failed:3,lastSuccessfulIngestionAt:"2026-08-14T00:00:00Z"}));
+check("latest successful time wins",()=>assert.equal(projectCountryGrowth([],[{status:"completed",createdAt:"2026-08-13T00:00:00Z",result:{countryBreakdown:{TH:{}}}},{status:"completed",createdAt:"2026-08-14T00:00:00Z",result:{countryBreakdown:{TH:{}}}}])[0].lastSuccessfulIngestionAt,"2026-08-14T00:00:00Z"));
+check("failed receipt does not claim success",()=>assert.equal(projectCountryGrowth([],[{status:"completed_with_errors",createdAt:"2026-08-14T00:00:00Z",result:{countryBreakdown:{TH:{failed:1}}}}])[0].lastSuccessfulIngestionAt,null));
+check("quota fails closed without configuration",()=>assert.deepEqual(projectQuota({estimatedCallsUsed:1}),{state:"unconfigured"}));
+check("quota projects authoritative ledger",()=>assert.deepEqual(projectQuota({monthlyLimit:100,estimatedCallsUsed:25,resetPeriod:"2026-08",resetsAt:"2026-09-01T00:00:00Z"}),{state:"ready",source:"server_quota_ledger",used:25,remaining:75,limit:100,resetPeriod:"2026-08",resetsAt:"2026-09-01T00:00:00Z",warning:"normal"}));
+check("quota warning threshold",()=>assert.equal(projectQuota({monthlyLimit:100,estimatedCallsUsed:80,resetPeriod:"2026-08",resetsAt:"2026-09-01T00:00:00Z"}).warning,"warning"));
+check("quota critical threshold",()=>assert.equal(projectQuota({monthlyLimit:100,estimatedCallsUsed:95,resetPeriod:"2026-08",resetsAt:"2026-09-01T00:00:00Z"}).warning,"critical"));
+check("retry id is deterministic",()=>assert.equal(deterministicRetryJobId("a"),deterministicRetryJobId("a")));
+check("only terminal failures retry",()=>{assert.equal(retryableStatus("recovered"),true);assert.equal(retryableStatus("running"),false)});
+check("retry candidates exclude existing and sort",()=>assert.deepEqual(retryCandidates([{courseID:"b"},{courseID:"a"}],new Set(["b"])).map(x=>x.courseID),["a"]));
+console.log(`course operations projection: ${passed} checks passed.`);

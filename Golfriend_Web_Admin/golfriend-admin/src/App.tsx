@@ -44,6 +44,8 @@ import V2AdminReports from './components/admin/v2/V2AdminReports';
 import V2CourseOperations from './components/admin/v2/V2CourseOperations';
 import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
+import V2CountryUserAnalytics from './components/admin/v2/V2CountryUserAnalytics';
+import V2TeeEconomyAnalytics from './components/admin/v2/V2TeeEconomyAnalytics';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -233,6 +235,8 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   return <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
+    {activeArea === 'analytics' && <V2CountryUserAnalytics />}
+    {activeArea === 'tee-analytics' && <V2TeeEconomyAnalytics />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerOperations />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}

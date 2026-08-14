@@ -11,7 +11,9 @@ import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from ".
 import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
-export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
+export {previewCourseRegionImport, commitCourseRegionImport, listCourseSyncReceipts, recoverExpiredCourseIngestionJobs, getCourseIngestionOperations, prepareCourseIngestionRetry} from "./courseIngestion.js";
+export {getCountryUserAnalytics} from "./countryUserAnalytics.js";
+export {getTeeEconomyAnalytics} from "./teeEconomyAnalytics.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
