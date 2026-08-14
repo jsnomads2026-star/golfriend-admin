@@ -21,6 +21,7 @@ export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerA
 export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin} from "./partnerActivationRuntime.js";
 export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
 export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSlot,reviewCourseAvailabilityV2,getCourseAvailabilityV2,listCourseAvailabilityAdminV2} from "./partnerAvailabilityRuntime.js";
+export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,sendPlayBookingMessageV2 as sendBookingMessage,getPlayBookingsPortalV2,getPlayBookingsAdminV2} from "./partnerBookingRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -541,7 +542,7 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // Course operator (or staff) confirms or rejects a pending booking. No settle/refund.
-export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
+const legacyRespondBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -620,7 +621,7 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
 
 // Cancel a booking. The owning player, the course operator, or staff may cancel
 // a pending/confirmed booking; the seat is released. Non-financial.
-export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
+const legacyCancelBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -684,7 +685,7 @@ export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
 
 // Booking messaging: a participant (the player, the course operator, or staff)
 // appends a message to the booking thread. Purely communicative, non-financial.
-export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
+const legacySendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -727,6 +728,9 @@ export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) =
   logger.info(`📅 Booking message on ${bookingId} by ${callerUid} (${senderRole}).`);
   return { success: true };
 });
+void legacyRespondBooking;
+void legacyCancelBooking;
+void legacySendBookingMessage;
 
 // ==========================================
 // 📖 ADMIN BOOKING OVERSIGHT (Non-Financial Force-Resolve: Confirm / Reject / Cancel)
