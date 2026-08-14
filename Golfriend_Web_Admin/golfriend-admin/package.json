@@ -32,6 +32,7 @@
     "verify:admin-shell": "node scripts/admin-shell-verify.mjs",
     "verify:course-operations": "node scripts/course-operations-verify.mjs",
     "verify:e6-course-growth": "node scripts/e6-course-growth-verify.mjs",
+    "verify:e6-ingestion-admin": "node scripts/e6-course-ingestion-admin-verify.mjs",
     "verify:marketing-library": "node scripts/marketing-library-verify.mjs",
     "verify:partner-operations": "node scripts/partner-operations-verify.mjs",
     "verify:reports-foundation": "node scripts/reports-foundation-verify.mjs",

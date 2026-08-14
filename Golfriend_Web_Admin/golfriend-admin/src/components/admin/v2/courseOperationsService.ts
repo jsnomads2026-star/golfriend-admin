@@ -6,6 +6,8 @@ export interface CourseOperationsService {
   loadCourses(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   loadGrowthReceipts(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
+  previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
+  commitRegion(jobId:string): Promise<Record<string,unknown>>;
 }
 
 export const courseOperationsService: CourseOperationsService = {
@@ -24,5 +26,18 @@ export const courseOperationsService: CourseOperationsService = {
     const callable = httpsCallable(functions, 'syncCoursesFromProvider');
     const response = await callable(payload);
     return response.data;
+  },
+  async previewRegion(payload) {
+    const callable=httpsCallable(functions,'previewCourseRegionImport');
+    const response=await callable(payload);
+    if(!response.data||typeof response.data!=='object'||typeof (response.data as Record<string,unknown>).jobId!=='string') throw new Error('COURSE_INGESTION_PREVIEW_INVALID');
+    return response.data as Record<string,unknown>;
+  },
+  async commitRegion(jobId) {
+    if(!jobId.trim()) throw new Error('COURSE_INGESTION_JOB_REQUIRED');
+    const callable=httpsCallable(functions,'commitCourseRegionImport');
+    const response=await callable({jobId});
+    if(!response.data||typeof response.data!=='object') throw new Error('COURSE_INGESTION_COMMIT_INVALID');
+    return response.data as Record<string,unknown>;
   },
 };
