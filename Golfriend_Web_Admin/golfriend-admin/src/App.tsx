@@ -12,6 +12,7 @@ import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourne
 import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
 import CourseAvailabilityV2 from './components/B2B/CourseAvailabilityV2';
 import PlayBookingLifecycleV2 from './components/B2B/PlayBookingLifecycleV2';
+import BookingOperationsReportV2 from './components/B2B/BookingOperationsReportV2';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
 import B2BStorefront from './components/public/B2BStorefront';
 import CourseDiscovery from './components/public/CourseDiscovery';
@@ -249,7 +250,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
-    {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
+    {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerApplications />}
     {activeArea === 'partners' && <V2PartnerAuthority />}
     {activeArea === 'partners' && <V2PartnerOperations />}
