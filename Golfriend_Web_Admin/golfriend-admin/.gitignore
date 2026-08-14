@@ -31,3 +31,4 @@ route-capability-map.json
 .emulator-local/
 firebase.emulator.local.json
 .env.local
+.firebase/emulators/
