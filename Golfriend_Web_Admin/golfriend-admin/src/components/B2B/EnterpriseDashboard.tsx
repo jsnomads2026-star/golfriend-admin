@@ -443,6 +443,7 @@ import OrgProfile from './enterprise/OrgProfile';
 import VenueManager from './enterprise/VenueManager';
 import StaffRoles from './enterprise/StaffRoles';
 import PartnerAuthorityConsole from './PartnerAuthorityConsole';
+import CourseAvailabilityV2 from './CourseAvailabilityV2';
 import EnterpriseReporting from './enterprise/EnterpriseReporting';
 import BillingBoundary from './enterprise/BillingBoundary';
 
@@ -619,7 +620,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'raffle' && <PolicyUnavailable feature="Raffle Draw" category="unresolved-policy" callable="drawRaffleWinner" />}
         {activeTab === 'crm' && <AdLeadsInbox partnerUid={authUid} />}
         {activeTab === 'org' && <OrgProfile partnerUid={authUid} email={partnerData?.email} />}
-        {activeTab === 'venues' && <><PartnerAuthorityConsole /><VenueManager partnerUid={authUid} /></>}
+        {activeTab === 'venues' && <><PartnerAuthorityConsole /><CourseAvailabilityV2 /><VenueManager partnerUid={authUid} /></>}
         {activeTab === 'staff' && <StaffRoles partnerUid={authUid} />}
         {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
         {activeTab === 'billing' && <BillingBoundary partnerUid={authUid} />}

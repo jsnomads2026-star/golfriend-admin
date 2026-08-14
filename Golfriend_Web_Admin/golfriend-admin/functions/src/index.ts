@@ -20,6 +20,7 @@ export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,upload
 export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2} from "./partnerOnboardingRuntime.js";
 export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin} from "./partnerActivationRuntime.js";
 export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
+export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSlot,reviewCourseAvailabilityV2,getCourseAvailabilityV2,listCourseAvailabilityAdminV2} from "./partnerAvailabilityRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -335,7 +336,7 @@ void _legacyClaimCourseOperator;
 // validated against the real `courses` vault, deduped per (course,date,time),
 // and it initializes bookedCount server-side so later booking transactions have
 // an authoritative counter to increment.
-export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) => {
+const legacyManageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -446,6 +447,7 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
 
   throw new HttpsError('invalid-argument', 'Unknown action. Use "create" or "setStatus".');
 });
+void legacyManageTeeTimeSlot;
 
 // ==========================================
 // 📅 BOOKING LIFECYCLE (Server-Authoritative, NON-FINANCIAL)

@@ -39,7 +39,7 @@ check('no process.env God-Mode/bypass identifier anywhere', () => {
 });
 
 // ---- RETAINED (approved V2): must authorize via server-owned module ----
-const RETAINED_STAFF = ['manageTeeTimeSlot', 'respondBooking', 'cancelBooking', 'sendBookingMessage', 'adminResolveBooking', 'syncCoursesFromProvider', 'setManualCourseCoordinates'];
+const RETAINED_STAFF = ['respondBooking', 'cancelBooking', 'sendBookingMessage', 'adminResolveBooking', 'syncCoursesFromProvider', 'setManualCourseCoordinates'];
 const RETAINED_DIRECTOR = ['applyModerationStrike'];
 
 for (const name of RETAINED_STAFF) {
@@ -77,6 +77,13 @@ check('claimCourseOperator: App Check plus approved organization membership, no 
   assert.ok(/member\(caller\)/.test(activationSrc));
   assert.ok(/authorizedCourseIds/.test(activationSrc));
   assert.ok(!/callerEmail|candidateIds|admin@golfriend\.co/.test(activationSrc));
+});
+check('manageTeeTimeSlot: modular App Check plus organization membership', () => {
+  const availability = readFileSync(resolve(__dirname, '../src/partnerAvailabilityRuntime.ts'), 'utf8');
+  assert.ok(/enforceAppCheck:true/.test(availability));
+  assert.ok(/membership\(caller\)/.test(availability));
+  assert.ok(/course_operators/.test(availability));
+  assert.ok(!/admin@golfriend\.co/.test(availability));
 });
 for (const name of ['manageEnterpriseStaff', 'cancelB2BContract', 'reportPlayerIncident']) {
   check(`identity-resolution ${name}: email used for candidateIds only, no God-Mode`, () => {
