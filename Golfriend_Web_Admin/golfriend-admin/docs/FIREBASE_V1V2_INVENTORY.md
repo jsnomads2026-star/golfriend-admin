@@ -80,6 +80,13 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 - `managePlayBookingV2` scopes confirmed, alternative, cancelled and completed transitions to the claimed course organization. Owners/managers manage the lifecycle; course staff confirm, propose alternatives and complete; support/analyst roles cannot mutate lifecycle state.
 - `sendPlayBookingMessageV2` permits only the authenticated member or authorized organization participant. Portal/Admin projections omit member UID and expose only a bounded display name and operational fields.
 - Command/version checks, deterministic messages and immutable `play_booking_audits` receipts provide retry and restart recovery. Notification delivery remains honestly `PROVIDER_UNCONFIGURED` until commissioned.
+
+### 8. Operational booking reporting and reconciliation (V2)
+
+- `getBookingOperationsPortalV2` and `getBookingOperationsAdminV2` project organization/course/date/status summaries from provider-neutral bookings, availability, active claims and immutable receipts. Portal scope follows delegated membership; Admin global access is staff-authorized and audited.
+- `reconcileBookingOperationsV2` detects over-capacity, orphaned bookings, stale alternatives, duplicate receipts, missing claims and status divergence against an expected source version. It creates a deterministic immutable receipt and never calls a provider or alters booking capacity.
+- `exportBookingOperationsV2` creates its immutable audit receipt before returning privacy-safe CSV/JSON. Member identity and payment, fee, wallet, ledger and settlement fields are excluded.
+- Small Business, Enterprise and Admin consumers provide deterministic filters, pagination, receipt lookup, eight locales and accessible loading, empty and error states. Direct client access to sources and receipts remains denied.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`

@@ -12,4 +12,7 @@ service cloud.firestore { match /databases/{database}/documents {
   match /partner_authority_audits/{document=**} { allow read, write: if false; }
   match /availability_audits/{document=**} { allow read, write: if false; }
   match /play_booking_audits/{document=**} { allow read, write: if false; }
+  match /booking_reconciliation_receipts/{document=**} { allow read, write: if false; }
+  match /booking_report_export_receipts/{document=**} { allow read, write: if false; }
+  match /booking_report_access_audits/{document=**} { allow read, write: if false; }
 } }
