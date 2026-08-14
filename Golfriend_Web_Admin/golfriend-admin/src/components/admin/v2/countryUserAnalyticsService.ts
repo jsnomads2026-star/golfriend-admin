@@ -1,0 +1,2 @@
+import{httpsCallable}from'firebase/functions';import{functions}from'../../../firebaseConfig';
+export async function loadCountryUserAnalytics(startDate:string,endDate:string):Promise<Record<string,unknown>>{const response=await httpsCallable(functions,'getCountryUserAnalytics')({startDate,endDate});const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.country-user-analytics/v1')throw new Error('COUNTRY_USER_ANALYTICS_INVALID');return value;}

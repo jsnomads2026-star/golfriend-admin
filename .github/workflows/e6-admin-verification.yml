@@ -32,6 +32,7 @@ jobs:
       - run: npm run verify:e6-course-growth
       - run: npm run verify:e6-ingestion-admin
       - run: npm run verify:e6-operations
+      - run: npm run verify:e6-user-analytics
       - run: npm run verify:course-operations
       - run: npm run build
       - run: git diff --check

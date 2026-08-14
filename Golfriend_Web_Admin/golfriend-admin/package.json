@@ -34,6 +34,7 @@
     "verify:e6-course-growth": "node scripts/e6-course-growth-verify.mjs",
     "verify:e6-ingestion-admin": "node scripts/e6-course-ingestion-admin-verify.mjs",
     "verify:e6-operations": "node scripts/e6-course-operations-verify.mjs",
+    "verify:e6-user-analytics": "node scripts/e6-country-user-analytics-verify.mjs",
     "verify:marketing-library": "node scripts/marketing-library-verify.mjs",
     "verify:partner-operations": "node scripts/partner-operations-verify.mjs",
     "verify:reports-foundation": "node scripts/reports-foundation-verify.mjs",
