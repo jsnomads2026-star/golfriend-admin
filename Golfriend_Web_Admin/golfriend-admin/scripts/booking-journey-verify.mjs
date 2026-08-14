@@ -21,6 +21,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { FROZEN_CALLABLE_ALIASES, validateFrozenAliases } from './functions-godmode-alias-contract.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -181,9 +182,20 @@ const F = {
     const raw = readFileSync(FUNCTIONS, 'utf8');
 
     // 3a · every callable is exported.
-    const missingExports = CALLABLES.filter(
-      (n) => !new RegExp(`export\\s+const\\s+${n}\\b`).test(raw),
-    );
+    const aliasFailures = validateFrozenAliases({
+      indexSource: raw,
+      moduleSources: {
+        './partnerAvailabilityRuntime.js': readFileSync(join(ROOT, 'functions', 'src', 'partnerAvailabilityRuntime.ts'), 'utf8'),
+        './partnerBookingRuntime.js': readFileSync(join(ROOT, 'functions', 'src', 'partnerBookingRuntime.ts'), 'utf8'),
+      },
+      rulesSource: readFileSync(join(ROOT, 'partner-onboarding.firestore.rules'), 'utf8'),
+      authorityGateSource: readFileSync(join(HERE, 'authority-gate.mjs'), 'utf8'),
+      deadExports: ['resolveEscrow', 'adminOverrideUser', 'adminManagePartner', 'logPlatformExpense', 'resolvePhotoValidation', 'updateFulfillmentOrder', 'drawRaffleWinner', 'manageTournamentOps', 'checkInFlight'],
+    });
+    const missingExports = CALLABLES.filter((n) => {
+      if (n in FROZEN_CALLABLE_ALIASES) return aliasFailures.length > 0;
+      return !new RegExp(`export\\s+const\\s+${n}\\b`).test(raw);
+    });
     check('Backend exports all 6 booking callables', missingExports.length === 0,
       missingExports.length ? `missing: ${missingExports.join(', ')}` : '');
 

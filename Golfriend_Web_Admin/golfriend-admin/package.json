@@ -12,6 +12,7 @@
     "gate:a11y": "node scripts/portal-a11y-gate.mjs",
     "gate:fnauth": "node scripts/functions-authority-gate.mjs",
     "gate:godmode": "node scripts/functions-godmode-gate.mjs",
+    "test:godmode-aliases": "node scripts/functions-godmode-alias-contract.test.mjs",
     "gate:clientcallable": "node scripts/client-callable-gate.mjs",
     "gate:fnexport": "node scripts/functions-export-gate.mjs",
     "gate:coursewrites": "node scripts/course-write-authority-gate.mjs",
