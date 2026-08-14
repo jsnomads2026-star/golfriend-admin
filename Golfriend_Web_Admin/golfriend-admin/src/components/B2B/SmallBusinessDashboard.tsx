@@ -12,6 +12,7 @@ import { db, storage } from '../../firebaseConfig';
 import PolicyUnavailable from '../common/PolicyUnavailable';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
+import CourseAvailabilityV2 from './CourseAvailabilityV2';
 import BookingRequests from './BookingRequests';
 import PartnerDocuments from './PartnerDocuments';
 import PartnerOnboarding from './PartnerOnboarding';
@@ -566,7 +567,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
 
       <div style={styles.content}>
         {activeTab === 'onboarding' && <><PartnerAuthorityConsole /><PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} /></>}
-        {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
+        {activeTab === 'availability' && <><CourseAvailabilityV2 /><CourseAvailability partnerUid={authUid} /></>}
         {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
         {activeTab === 'documents' && <PartnerDocuments partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}

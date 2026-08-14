@@ -10,6 +10,7 @@ import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
 import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
 import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
+import CourseAvailabilityV2 from './components/B2B/CourseAvailabilityV2';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
 import B2BStorefront from './components/public/B2BStorefront';
 import CourseDiscovery from './components/public/CourseDiscovery';
@@ -246,6 +247,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   return <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
+    {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerApplications />}
     {activeArea === 'partners' && <V2PartnerAuthority />}

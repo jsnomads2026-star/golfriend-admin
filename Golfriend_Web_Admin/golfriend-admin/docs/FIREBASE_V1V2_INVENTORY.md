@@ -66,6 +66,13 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 - `partner_organizations`, identity bindings, memberships, invitations, disputes, claims and immutable receipts are callable-only. Clients have deny-all direct access.
 - Portal consumers are mounted in both Small Business onboarding and Enterprise venue management. Admin activation/claim review is mounted in the V2 Partners area.
 - Course-sync interoperability is deliberately read-only: activation accepts an existing authoritative `courses/{courseId}` record and never invokes a provider or changes synchronization provenance.
+
+### 6. Organization-scoped course availability (V2)
+
+- `manageCourseAvailabilityV2` authorizes active owner, manager or course-staff memberships only after an approved `course_operators` claim; support and analyst roles are read-only.
+- Deterministic course/date/local-time IDs prevent duplicate slots. IANA time zone, capacity, command ID and expected version are server validated.
+- New and changed availability remains `pending_admin`; `reviewCourseAvailabilityV2` is the approval boundary for open/closed/cancelled supply. Records remain provider-neutral and `publishToApp: false`.
+- `tee_time_slots` contains capacity and booking coordination only: no price, payment, fee, wallet, settlement or financial ownership.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`

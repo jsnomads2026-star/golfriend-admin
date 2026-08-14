@@ -26,8 +26,11 @@ jobs:
         working-directory: Golfriend_Web_Admin/golfriend-admin/functions
       - run: npm run test:partner-activation
         working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run test:partner-availability
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
       - run: npm run verify:partner-onboarding
       - run: npm run verify:partner-activation
+      - run: npm run verify:partner-availability
       - run: npm run gate:i18n
       - run: npm run build
       - run: git diff --check
