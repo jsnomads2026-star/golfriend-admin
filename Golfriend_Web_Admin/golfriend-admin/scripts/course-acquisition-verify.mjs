@@ -121,7 +121,7 @@ const canonical = read('../src/i18n/locales.ts');
 const canonicalCodes = canonical.match(/LOCALE_CODES = \[([^\]]+)\]/)[1].split(',').map((s) => s.trim().replace(/'/g, ''));
 assert.equal(canonicalCodes.length, 8);
 assert.doesNotMatch(model + types + provider + ui, /\[\s*'en'\s*,\s*'th'\s*,\s*'ko'/);
-assert.match(ui, /import \{ LOCALE_CODES \} from "\.\.\/\.\.\/\.\.\/i18n\/locales"/);
+assert.match(ui, /import \{ LOCALE_CODES[^}]*\} from "\.\.\/\.\.\/\.\.\/i18n\/locales"/);
 assert.match(types, /import type\{CanonicalLocale\}from'\.\.\/\.\.\/\.\.\/i18n\/locales'/);
 
 // Route: mounted inside the existing eight-area allowlist, no new area.

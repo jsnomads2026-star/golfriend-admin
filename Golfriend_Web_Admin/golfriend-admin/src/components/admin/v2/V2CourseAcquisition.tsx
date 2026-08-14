@@ -12,11 +12,20 @@ import {
   type Prospect,
 } from "./courseAcquisitionModel.mjs";
 import {
+  buildOpportunityReport,
+  opportunityToJson,
+  opportunityToText,
+  OUTREACH_TEMPLATE_KINDS,
+  renderOutreachTemplate,
+  type OpportunityReport,
+  type OutreachDraft,
+} from "./courseOpportunityModel.mjs";
+import {
   localPreviewAcquisitionProvider,
   type AcquisitionProvider,
   type AcquisitionSnapshot,
 } from "./courseAcquisitionProvider";
-import { LOCALE_CODES } from "../../../i18n/locales";
+import { LOCALE_CODES, coerceLocale } from "../../../i18n/locales";
 import "./V2CourseAcquisition.css";
 import { useDialogFocus } from "./useDialogFocus";
 const label = (v: string) =>
@@ -39,6 +48,10 @@ export default function V2CourseAcquisition({
     [sort, setSort] = useState("recent"),
     [selected, setSelected] = useState<Prospect | null>(null),
     [handoff, setHandoff] = useState<any>(null),
+    [report, setReport] = useState<OpportunityReport | null>(null),
+    [draft, setDraft] = useState<OutreachDraft | null>(null),
+    [draftKind, setDraftKind] = useState("invitation"),
+    [draftLocale, setDraftLocale] = useState("en"),
     [copied, setCopied] = useState(false);
   const detailRef = useDialogFocus(Boolean(selected), () => setSelected(null));
   useEffect(() => {
@@ -71,12 +84,35 @@ export default function V2CourseAcquisition({
         Loading course acquisition registry…
       </div>
     );
+  const open = (r: Prospect) => {
+    setSelected(r);
+    setHandoff(null);
+    setReport(null);
+    setDraft(null);
+    setCopied(false);
+    setDraftLocale(coerceLocale(r.contactLocale));
+  };
   const copy = async () => {
     if (!selected) return;
     await navigator.clipboard.writeText(
-      JSON.stringify(shareableProspect(selected), null, 2),
+      draft
+        ? `${draft.subject}\n\n${draft.body}`
+        : report
+          ? opportunityToJson(report)
+          : JSON.stringify(shareableProspect(selected), null, 2),
     );
     setCopied(true);
+  };
+  const exportEvidence = () => {
+    if (!report) return;
+    const url = URL.createObjectURL(
+      new Blob([opportunityToText(report)], { type: "text/plain" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `golfriend-opportunity-${report.course.id}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
   const eligibility = selected
     ? invoiceEligibility(selected, evaluationDate)
@@ -207,15 +243,9 @@ export default function V2CourseAcquisition({
                     <tr
                       key={r.id}
                       tabIndex={0}
-                      onClick={() => {
-                        setSelected(r);
-                        setHandoff(null);
-                      }}
+                      onClick={() => open(r)}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          setSelected(r);
-                          setHandoff(null);
-                        }
+                        if (event.key === "Enter" || event.key === " ") open(r);
                       }}
                     >
                       <td>
@@ -324,6 +354,95 @@ export default function V2CourseAcquisition({
                 {label(h.channel)} · {label(h.stageAfter)} · {h.summary}
               </div>
             ))
+          )}
+          <h4>Opportunity evidence and outreach drafts</h4>
+          <div className="acq-compose">
+            <select
+              aria-label="Outreach template"
+              value={draftKind}
+              onChange={(e) => setDraftKind(e.target.value)}
+            >
+              {OUTREACH_TEMPLATE_KINDS.map((x) => (
+                <option key={x} value={x}>{label(x)}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Draft locale"
+              value={draftLocale}
+              onChange={(e) => setDraftLocale(e.target.value)}
+            >
+              {LOCALE_CODES.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+            <button
+              onClick={() =>
+                setReport(
+                  buildOpportunityReport({
+                    prospect: selected,
+                    generatedAt: new Date().toISOString(),
+                    evaluationDate,
+                  }),
+                )
+              }
+            >
+              Build opportunity evidence
+            </button>
+            <button
+              onClick={() =>
+                setDraft(
+                  renderOutreachTemplate({
+                    kind: draftKind,
+                    locale: draftLocale,
+                    prospect: selected,
+                    report,
+                  }),
+                )
+              }
+            >
+              Generate draft
+            </button>
+          </div>
+          {report && (
+            <div className="acq-evidence">
+              <b>Opportunity evidence · {report.schema}</b>
+              <p>
+                Period {report.period.label} · attribution{" "}
+                {label(report.attribution.level)} · aggregates below{" "}
+                {report.privacy.minimumAggregate} are withheld
+              </p>
+              <ul>
+                {report.metrics.map((m) => (
+                  <li key={m.id}>
+                    <b>{label(m.id)}</b>
+                    <span>
+                      {m.disclosed
+                        ? m.value
+                        : m.reason === "not_authoritatively_attributed"
+                          ? "Not claimed — no authoritative attribution"
+                          : `Withheld — ${label(m.reason)}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="acq-unsigned">{report.invoice.notice}</p>
+              <p>
+                No member identity, internal note or precise personal movement
+                is included.
+              </p>
+              <button onClick={exportEvidence}>Download evidence (TXT)</button>
+            </div>
+          )}
+          {draft && (
+            <div className="acq-draft">
+              <b>
+                {draft.kind} · {draft.locale}
+              </b>
+              <p>{draft.subject}</p>
+              <pre>{draft.body}</pre>
+              <p>{draft.notice}</p>
+              <button disabled>Send draft unavailable</button>
+            </div>
           )}
           <div className="acq-actions">
             <button onClick={() => setHandoff(conversionHandoff(selected))}>
