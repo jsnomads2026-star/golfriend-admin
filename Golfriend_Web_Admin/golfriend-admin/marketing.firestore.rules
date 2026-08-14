@@ -1,0 +1,1 @@
+rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /marketing_assets/{document=**} { allow read, write: if false; } match /marketing_asset_receipts/{document=**} { allow read, write: if false; } } }
