@@ -87,6 +87,13 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 - `reconcileBookingOperationsV2` detects over-capacity, orphaned bookings, stale alternatives, duplicate receipts, missing claims and status divergence against an expected source version. It creates a deterministic immutable receipt and never calls a provider or alters booking capacity.
 - `exportBookingOperationsV2` creates its immutable audit receipt before returning privacy-safe CSV/JSON. Member identity and payment, fee, wallet, ledger and settlement fields are excluded.
 - Small Business, Enterprise and Admin consumers provide deterministic filters, pagination, receipt lookup, eight locales and accessible loading, empty and error states. Direct client access to sources and receipts remains denied.
+
+### 9. Provider-neutral booking publication boundary (V2)
+
+- `prepareBookingProviderPublicationV2` produces a deterministic, versioned outbox envelope from approved course availability, booking lifecycle/status, message receipts and reconciliation sources only. It excludes member identity, message text, payment, fee, wallet, ledger, settlement and Golfriend Trip behavior.
+- `publishBookingProviderPublicationV2` uses an injected adapter contract and currently fails closed with an immutable `PROVIDER_UNCONFIGURED` receipt. No destination, credentials or external transmission is configured.
+- Owners/managers are restricted to active claimed courses in their organization; other partner roles are read-only. Active Admin staff may inspect/prepare an explicitly selected organization. Every callable enforces App Check.
+- Small Business, Enterprise and Admin consumers expose prepared-not-transmitted state in eight locales. Direct client access to publication documents and receipts is denied.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`

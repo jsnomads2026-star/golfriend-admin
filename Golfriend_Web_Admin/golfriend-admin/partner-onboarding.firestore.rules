@@ -15,4 +15,6 @@ service cloud.firestore { match /databases/{database}/documents {
   match /booking_reconciliation_receipts/{document=**} { allow read, write: if false; }
   match /booking_report_export_receipts/{document=**} { allow read, write: if false; }
   match /booking_report_access_audits/{document=**} { allow read, write: if false; }
+  match /booking_provider_publications/{document=**} { allow read, write: if false; }
+  match /booking_provider_publication_receipts/{document=**} { allow read, write: if false; }
 } }

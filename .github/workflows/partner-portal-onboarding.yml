@@ -36,6 +36,8 @@ jobs:
       - run: npm run verify:partner-booking
       - run: npm run verify:partner-booking-reporting
       - run: npm run test:godmode-aliases
+      - run: npm run verify:booking-provider-publication
+      - run: npm --prefix functions run test:booking-provider-publication
       - run: npm --prefix functions run test:partner-booking-reporting
       - run: npm run gate:i18n
       - run: npm run build

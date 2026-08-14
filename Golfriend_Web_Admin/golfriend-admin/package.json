@@ -51,6 +51,7 @@
     "verify:partner-availability": "node scripts/partner-availability-verify.mjs",
     "verify:partner-booking": "node scripts/partner-booking-verify.mjs",
     "verify:partner-booking-reporting": "node scripts/partner-booking-reporting-verify.mjs",
+    "verify:booking-provider-publication": "node scripts/booking-provider-publication-verify.mjs",
     "verify:partner-onboarding": "node scripts/partner-onboarding-v2-verify.mjs",
     "test:marketing-rules": "node scripts/run-marketing-rules-emulator.mjs",
     "verify:partner-operations": "node scripts/partner-operations-verify.mjs",

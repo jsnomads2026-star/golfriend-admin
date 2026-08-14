@@ -56,8 +56,9 @@ const teeSheetBranch = Ent.match(/activeTab === 'teesheet' && <>([\s\S]*?)<\/?>/
 assert(
   teeSheetBranch.includes('<PlayBookingLifecycleV2 />') &&
   teeSheetBranch.includes('<BookingOperationsReportV2 />') &&
+  teeSheetBranch.includes('<BookingProviderPublicationV2 />') &&
   teeSheetBranch.includes('<CourseTeeSheet />'),
-  `EnterpriseDashboard: approved 'teesheet' lifecycle, reporting and tee sheet preserved`,
+  `EnterpriseDashboard: approved 'teesheet' lifecycle, reporting, publication and tee sheet preserved`,
 );
 assert(/CourseAvailability/.test(SB), `SmallBusinessDashboard: approved availability surface preserved`);
 

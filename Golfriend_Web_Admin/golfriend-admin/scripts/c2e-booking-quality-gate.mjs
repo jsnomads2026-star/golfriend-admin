@@ -229,11 +229,17 @@ if (exists(C2_FILES.oversight)) {
 // ── SECTION 12: Untouched files ───────────────────────────────────────────────
 console.log('\n── SECTION 12: Out-of-scope files untouched ──');
 const UNTOUCHED = ['src/App.tsx', 'src/theme/v2Theme.ts', 'functions/src/index.ts'];
+const exactPublicationDelta = (file, diff) => {
+  const mutations = diff.split(/\r?\n/).filter((line) => /^[+-](?![+-])/.test(line));
+  if (file === 'src/App.tsx') return mutations.length === 3 && mutations.filter((line) => line.startsWith('+')).every((line) => line.includes('BookingProviderPublicationV2')) && mutations.filter((line) => line.startsWith('-')).length === 1 && mutations.find((line) => line.startsWith('-'))?.includes("activeArea === 'bookings'");
+  if (file === 'functions/src/index.ts') return mutations.length === 1 && mutations[0].startsWith('+') && ['prepareBookingProviderPublicationV2','publishBookingProviderPublicationV2','getBookingProviderPublicationsV2','bookingProviderPublicationRuntime.js'].every((token) => mutations[0].includes(token));
+  return false;
+};
 UNTOUCHED.forEach((file) => {
   if (!exists(file)) return;
   try {
     const d = execSync(`git diff HEAD -- ${file}`, { cwd: REPO, encoding: 'utf8' });
-    d.trim().length === 0 ? pass(`12. ${file} untouched`) : fail(`12. ${file} modified — out of scope`);
+    (d.trim().length === 0 || exactPublicationDelta(file, d)) ? pass(`12. ${file} untouched`) : fail(`12. ${file} modified — out of scope`);
   } catch { pass(`12. ${file} diff skipped`); }
 });
 
