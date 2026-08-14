@@ -11,4 +11,5 @@ service cloud.firestore { match /databases/{database}/documents {
   match /partner_claim_disputes/{document=**} { allow read, write: if false; }
   match /partner_authority_audits/{document=**} { allow read, write: if false; }
   match /availability_audits/{document=**} { allow read, write: if false; }
+  match /play_booking_audits/{document=**} { allow read, write: if false; }
 } }

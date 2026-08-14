@@ -73,6 +73,13 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 - Deterministic course/date/local-time IDs prevent duplicate slots. IANA time zone, capacity, command ID and expected version are server validated.
 - New and changed availability remains `pending_admin`; `reviewCourseAvailabilityV2` is the approval boundary for open/closed/cancelled supply. Records remain provider-neutral and `publishToApp: false`.
 - `tee_time_slots` contains capacity and booking coordination only: no price, payment, fee, wallet, settlement or financial ownership.
+
+### 7. Provider-neutral Play booking lifecycle (V2)
+
+- `requestPlayBookingV2` accepts authenticated member requests against approved open provider availability; capacity is reserved transactionally without payment or ledger behavior.
+- `managePlayBookingV2` scopes confirmed, alternative, cancelled and completed transitions to the claimed course organization. Owners/managers manage the lifecycle; course staff confirm, propose alternatives and complete; support/analyst roles cannot mutate lifecycle state.
+- `sendPlayBookingMessageV2` permits only the authenticated member or authorized organization participant. Portal/Admin projections omit member UID and expose only a bounded display name and operational fields.
+- Command/version checks, deterministic messages and immutable `play_booking_audits` receipts provide retry and restart recovery. Notification delivery remains honestly `PROVIDER_UNCONFIGURED` until commissioned.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`
