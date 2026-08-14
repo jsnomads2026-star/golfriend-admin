@@ -93,7 +93,7 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 - `prepareBookingProviderPublicationV2` produces a deterministic, versioned outbox envelope from approved course availability, booking lifecycle/status, message receipts and reconciliation sources only. It excludes member identity, message text, payment, fee, wallet, ledger, settlement and Golfriend Trip behavior.
 - `publishBookingProviderPublicationV2` uses an injected adapter contract and currently fails closed with an immutable `PROVIDER_UNCONFIGURED` receipt. No destination, credentials or external transmission is configured.
 - Owners/managers are restricted to active claimed courses in their organization; other partner roles are read-only. Active Admin staff may inspect/prepare an explicitly selected organization. Every callable enforces App Check.
-- Small Business, Enterprise and Admin consumers expose prepared-not-transmitted state in eight locales. Direct client access to publication documents and receipts is denied.
+- Small Business, Enterprise and Admin consumers expose prepared-not-transmitted state in eight complete, independent locale dictionaries. The publication verifier rejects English-spread fallback dictionaries and requires every operational state/action label per locale. Direct client access to publication documents and receipts is denied.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`
