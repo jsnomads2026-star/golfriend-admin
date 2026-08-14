@@ -13,6 +13,7 @@ import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } 
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 export {previewCourseRegionImport, commitCourseRegionImport, listCourseSyncReceipts, recoverExpiredCourseIngestionJobs, getCourseIngestionOperations, prepareCourseIngestionRetry} from "./courseIngestion.js";
 export {getCountryUserAnalytics} from "./countryUserAnalytics.js";
+export {getTeeEconomyAnalytics} from "./teeEconomyAnalytics.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
