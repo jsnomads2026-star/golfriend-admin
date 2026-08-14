@@ -8,6 +8,7 @@ import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
 import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
+import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
 import B2BStorefront from './components/public/B2BStorefront';
 import CourseDiscovery from './components/public/CourseDiscovery';
@@ -47,6 +48,7 @@ import V2AdminReports from './components/admin/v2/V2AdminReports';
 import V2CourseOperations from './components/admin/v2/V2CourseOperations';
 import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
+import V2PartnerApplications from './components/admin/v2/V2PartnerApplications';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -215,6 +217,11 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     );
   }
 
+  // A signed-in applicant may apply without receiving partner-organization authority.
+  if (mode === 'partner' && user && access.state === 'unauthorized') {
+    return <PartnerApplicationJourney onSignOut={executeSecureLogout} />;
+  }
+
   // Loading / role-resolving / error / unauthorized / suspended → honest state screens.
   if (access.state !== 'authorized') {
     const copy = STATE_COPY[access.state] || STATE_COPY.error;
@@ -238,6 +245,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
+    {activeArea === 'partners' && <V2PartnerApplications />}
     {activeArea === 'partners' && <V2PartnerOperations />}
     {activeArea === 'partners' && <PartnerIngestion />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}

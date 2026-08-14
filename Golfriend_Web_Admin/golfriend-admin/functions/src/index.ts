@@ -17,6 +17,7 @@ import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDec
 import { FieldValue } from "firebase-admin/firestore";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,uploadMarketingAssetVersion,transitionMarketingAsset,getMarketingAssetDownload} from "./marketingAssetRuntime.js";
+export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2} from "./partnerOnboardingRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
