@@ -3,4 +3,11 @@ service cloud.firestore { match /databases/{database}/documents {
   match /partner_applications_v2/{document=**} { allow read, write: if false; }
   match /partner_application_audits/{document=**} { allow read, write: if false; }
   match /course_growth_candidates/{document=**} { allow read, write: if false; }
+  match /partner_organizations/{document=**} { allow read, write: if false; }
+  match /partner_identity_bindings/{document=**} { allow read, write: if false; }
+  match /partner_memberships/{document=**} { allow read, write: if false; }
+  match /partner_course_claims/{document=**} { allow read, write: if false; }
+  match /partner_staff_invitations/{document=**} { allow read, write: if false; }
+  match /partner_claim_disputes/{document=**} { allow read, write: if false; }
+  match /partner_authority_audits/{document=**} { allow read, write: if false; }
 } }

@@ -58,6 +58,14 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 ### 4. Enterprise Portal — `src/components/B2B/EnterpriseDashboard.tsx` + `enterprise/*`
 - `EnterpriseDashboard.tsx:8` → `db, storage`; `getAuth` + `signOut` (`:5, :465, :496`).
 - `enterprise/*`: VenueManager (`claimCourseOperator`), StaffRoles (`manageEnterpriseStaff`), OrgProfile, EnterpriseReporting, BillingBoundary — import `db` from `../../../firebaseConfig`; callables via `getFunctions()` (no region).
+
+### 5. Approved partner activation and course authority (V2)
+
+- `activatePartner` is the sole activation authority: an active Admin binds an approved `partner_applications_v2` record, its `course_growth_candidates` handoff, a verified Firebase Auth UID, and a specific existing `courses` record.
+- `claimCourseOperator` creates only `pending_admin` claims. `reviewCourseOperatorClaim` is the Admin approval boundary that writes `course_operators`; every course operator record retains `publishToApp: false`.
+- `partner_organizations`, identity bindings, memberships, invitations, disputes, claims and immutable receipts are callable-only. Clients have deny-all direct access.
+- Portal consumers are mounted in both Small Business onboarding and Enterprise venue management. Admin activation/claim review is mounted in the V2 Partners area.
+- Course-sync interoperability is deliberately read-only: activation accepts an existing authoritative `courses/{courseId}` record and never invokes a provider or changes synchronization provenance.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`

@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const src = readFileSync(resolve(__dirname, '../src/index.ts'), 'utf8');
+const activationSrc = readFileSync(resolve(__dirname, '../src/partnerActivationRuntime.ts'), 'utf8');
 const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 const bodyOf = (name: string): string => {
   const m = src.match(new RegExp('export const ' + name + ' = onCall\\([\\s\\S]*?\\r?\\n\\}\\);'));
@@ -71,7 +72,13 @@ for (const name of QUARANTINED) {
 }
 
 // ---- Identity-resolution callables retain email ONLY for own-doc lookup ----
-for (const name of ['claimCourseOperator', 'manageEnterpriseStaff', 'cancelB2BContract', 'reportPlayerIncident']) {
+check('claimCourseOperator: App Check plus approved organization membership, no email lookup', () => {
+  assert.ok(/export const claimCourseOperator=onCall\(\{enforceAppCheck:true\}/.test(activationSrc));
+  assert.ok(/member\(caller\)/.test(activationSrc));
+  assert.ok(/authorizedCourseIds/.test(activationSrc));
+  assert.ok(!/callerEmail|candidateIds|admin@golfriend\.co/.test(activationSrc));
+});
+for (const name of ['manageEnterpriseStaff', 'cancelB2BContract', 'reportPlayerIncident']) {
   check(`identity-resolution ${name}: email used for candidateIds only, no God-Mode`, () => {
     const code = stripComments(bodyOf(name));
     assert.ok(!/admin@golfriend\.co/.test(code), `${name} must not contain the God-Mode email`);
