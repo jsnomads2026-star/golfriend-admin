@@ -1,0 +1,10 @@
+export type PlayBookingDeskStatus = 'pending'|'confirmed'|'rejected'|'changed'|'cancelled'|'expired';
+export type PlayBookingDeskError = 'conflict'|'stale'|'unavailable';
+export type PlayBookingDeskPermissions = Readonly<{read:true;message:boolean;confirm:boolean;alternative:boolean;cancel:boolean;complete:boolean}>;
+export type PlayBookingDeskItem = Readonly<{bookingId:string;slotId:string;courseId:string;status:PlayBookingDeskStatus;version:number;memberDisplayName:string;course:Readonly<{courseId:string;name:string|null}>;teeTime:Readonly<{date:string;time:string;timeZone:string}>;provider:Readonly<{providerId:string;displayName:string}>|null;terms:string|null;reference:string|null;lastMessageAt:string|null}>;
+export type PlayBookingDeskProjection = Readonly<{state:'ready';schema:'golfriend.play-booking.v2';role:'primary_owner'|'manager'|'course_staff'|'support'|'analyst';permissions:PlayBookingDeskPermissions;notificationProviderConfigured:boolean;boundary:'PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP';delegatedCourseIds:readonly string[]|null;bookings:readonly PlayBookingDeskItem[]}>|Readonly<{state:'delegated_scope_unavailable';reason:'delegated_scope_unproven';bookings:readonly []}>|Readonly<{state:'unavailable';reason:string;bookings:readonly []}>;
+export type BookingAcknowledgementReceipt = Readonly<{schema:'golfriend.portal.booking-acknowledgement.v1';receiptId:string;bookingId:string;version:number;status:PlayBookingDeskStatus;action:'confirm'|'alternative'|'cancel'|'complete'|'message'|'acknowledge';commandId:string;authority:'client_projection';immutable:true;transmissionIncluded:false}>;
+export const PLAY_BOOKING_DESK_STATUSES: readonly PlayBookingDeskStatus[];
+export function parsePlayBookingDeskResponse(raw:unknown):PlayBookingDeskProjection;
+export function classifyPlayBookingDeskError(error:unknown):PlayBookingDeskError;
+export function createBookingAcknowledgementReceipt(input:Readonly<{bookingId:string;version:number;status:PlayBookingDeskStatus;action:BookingAcknowledgementReceipt['action'];commandId:string}>):BookingAcknowledgementReceipt;
