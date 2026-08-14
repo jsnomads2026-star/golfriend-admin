@@ -6,6 +6,7 @@ import {randomUUID} from "node:crypto";
 import {isActiveStaff} from "./authority.js";
 import {assertQuotaAvailable, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, normalizeCourseCandidates, planCourseUpserts, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, withDeterministicRetry} from "./courseGrowth.js";
 import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
+import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -175,6 +176,8 @@ export const commitCourseRegionImport = onCall({
   let reviewRequired = 0;
   let failed = 0;
   let apiCallsUsed = 0;
+  const countryBreakdown:Record<string,{added:number;updated:number;failed:number}> = {};
+  const countryRow=(candidate:Candidate)=>countryBreakdown[countryCode(candidate.country)] ||= {added:0,updated:0,failed:0};
   const errors: Array<{courseID: string; message: string}> = [];
 
   for (const candidate of candidates) {
@@ -211,19 +214,21 @@ export const commitCourseRegionImport = onCall({
       });
       if (created) {
         added++;
+        countryRow(candidate).added++;
         if (growthRecord.requiresCoordinatorReview === true) reviewRequired++;
       } else {
         skippedExisting++;
       }
     } catch (error: any) {
       failed++;
+      countryRow(candidate).failed++;
       errors.push({courseID: candidate.courseID, message: error?.message || "Unknown ingestion error"});
       if (error instanceof HttpsError && error.code === "resource-exhausted") break;
       logger.error("Course ingestion failed", {jobId, courseID: candidate.courseID, error});
     }
   }
 
-  const result = {added, skippedExisting, reviewRequired, failed, apiCallsUsed, errors: errors.slice(0, 20), quotaRemainingAfter: quota.remainingAfter + (reservedCalls - apiCallsUsed)};
+  const result = {added, updated:0, skippedExisting, reviewRequired, failed, apiCallsUsed, countryBreakdown, errors: errors.slice(0, 20), quotaRemainingAfter: quota.remainingAfter + (reservedCalls - apiCallsUsed)};
   await requireActiveLease(jobRef, request.auth.uid, leaseToken);
   const batch = db.batch();
   batch.set(jobRef, {
@@ -276,6 +281,29 @@ export const recoverExpiredCourseIngestionJobs = onCall({enforceAppCheck: true},
     if (didRecover) recovered++;
   }
   return {schemaVersion: COURSE_INGESTION_RECOVERY_SCHEMA, inspected: jobs.size, recovered};
+});
+
+export const getCourseIngestionOperations = onCall({enforceAppCheck:true},async(request)=>{
+  if(!request.auth?.uid)throw new HttpsError("unauthenticated","Sign in to Admin first.");await requireCoordinator(request.auth.uid);
+  const [coursesSnapshot,receiptsSnapshot,quotaSnapshot,jobsSnapshot]=await Promise.all([
+    db.collection("courses").get(),db.collection("course_sync_receipts").orderBy("createdAt","desc").limit(100).get(),db.collection("platform").doc("golfApiUsage").get(),db.collection("course_ingestion_jobs").where("status","in",["completed_with_errors","recovered"]).limit(20).get(),
+  ]);
+  const receipts=receiptsSnapshot.docs.map(doc=>{const value=doc.data();return {...value,createdAt:value.createdAt?.toDate?.().toISOString?.()||null};});
+  const failedJobs=jobsSnapshot.docs.map(doc=>{const value=doc.data();return {jobId:doc.id,status:value.status,failed:Number(value.result?.failed)||0,createdAt:value.createdAt?.toDate?.().toISOString?.()||null,retryJobId:value.retryJobId||null};});
+  return {schemaVersion:COURSE_OPERATIONS_SCHEMA,countries:projectCountryGrowth(coursesSnapshot.docs.map(doc=>doc.data()),receipts),quota:projectQuota(quotaSnapshot.data()),failedJobs};
+});
+
+export const prepareCourseIngestionRetry = onCall({enforceAppCheck:true},async(request)=>{
+  if(!request.auth?.uid)throw new HttpsError("unauthenticated","Sign in to Admin first.");await requireCoordinator(request.auth.uid);
+  const sourceJobId=String(request.data?.jobId||"").trim();if(!sourceJobId)throw new HttpsError("invalid-argument","A failed job ID is required.");
+  const sourceRef=db.collection("course_ingestion_jobs").doc(sourceJobId);const sourceSnapshot=await sourceRef.get();const source=sourceSnapshot.data();
+  if(!sourceSnapshot.exists||!source)throw new HttpsError("not-found","Failed job not found.");if(!retryableStatus(source.status))throw new HttpsError("failed-precondition","Job is not retryable.");
+  const candidates=Array.isArray(source.candidates)?source.candidates.slice(0,MAX_COURSES_PER_COMMIT):[];const refs=candidates.map((item:any)=>db.collection("courses").doc(String(item.courseID||"")));const existing=refs.length?await db.getAll(...refs):[];
+  const pending=retryCandidates(candidates,new Set(existing.filter(doc=>doc.exists).map(doc=>doc.id)));if(!pending.length)throw new HttpsError("failed-precondition","No unresolved courses remain.");
+  const retryJobId=deterministicRetryJobId(sourceJobId),retryRef=db.collection("course_ingestion_jobs").doc(retryJobId);
+  const result=await db.runTransaction(async transaction=>{const [latest,retry]=await Promise.all([transaction.get(sourceRef),transaction.get(retryRef)]);const value=latest.data();if(!value||!retryableStatus(value.status))throw new HttpsError("failed-precondition","Job is no longer retryable.");if(retry.exists)return {jobId:retryJobId,replayed:true,count:Number(retry.data()?.missingCount)||pending.length};
+    transaction.create(retryRef,{status:"previewed",requestedBy:request.auth!.uid,retryOf:sourceJobId,retrySchemaVersion:COURSE_RETRY_SCHEMA,candidates:pending,missingCount:pending.length,createdAt:admin.firestore.FieldValue.serverTimestamp(),expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+JOB_TTL_MS)});transaction.update(sourceRef,{retryJobId,retryPreparedAt:admin.firestore.FieldValue.serverTimestamp()});return {jobId:retryJobId,replayed:false,count:pending.length};});
+  return {schemaVersion:COURSE_RETRY_SCHEMA,...result};
 });
 
 export const listCourseSyncReceipts = onCall({enforceAppCheck: true}, async (request) => {

@@ -8,6 +8,8 @@ export interface CourseOperationsService {
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
   commitRegion(jobId:string): Promise<Record<string,unknown>>;
+  loadIngestionOperations():Promise<Record<string,unknown>>;
+  prepareFailedRetry(jobId:string):Promise<Record<string,unknown>>;
 }
 
 export const courseOperationsService: CourseOperationsService = {
@@ -40,4 +42,6 @@ export const courseOperationsService: CourseOperationsService = {
     if(!response.data||typeof response.data!=='object') throw new Error('COURSE_INGESTION_COMMIT_INVALID');
     return response.data as Record<string,unknown>;
   },
+  async loadIngestionOperations(){const response=await httpsCallable(functions,'getCourseIngestionOperations')();const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.course-operations/v1')throw new Error('COURSE_OPERATIONS_INVALID');return value;},
+  async prepareFailedRetry(jobId){if(!jobId.trim())throw new Error('COURSE_RETRY_JOB_REQUIRED');const response=await httpsCallable(functions,'prepareCourseIngestionRetry')({jobId});const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.course-ingestion-retry/v1'||typeof value.jobId!=='string')throw new Error('COURSE_RETRY_INVALID');return value;},
 };

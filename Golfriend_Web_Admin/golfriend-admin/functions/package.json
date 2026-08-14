@@ -12,7 +12,7 @@
     "test:v2authority": "tsc && node lib/v2AuthorityConformance.test.js",
     "test:janitor": "tsc && node lib/janitorLogic.test.js",
     "test:coursewrites": "tsc && node lib/courseWriteAuthority.test.js",
-    "test": "tsc && node lib/courseSync.test.js && node lib/courseGrowth.test.js && node lib/courseIngestionRecovery.test.js && node lib/courseSyncPreview.test.js && node lib/courseWriteAuthority.test.js && node lib/bookingLogic.test.js && node lib/authority.test.js && node lib/v2AuthorityConformance.test.js && node lib/janitorLogic.test.js",
+    "test": "tsc && node lib/courseSync.test.js && node lib/courseGrowth.test.js && node lib/courseIngestionRecovery.test.js && node lib/courseOperationsProjection.test.js && node lib/courseSyncPreview.test.js && node lib/courseWriteAuthority.test.js && node lib/bookingLogic.test.js && node lib/authority.test.js && node lib/v2AuthorityConformance.test.js && node lib/janitorLogic.test.js",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
