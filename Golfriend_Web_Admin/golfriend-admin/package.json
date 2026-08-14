@@ -45,6 +45,7 @@
     "verify:admin-shell": "node scripts/admin-shell-verify.mjs",
     "verify:course-operations": "node scripts/course-operations-verify.mjs",
     "verify:marketing-library": "node scripts/marketing-library-verify.mjs",
+    "test:marketing-rules": "node scripts/run-marketing-rules-emulator.mjs",
     "verify:partner-operations": "node scripts/partner-operations-verify.mjs",
     "verify:reports-foundation": "node scripts/reports-foundation-verify.mjs",
     "verify:commissioning-readiness": "node scripts/commissioning-readiness-verify.mjs",
@@ -65,6 +66,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "5.0.0",
     "@tailwindcss/postcss": "^4.3.1",
     "@tailwindcss/vite": "^4.3.1",
     "@types/node": "^24.12.3",
