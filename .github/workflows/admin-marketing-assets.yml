@@ -24,6 +24,10 @@ jobs:
           cache-dependency-path: |
             Golfriend_Web_Admin/golfriend-admin/package-lock.json
             Golfriend_Web_Admin/golfriend-admin/functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - run: npm ci
       - run: npm ci
         working-directory: Golfriend_Web_Admin/golfriend-admin/functions
