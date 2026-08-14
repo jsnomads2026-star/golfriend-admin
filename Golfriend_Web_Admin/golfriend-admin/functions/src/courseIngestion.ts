@@ -2,8 +2,10 @@ import {defineSecret} from "firebase-functions/params";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import {randomUUID} from "node:crypto";
 import {isActiveStaff} from "./authority.js";
 import {assertQuotaAvailable, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, normalizeCourseCandidates, planCourseUpserts, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, withDeterministicRetry} from "./courseGrowth.js";
+import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -11,6 +13,13 @@ const db = admin.firestore();
 const API_BASE = "https://www.golfapi.io/api/v2.3";
 const JOB_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_COURSES_PER_COMMIT = 50;
+
+async function requireActiveLease(jobRef: FirebaseFirestore.DocumentReference, ownerUid: string, leaseToken: string): Promise<void> {
+  const snapshot = await jobRef.get();
+  try { assertLeaseOwner(snapshot.data(), ownerUid, leaseToken, Date.now()); } catch (error) {
+    throw new HttpsError("aborted", error instanceof Error ? error.message : "LEASE_OWNERSHIP_LOST");
+  }
+}
 
 function finiteNumber(value: unknown): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -32,10 +41,10 @@ async function requireCoordinator(uid: string): Promise<void> {
   }
 }
 
-async function golfApiGet(path: string, apiKey: string, onAttempt: () => void = () => {}): Promise<{data: any; callsUsed: number}> {
+async function golfApiGet(path: string, apiKey: string, onAttempt: () => void | Promise<void> = () => {}): Promise<{data: any; callsUsed: number}> {
   const configuredKey = requireProviderConfiguration(apiKey);
   const result = await withDeterministicRetry(async () => {
-    onAttempt();
+    await onAttempt();
     const response = await fetch(`${API_BASE}${path}`, {headers: {Authorization: `Bearer ${configuredKey}`}});
     if (response.status === 403 || response.status === 429) throw new HttpsError("resource-exhausted", `Golf API quota rejected the request (${response.status}).`);
     if (!response.ok) throw new HttpsError("unavailable", `Golf API request failed (${response.status}).`);
@@ -131,6 +140,13 @@ export const commitCourseRegionImport = onCall({
 
   const jobRef = db.collection("course_ingestion_jobs").doc(jobId);
   requireProviderConfiguration(GOLF_API_KEY.value());
+  const recoverySnapshot = await db.collection("platform").doc("courseIngestionRecovery").get();
+  let recoveryConfig;
+  try { recoveryConfig = requireRecoveryConfiguration(recoverySnapshot.data()); } catch {
+    throw new HttpsError("failed-precondition", "RECOVERY_UNCONFIGURED");
+  }
+  const leaseToken = randomUUID();
+  const leaseExpiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + recoveryConfig.leaseDurationMs);
   const claimed = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(jobRef);
     const job = snapshot.data();
@@ -139,7 +155,7 @@ export const commitCourseRegionImport = onCall({
     if (job.status === "completed" || job.status === "completed_with_errors") return {job, replay: true};
     if (job.status !== "previewed") throw new HttpsError("failed-precondition", "Preview is already running or unavailable.");
     if (job.expiresAt?.toMillis() < Date.now()) throw new HttpsError("failed-precondition", "Preview expired; run it again.");
-    transaction.update(jobRef, {status: "running", startedAt: admin.firestore.FieldValue.serverTimestamp()});
+    transaction.update(jobRef, {status: "running", startedAt: admin.firestore.FieldValue.serverTimestamp(), lease: {ownerUid: request.auth!.uid, token: leaseToken, expiresAt: leaseExpiresAt}});
     return {job, replay: false};
   });
 
@@ -153,6 +169,7 @@ export const commitCourseRegionImport = onCall({
     await jobRef.set({status: "previewed", reservationFailedAt: admin.firestore.FieldValue.serverTimestamp()}, {merge: true});
     throw error;
   }
+  await jobRef.set({quotaReservation: {reservedCalls, attemptedCalls: 0}}, {merge: true});
   let added = 0;
   let skippedExisting = 0;
   let reviewRequired = 0;
@@ -161,15 +178,17 @@ export const commitCourseRegionImport = onCall({
   const errors: Array<{courseID: string; message: string}> = [];
 
   for (const candidate of candidates) {
+    await requireActiveLease(jobRef, request.auth.uid, leaseToken);
     const courseRef = db.collection("courses").doc(candidate.courseID);
     if ((await courseRef.get()).exists) {
       skippedExisting++;
       continue;
     }
     try {
-      const courseResponse = await golfApiGet(`/courses/${encodeURIComponent(candidate.courseID)}`, GOLF_API_KEY.value(), () => {apiCallsUsed++;});
+      const recordAttempt = async () => { apiCallsUsed++; await jobRef.set({"quotaReservation.attemptedCalls": apiCallsUsed}, {merge: true}); };
+      const courseResponse = await golfApiGet(`/courses/${encodeURIComponent(candidate.courseID)}`, GOLF_API_KEY.value(), recordAttempt);
       const course = courseResponse.data?.data || courseResponse.data || {};
-      const coordinateResponse = await golfApiGet(`/coordinates/${encodeURIComponent(candidate.courseID)}`, GOLF_API_KEY.value(), () => {apiCallsUsed++;});
+      const coordinateResponse = await golfApiGet(`/coordinates/${encodeURIComponent(candidate.courseID)}`, GOLF_API_KEY.value(), recordAttempt);
       const coordinates: any = coordinateResponse.data?.data || coordinateResponse.data || {};
 
       const growthRecord = buildCourseGrowthRecord(candidate, course, coordinates);
@@ -182,7 +201,10 @@ export const commitCourseRegionImport = onCall({
       };
 
       const created = await db.runTransaction(async (transaction) => {
-        const latest = await transaction.get(courseRef);
+        const [leaseSnapshot, latest] = await Promise.all([transaction.get(jobRef), transaction.get(courseRef)]);
+        try { assertLeaseOwner(leaseSnapshot.data(), request.auth!.uid, leaseToken, Date.now()); } catch (error) {
+          throw new HttpsError("aborted", error instanceof Error ? error.message : "LEASE_OWNERSHIP_LOST");
+        }
         if (latest.exists) return false;
         transaction.create(courseRef, record);
         return true;
@@ -202,6 +224,7 @@ export const commitCourseRegionImport = onCall({
   }
 
   const result = {added, skippedExisting, reviewRequired, failed, apiCallsUsed, errors: errors.slice(0, 20), quotaRemainingAfter: quota.remainingAfter + (reservedCalls - apiCallsUsed)};
+  await requireActiveLease(jobRef, request.auth.uid, leaseToken);
   const batch = db.batch();
   batch.set(jobRef, {
     status: failed > 0 ? "completed_with_errors" : "completed",
@@ -223,6 +246,36 @@ export const commitCourseRegionImport = onCall({
   await batch.commit();
 
   return {...result, receiptId, replayed: false};
+});
+
+export const recoverExpiredCourseIngestionJobs = onCall({enforceAppCheck: true}, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
+  await requireCoordinator(request.auth.uid);
+  const configSnapshot = await db.collection("platform").doc("courseIngestionRecovery").get();
+  let config;
+  try { config = requireRecoveryConfiguration(configSnapshot.data()); } catch {
+    throw new HttpsError("failed-precondition", "RECOVERY_UNCONFIGURED");
+  }
+  const jobs = await db.collection("course_ingestion_jobs").where("status", "==", "running").limit(config.maxJobs).get();
+  let recovered = 0;
+  for (const snapshot of jobs.docs) {
+    const observed = snapshot.data();
+    const token = String(observed.lease?.token || "");
+    if (!shouldRecoverLease(observed, token, Date.now())) continue;
+    const receiptId = deterministicRecoveryReceiptId(snapshot.id, token);
+    const didRecover = await db.runTransaction(async (transaction) => {
+      const latestSnapshot = await transaction.get(snapshot.ref);
+      const latest = latestSnapshot.data();
+      if (!shouldRecoverLease(latest, token, Date.now())) return false;
+      const reconciliation = recoveryReconciliation(latest);
+      transaction.update(snapshot.ref, {status: "recovered", recoveredAt: admin.firestore.FieldValue.serverTimestamp(), recoveredBy: request.auth!.uid, recoveryReceiptId: receiptId, recovery: reconciliation});
+      transaction.set(db.collection("platform").doc("golfApiUsage"), {estimatedCallsUsed: admin.firestore.FieldValue.increment(-reconciliation.releaseCalls), lastRecoveryJobId: snapshot.id}, {merge: true});
+      transaction.create(db.collection("course_sync_recovery_receipts").doc(receiptId), {schemaVersion: COURSE_INGESTION_RECOVERY_SCHEMA, receiptId, jobId: snapshot.id, leaseTokenHash: receiptId.slice("recovery_".length), recoveredBy: request.auth!.uid, reconciliation, providerExecution: "not_retried", createdAt: admin.firestore.FieldValue.serverTimestamp()});
+      return true;
+    });
+    if (didRecover) recovered++;
+  }
+  return {schemaVersion: COURSE_INGESTION_RECOVERY_SCHEMA, inspected: jobs.size, recovered};
 });
 
 export const listCourseSyncReceipts = onCall({enforceAppCheck: true}, async (request) => {
