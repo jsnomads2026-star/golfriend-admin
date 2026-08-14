@@ -17,7 +17,7 @@ import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDec
 import { FieldValue } from "firebase-admin/firestore";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,uploadMarketingAssetVersion,transitionMarketingAsset,getMarketingAssetDownload} from "./marketingAssetRuntime.js";
-export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2} from "./partnerOnboardingRuntime.js";
+export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2, getMyVerifiedCourseOnboardingV2, saveVerifiedCourseOnboardingDraftV2, acceptVerifiedCourseOnboardingAgreementV2, submitVerifiedCourseOnboardingV2} from "./partnerOnboardingRuntime.js";
 export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin} from "./partnerActivationRuntime.js";
 export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
 export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSlot,reviewCourseAvailabilityV2,getCourseAvailabilityV2,listCourseAvailabilityAdminV2} from "./partnerAvailabilityRuntime.js";
