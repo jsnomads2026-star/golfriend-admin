@@ -5,11 +5,13 @@ t("consumer producer callable parity",()=>names.forEach(x=>{assert.match(svc,new
 t("top-level command payload parity",()=>{assert.match(svc,/\{context,commandId,expectedVersion:baseVersion,draft:flatten\(draft\)\}/);assert.match(svc,/\{context,commandId,locale:a\.locale,trialOfferId,trialDays,contentDigest:a\.localizedDigest,explicitlyAccepted:true\}/)});
 t("producer projection adapter",()=>{assert.match(svc,/raw\?\.application/);assert.match(svc,/raw\?\.state/);assert.match(svc,/agreementAcceptanceReceiptId/)});
 t("server-derived GF-EN-004 course scope",()=>{assert.match(ui,/organizationAuthorityService\.load/);["membershipId","organizationId","propertyId","courseId"].forEach(x=>assert.match(svc,new RegExp(x)))});
+t("explicit immutable multi-course selection",()=>{assert.match(ui,/setScopes\(available\)/);assert.match(ui,/phase===\"scope\"/);assert.match(ui,/key=\{`\$\{x\.membershipId\}\|\$\{x\.courseId\}`\}/);assert.doesNotMatch(ui,/available\[0\]/)});
 t("flat allowlisted producer draft",()=>["representativeAuthorityDeclaration","courseProfileAttemptId","dataUseAcknowledged","memberPurposeAcknowledged","tournamentPurposeAcknowledged","bookingCommissionAcknowledged"].forEach(x=>assert.match(svc,new RegExp(x))));
 t("exact trials and authorized offer",()=>{assert.match(svc,/TRIAL_OPTIONS=\[30,90\]/);assert.match(ui,/trialOfferId/)});
 t("complete agreement and explicit acceptance",()=>["canonicalDigest","localizedDigest","commissionPolicyRef","trialTermsRef","dataUseTermsRef","explicitlyAccepted:true"].forEach(x=>assert.match(svc,new RegExp(x))));
 t("stable retry command ids",()=>assert.match(ui,/commands\.current\[kind\]/));
 t("lifecycle and honest Admin handoff",()=>{["changes_requested","approved_for_trial","trial_active","trial_expired","conversion_review","active_partner","suspended","withdrawn"].forEach(x=>assert.match(svc,new RegExp(x)));assert.match(copy,/Portal cannot approve/)});
 t("exact eight locales",()=>assert.match(copy,/\["en","th","ko","ja","zh","es","fr","de"\]as const/));
+t("producer labels independently localized",()=>["en","th","ko","ja","zh","es","fr","de"].forEach(locale=>assert.match(copy,new RegExp(`${locale}:\\{membershipId:`))));
 t("accessible states",()=>[/aria-live=/,/aria-busy=/,/role="alert"/,/aria-current=/,/tabIndex=\{0\}/,/minHeight:48/].forEach(x=>assert.match(ui,x)));
 t("no direct datastore or financial authority",()=>{assert.doesNotMatch(ui+svc,/firestore|setDoc|addDoc|collection\(|stripe|collectPayment|activateProvider/i)});console.log(`enterprise onboarding consumer compatibility: ${n} checks passed.`);
