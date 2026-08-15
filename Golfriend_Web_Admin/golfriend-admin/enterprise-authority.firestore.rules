@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /enterprise_authority_bindings/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_memberships/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_grants/{document=**} { allow read, write: if false; }
+    match /enterprise_organizations/{document=**} { allow read, write: if false; }
+    match /enterprise_properties/{document=**} { allow read, write: if false; }
+    match /enterprise_courses/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profiles/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profile_attempts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_links/{document=**} { allow read, write: if false; }
+    match /enterprise_member_link_receipts/{document=**} { allow read, write: if false; }
+  }
+}

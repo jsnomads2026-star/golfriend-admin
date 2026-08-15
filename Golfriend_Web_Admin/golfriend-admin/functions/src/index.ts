@@ -24,6 +24,7 @@ export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSl
 export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,sendPlayBookingMessageV2 as sendBookingMessage,getPlayBookingsPortalV2,getPlayBookingsAdminV2} from "./partnerBookingRuntime.js";
 export {getBookingOperationsPortalV2,getBookingOperationsAdminV2,reconcileBookingOperationsV2,exportBookingOperationsV2,getBookingOperationsReceiptV2} from "./bookingReportingRuntime.js";
 export {prepareBookingProviderPublicationV2,publishBookingProviderPublicationV2,getBookingProviderPublicationsV2} from "./bookingProviderPublicationRuntime.js";
+export {getEnterpriseOrganizationAuthorityV2} from "./enterpriseAuthorityRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
