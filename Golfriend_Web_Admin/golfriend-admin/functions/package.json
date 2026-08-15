@@ -31,7 +31,8 @@
     "logs": "firebase functions:log",
     "test:enterprise-member-management": "tsc && node --test lib/enterpriseMemberManagementDomain.test.js lib/enterpriseMemberManagementSecurity.test.js",
     "test:enterprise-member-admin": "tsc && node --test lib/enterpriseMemberAdminDomain.test.js lib/enterpriseMemberAdminSecurity.test.js",
-    "test:enterprise-member-commissioning": "tsc && node --test lib/enterpriseMemberCommissioningDomain.test.js lib/enterpriseMemberCommissioningSecurity.test.js"
+    "test:enterprise-member-commissioning": "tsc && node --test lib/enterpriseMemberCommissioningDomain.test.js lib/enterpriseMemberCommissioningSecurity.test.js",
+    "test:small-business": "tsc && node --test lib/smallBusinessDomain.test.js lib/smallBusinessRuntimeContract.test.js"
   },
   "engines": {
     "node": "20"

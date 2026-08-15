@@ -51,5 +51,20 @@ service cloud.firestore {
     match /enterprise_member_delivery_dry_runs/{document=**} { allow read, write: if false; }
     match /enterprise_member_delivery_provider_compositions/{document=**} { allow read, write: if false; }
     match /enterprise_member_jhcc_validations/{document=**} { allow read, write: if false; }
+    match /small_businesses/{document=**} { allow read, write: if false; }
+    match /small_business_representative_bindings/{document=**} { allow read, write: if false; }
+    match /small_business_commands/{document=**} { allow read, write: if false; }
+    match /small_business_approval_receipts/{document=**} { allow read, write: if false; }
+    match /small_business_subscription_intents/{document=**} { allow read, write: if false; }
+    match /small_business_subscription_outbox/{document=**} { allow read, write: if false; }
+    match /small_business_promotions/{document=**} { allow read, write: if false; }
+    match /small_business_promotion_policy_approvals/{document=**} { allow read, write: if false; }
+    match /small_business_contract_approvals/{document=**} { allow read, write: if false; }
+    match /small_business_promotion_suppressions/{document=**} { allow read, write: if false; }
+    match /small_business_delivery_suppressions/{document=**} { allow read, write: if false; }
+    match /small_business_promotion_publications/{document=**} { allow read, write: if false; }
+    match /small_business_engagements/{document=**} { allow read, write: if false; }
+    match /small_business_report_events/{document=**} { allow read, write: if false; }
+    match /small_business_jhcc_preparations/{document=**} { allow read, write: if false; }
   }
 }
