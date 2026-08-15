@@ -440,7 +440,7 @@ const AdHub = ({ isMasterHost, partnerUid }: { isMasterHost: boolean, partnerUid
 import WalletSettings from './WalletSettings';
 
 // 🏢 Enterprise portal sub-modules (organization, venues, staff, reporting, billing)
-import OrgProfile from './enterprise/OrgProfile';
+import EnterpriseCourseMemberOperations from './enterpriseCourseMember/EnterpriseCourseMemberOperations';
 import VenueManager from './enterprise/VenueManager';
 import StaffRoles from './enterprise/StaffRoles';
 import PartnerAuthorityConsole from './PartnerAuthorityConsole';
@@ -623,7 +623,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'tv' && <TournamentTV />}
         {activeTab === 'raffle' && <PolicyUnavailable feature="Raffle Draw" category="unresolved-policy" callable="drawRaffleWinner" />}
         {activeTab === 'crm' && <AdLeadsInbox partnerUid={authUid} />}
-        {activeTab === 'org' && <OrgProfile partnerUid={authUid} email={partnerData?.email} />}
+        {activeTab === 'org' && <EnterpriseCourseMemberOperations />}
         {activeTab === 'venues' && <><PartnerAuthorityConsole /><CourseAvailabilityV2 /><VenueManager partnerUid={authUid} /></>}
         {activeTab === 'staff' && <StaffRoles partnerUid={authUid} />}
         {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
