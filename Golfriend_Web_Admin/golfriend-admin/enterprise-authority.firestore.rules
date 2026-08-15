@@ -41,5 +41,15 @@ service cloud.firestore {
     match /enterprise_member_delivery_policies/{document=**} { allow read, write: if false; }
     match /enterprise_member_delivery_suppressions/{document=**} { allow read, write: if false; }
     match /enterprise_member_report_ready_events/{document=**} { allow read, write: if false; }
+    match /enterprise_member_template_approvals/{document=**} { allow read, write: if false; }
+    match /enterprise_member_template_approval_policies/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_template_retirements/{document=**} { allow read, write: if false; }
+    match /enterprise_member_commissioning_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_member_commissioning_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_legal_approval_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_customer_template_approval_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_dry_runs/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_provider_compositions/{document=**} { allow read, write: if false; }
+    match /enterprise_member_jhcc_validations/{document=**} { allow read, write: if false; }
   }
 }

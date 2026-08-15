@@ -30,7 +30,7 @@ function auth(r: any) {
     );
   return uid;
 }
-async function reviewer(r: any) {
+export async function resolveEnterpriseMemberAdminReviewer(r: any) {
   const uid = auth(r),
     [snap, user] = await Promise.all([
       db.collection("admin_users").doc(uid).get(),
@@ -98,7 +98,7 @@ function publicHistory(docs: any[], x: any) {
 export const getEnterpriseMemberRequestsAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    await reviewer(r);
+    await resolveEnterpriseMemberAdminReviewer(r);
     const f = r.data?.filter || {};
     if (
       Object.keys(f).some(
@@ -165,7 +165,7 @@ export const getEnterpriseMemberRequestsAdminV1 = onCall(
 export const getEnterpriseMemberRequestAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    await reviewer(r);
+    await resolveEnterpriseMemberAdminReviewer(r);
     const id = strictId(r.data?.requestId, "REQUEST"),
       { x } = await requestById(id),
       receipts = await db
@@ -261,7 +261,7 @@ export const getEnterpriseMemberRequestAdminV1 = onCall(
 export const decideEnterpriseMemberRequestAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    const a = await reviewer(r),
+    const a = await resolveEnterpriseMemberAdminReviewer(r),
       requestId = strictId(r.data?.requestId, "REQUEST"),
       command = strictId(r.data?.commandId, "COMMAND"),
       expected = strictVersion(r.data?.expectedVersion),
@@ -428,7 +428,7 @@ export const decideEnterpriseMemberRequestAdminV1 = onCall(
 export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    const a = await reviewer(r),
+    const a = await resolveEnterpriseMemberAdminReviewer(r),
       requestId = strictId(r.data?.requestId, "REQUEST"),
       command = strictId(r.data?.commandId, "COMMAND"),
       expected = strictVersion(r.data?.expectedVersion),
@@ -473,6 +473,21 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
         delivery,
         reviewerAuthorityVersion: a.authorityVersion,
       });
+    const policySeed = await policyRef.get(),
+      policyJurisdiction = String(policySeed.data()?.jurisdiction || "");
+    if (
+      !policySeed.exists ||
+      !/^[A-Z]{2}(?:-[A-Z0-9]{2,8})?$/.test(policyJurisdiction)
+    )
+      throw new HttpsError("failed-precondition", "DELIVERY_POLICY_MISMATCH");
+    const templateRef = db
+      .collection("enterprise_member_delivery_templates")
+      .doc(
+        `${delivery.templateId}:${delivery.templateVersion}:${delivery.locale}:${policyJurisdiction}`,
+      );
+    const retirementRef = db
+      .collection("enterprise_member_delivery_template_retirements")
+      .doc(templateRef.id);
     let replayed = false;
     await db.runTransaction(async (tx) => {
       const selfBinding = db
@@ -492,16 +507,11 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
           course,
           member,
           linkState,
+          retirement,
         ] = await Promise.all([
           tx.get(doc.ref),
           tx.get(commandRef),
-          tx.get(
-            db
-              .collection("enterprise_member_delivery_templates")
-              .doc(
-                `${delivery.templateId}:${delivery.templateVersion}:${delivery.locale}`,
-              ),
-          ),
+          tx.get(templateRef),
           tx.get(
             db
               .collection("enterprise_member_delivery_suppressions")
@@ -518,6 +528,7 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
           tx.get(courseRef),
           memberRef ? tx.get(memberRef) : Promise.resolve(null),
           linkQuery ? tx.get(linkQuery) : Promise.resolve(null),
+          tx.get(retirementRef),
         ]);
       if (prior.exists) {
         if (prior.data()?.digest !== dg)
@@ -605,7 +616,9 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
         p.templateId !== delivery.templateId ||
         p.templateVersion !== delivery.templateVersion ||
         p.legalBasisReference !== delivery.legalBasisReference ||
-        delivery.locale !== d.locale
+        delivery.locale !== d.locale ||
+        p.jurisdiction !== policyJurisdiction ||
+        t.jurisdiction !== policyJurisdiction
       )
         throw new HttpsError("failed-precondition", "DELIVERY_POLICY_MISMATCH");
       if (!/^ref_[a-f0-9]{12,64}$/.test(String(d.contactReference || "")))
@@ -615,6 +628,7 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
         );
       if (
         !template.exists ||
+        retirement.exists ||
         t.status !== "approved" ||
         t.locale !== delivery.locale ||
         t.version !== delivery.templateVersion ||
@@ -696,7 +710,7 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
 export const getEnterpriseMemberDeliveryOutboxAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    await reviewer(r);
+    await resolveEnterpriseMemberAdminReviewer(r);
     const requestId = strictId(r.data?.requestId, "REQUEST"),
       { x } = await requestById(requestId),
       snap = await db
@@ -723,7 +737,7 @@ export const getEnterpriseMemberDeliveryOutboxAdminV1 = onCall(
 export const resolveEnterpriseMemberCsvConflictsAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    const a = await reviewer(r),
+    const a = await resolveEnterpriseMemberAdminReviewer(r),
       requestId = strictId(r.data?.requestId, "REQUEST"),
       command = strictId(r.data?.commandId, "COMMAND"),
       expected = strictVersion(r.data?.expectedVersion),
