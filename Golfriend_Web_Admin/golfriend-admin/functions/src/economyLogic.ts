@@ -79,3 +79,11 @@ export function quoteRate(rate: AuthoritativeEconomyRate, rateVersion: string, u
     marginUsd: revenueUsd - rate.directCostUsd,
   };
 }
+
+
+export function refundableTees(netTees: unknown): number {
+  if (typeof netTees !== "number" || !Number.isSafeInteger(netTees) || netTees >= 0) {
+    throw new Error("TRANSACTION_NOT_REFUNDABLE");
+  }
+  return Math.abs(netTees);
+}
