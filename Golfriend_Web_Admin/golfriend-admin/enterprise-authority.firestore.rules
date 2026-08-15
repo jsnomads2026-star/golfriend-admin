@@ -67,6 +67,8 @@ service cloud.firestore {
     match /small_business_delivery_suppressions/{document=**} { allow read, write: if false; }
     match /small_business_promotion_publications/{document=**} { allow read, write: if false; }
     match /small_business_engagements/{document=**} { allow read, write: if false; }
+    match /small_business_engagements_v2/{document=**} { allow read, write: if false; }
+    match /small_business_inquiries_v2/{document=**} { allow read, write: if false; }
     match /small_business_report_events/{document=**} { allow read, write: if false; }
     match /small_business_jhcc_preparations/{document=**} { allow read, write: if false; }
   }

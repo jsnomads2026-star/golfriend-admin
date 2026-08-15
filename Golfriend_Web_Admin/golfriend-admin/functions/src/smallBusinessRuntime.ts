@@ -6,7 +6,9 @@ import {
   correctionTransition,
   digest,
   discoveryCard,
+  inquiryTransition,
   normalizeProfile,
+  normalizeDiscoveryFilter,
   normalizePromotion,
   prepareJhcc,
   promotionTransition,
@@ -1363,6 +1365,87 @@ export const prepareSmallBusinessInquiryV1 = onCall(
     };
   },
 );
+const MOBILE_SCHEMA_V2="golfriend.small-business.mobile-integration.v2", MEMBER_ENGAGEMENT_KINDS = ["view", "favorite", "unfavorite"], MOBILE_LOCALES=["en","th","ko","ja","zh","es","fr","de"], FRESH_MS=5*60*1000;
+const memberRef = (u: string) => `member_${digest(u).slice(0, 32)}`;
+const localeV2=(v:any)=>{const x=String(v||"");if(!MOBILE_LOCALES.includes(x))throw new HttpsError("invalid-argument","LOCALE_INVALID");return x;};
+const fingerprint=(provided:any,material:any)=>{const expected=digest(material);if(provided!==expected)throw new HttpsError("invalid-argument","PAYLOAD_FINGERPRINT_INVALID");return expected;};
+function page(raw:any,scope:any,defaultLimit=20){const limit=raw?.limit===undefined?defaultLimit:strictVersion(raw.limit,"LIMIT");if(limit<1||limit>50)throw new HttpsError("invalid-argument","LIMIT_INVALID");let offset=0;if(raw?.cursor!==undefined){const parts=String(raw.cursor).split(".");if(parts.length!==2)throw new HttpsError("invalid-argument","CURSOR_INVALID");offset=Number.parseInt(Buffer.from(parts[0],"base64url").toString("utf8"),10);if(!Number.isSafeInteger(offset)||offset<0||parts[1]!==digest([scope,offset]))throw new HttpsError("invalid-argument","CURSOR_INVALID");}const cursor=(next:number)=>`${Buffer.from(String(next)).toString("base64url")}.${digest([scope,next])}`;return{limit,offset,cursor};}
+const evidenceV2=(u:string,locale:string,state="current")=>{const now=Date.now();return{schema:MOBILE_SCHEMA_V2,version:2,state,locale,issuedAt:new Date(now).toISOString(),freshUntil:new Date(now+FRESH_MS).toISOString(),memberBinding:memberRef(u),authoritativeStatus:state==="current"?"active":"unavailable"};};
+function exactKeys(raw: any, allowed: string[], label: string) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((k) => !allowed.includes(k)))
+    throw new HttpsError("invalid-argument", `${label}_INVALID`);
+}
+function locationVersion(x:any,l:any){const stored=l?.version??x?.locationVersions?.[l?.locationId];if(stored!==undefined)return strictVersion(stored,"LOCATION_VERSION");return Number.parseInt(digest({locationId:l?.locationId,name:l?.name,address:l?.address,city:l?.city,countryCode:l?.countryCode,serviceArea:l?.serviceArea,operatingHours:l?.operatingHours}).slice(0,12),16)}
+const locationActive=(l:any)=>l&&(l.status===undefined||l.status==="active");
+function approvedCardV2(x: any,l=x.profile?.locations?.[0]) {
+  const card = discoveryCard({
+    businessId: x.businessId,
+    status: x.status,
+    publicName: x.profile?.publicName,
+    category: x.profile?.category,
+    city: x.profile?.locations?.[0]?.city,
+    countryCode: x.profile?.locations?.[0]?.countryCode,
+    serviceDescription: x.profile?.serviceDescription,
+    sponsored: false,
+  });
+  return { ...card, profileVersion: strictVersion(x.version, "PROFILE_VERSION"),profileDigest:digest(normalizeProfile(x.profile)),locationId:strictId(l?.locationId,"LOCATION"),locationVersion:locationVersion(x,l),displayName:x.profile.publicName,country:l.countryCode,description:x.profile.serviceDescription,authoritativeStatus:"active" };
+}
+async function activeBusinessVersion(tx: any, businessId: string, expectedVersion: number, locationId?:string, expectedLocationVersion?:number) {
+  const ref = db.collection("small_businesses").doc(businessId), snap = await tx.get(ref), x = snap.data();
+  if (!snap.exists || x?.status !== "active") throw new HttpsError("failed-precondition", "BUSINESS_SUSPENDED_OR_UNAVAILABLE");
+  if (strictVersion(x.version, "PROFILE_VERSION") !== expectedVersion) throw new HttpsError("failed-precondition", "PROFILE_VERSION_CHANGED");
+  if(locationId){const l=x.profile?.locations?.find((z:any)=>z.locationId===locationId);if(!locationActive(l))throw new HttpsError("failed-precondition","LOCATION_UNAVAILABLE");if(locationVersion(x,l)!==expectedLocationVersion)throw new HttpsError("failed-precondition","LOCATION_VERSION_CHANGED");}
+  return { ref, x };
+}
+export const discoverSmallBusinessesV2 = onCall({ enforceAppCheck: true }, async (r) => {
+  const u=uid(r),locale=localeV2(r.data?.locale);
+  exactKeys(r.data || {}, ["locale","filter","cursor","limit"], "DISCOVERY_REQUEST");
+  let f:any; try { f=normalizeDiscoveryFilter(r.data?.filter); } catch(e) { fail(e); }
+  const paging=page(r.data,["discovery",memberRef(u),locale,f]);
+  const snap = await db.collection("small_businesses").where("status", "==", "active").limit(100).get();
+  const rows = snap.docs.map((d) => d.data()).filter((x) =>
+    (f.category === undefined || x.profile?.category === f.category) &&
+    (f.city === undefined || x.profile?.locations?.some((l: any) => l.city === f.city)) &&
+    (f.countryCode === undefined || x.profile?.locations?.some((l: any) => l.countryCode === f.countryCode)));
+  const all:any[]=[];for(const x of rows)for(const l of (x.profile?.locations||[]).filter(locationActive))try{all.push(approvedCardV2(x,l));}catch{/* malformed producer document is unavailable, never leaked */}all.sort((a,b)=>a.businessId.localeCompare(b.businessId)||a.locationId.localeCompare(b.locationId));const items=all.slice(paging.offset,paging.offset+paging.limit),next=paging.offset+paging.limit<all.length?paging.cursor(paging.offset+paging.limit):undefined;
+  return { ...evidenceV2(u,locale,items.length?"current":"empty"), items, ...(next&&{nextCursor:next}),rawLocationPersisted: false, returnRoute: "/lounge" };
+});
+export const getSmallBusinessDetailV2 = onCall({ enforceAppCheck: true }, async (r) => {
+  const u=uid(r),locale=localeV2(r.data?.locale); exactKeys(r.data, ["businessId", "expectedProfileVersion","locale"], "DETAIL_REQUEST");
+  const x = (await business(strictId(r.data.businessId, "BUSINESS"))).x, expected = strictVersion(r.data.expectedProfileVersion, "EXPECTED_PROFILE_VERSION");
+  if (x.status !== "active") throw new HttpsError("failed-precondition", "BUSINESS_SUSPENDED_OR_UNAVAILABLE");
+  if (x.version !== expected) throw new HttpsError("failed-precondition", "PROFILE_VERSION_CHANGED");
+  const promos=await db.collection("small_business_promotions").where("businessId","==",x.businessId).limit(50).get(),now=Date.now();
+  return { ...evidenceV2(u,locale),items:x.profile.locations.filter(locationActive).map((l:any)=>approvedCardV2(x,l)),promotions:promos.docs.map(d=>d.data()).filter((p:any)=>p.status==="published"&&Date.parse(p.effectiveAt)<=now&&Date.parse(p.expiresAt)>now).map((p:any)=>({promotionId:p.promotionId,locationIds:p.locationIds,contentDigest:p.contentDigest,disclosure:"sponsored_partner",effectiveAt:iso(p.effectiveAt),expiresAt:iso(p.expiresAt)})),rawLocationPersisted:false,returnRoute:"/lounge" };
+});
+export const recordSmallBusinessEngagementV2 = onCall({ enforceAppCheck: true }, async (r) => {
+  const u=uid(r); exactKeys(r.data,["commandId","businessId","expectedProfileVersion","locationId","expectedLocationVersion","kind","payloadFingerprint"],"ENGAGEMENT_REQUEST");
+  const commandId=strictId(r.data.commandId,"COMMAND"),businessId=strictId(r.data.businessId,"BUSINESS"),locationId=strictId(r.data.locationId,"LOCATION"),expectedProfileVersion=strictVersion(r.data.expectedProfileVersion,"EXPECTED_PROFILE_VERSION"),expectedLocationVersion=strictVersion(r.data.expectedLocationVersion,"EXPECTED_LOCATION_VERSION"), kind=String(r.data.kind),canonical={commandId,businessId,expectedProfileVersion,locationId,expectedLocationVersion,kind},payloadFingerprint=fingerprint(r.data.payloadFingerprint,canonical);
+  if(!MEMBER_ENGAGEMENT_KINDS.includes(kind)) throw new HttpsError("invalid-argument","ENGAGEMENT_INVALID");
+  const ref=db.collection("small_business_engagements_v2").doc(commandId), material={schema:MOBILE_SCHEMA_V2,commandId,businessId,savedProfileVersion:expectedProfileVersion,locationId,savedLocationVersion:expectedLocationVersion,opaqueMemberRef:memberRef(u),kind,payloadFingerprint,rawLocationPersisted:false,immutable:true};
+  return db.runTransaction(async(tx)=>{const [old]=await Promise.all([tx.get(ref),activeBusinessVersion(tx,businessId,expectedProfileVersion,locationId,expectedLocationVersion)]);if(old.exists){if(old.data()?.opaqueMemberRef!==memberRef(u))throw new HttpsError("permission-denied","MEMBER_BINDING_MISMATCH");if(old.data()?.payloadFingerprint!==payloadFingerprint)throw new HttpsError("already-exists","REPLAY_PAYLOAD_CHANGED");return{schema:MOBILE_SCHEMA_V2,commandId,replayed:true};}tx.create(ref,{...material,createdAt:stamp()});return{schema:MOBILE_SCHEMA_V2,commandId,replayed:false};});
+});
+async function listMemberEngagements(r:any, mode:"favorites"|"recents") {
+  const u=uid(r),locale=localeV2(r.data?.locale); exactKeys(r.data||{},["locale","cursor","limit"],"ENGAGEMENT_LIST_REQUEST");
+  const paging=page(r.data,[mode,memberRef(u),locale]);
+  const snap=await db.collection("small_business_engagements_v2").where("opaqueMemberRef","==",memberRef(u)).limit(200).get(), latest=new Map<string,any>();
+  for(const d of snap.docs){const x=d.data(), relevant=mode==="favorites"?["favorite","unfavorite"].includes(x.kind):x.kind==="view";if(!relevant)continue;const key=`${x.businessId}:${x.locationId}`,ms=x.createdAt?.toMillis?.()||0,old=latest.get(key);if(!old||ms>old.ms||ms===old.ms&&String(x.commandId)<String(old.commandId))latest.set(key,{...x,ms});}
+  const candidates=[...latest.values()].filter((x)=>mode==="favorites"?x.kind==="favorite":true).sort((a,b)=>b.ms-a.ms||String(a.commandId).localeCompare(String(b.commandId))),items=[];
+  for(const e of candidates.slice(paging.offset,paging.offset+paging.limit)){const s=await db.collection("small_businesses").doc(e.businessId).get(),x=s.data(),l=x?.profile?.locations?.find((z:any)=>z.locationId===e.locationId);if(s.exists&&x?.status==="active"&&locationActive(l))items.push({...approvedCardV2(x,l),savedProfileVersion:e.savedProfileVersion,currentProfileVersion:x.version,savedLocationVersion:e.savedLocationVersion,currentLocationVersion:locationVersion(x,l),state:x.version===e.savedProfileVersion&&locationVersion(x,l)===e.savedLocationVersion?"current":"stale"});else items.push({businessId:e.businessId,savedProfileVersion:e.savedProfileVersion,currentProfileVersion:x?.version??null,locationId:e.locationId,savedLocationVersion:e.savedLocationVersion,currentLocationVersion:locationActive(l)?locationVersion(x,l):null,state:"tombstone",authoritativeStatus:"unavailable",returnRoute:"/lounge"});}
+  const next=paging.offset+paging.limit<candidates.length?paging.cursor(paging.offset+paging.limit):undefined,state=items.some((x:any)=>x.state==="tombstone")?"tombstone":items.length?"current":"empty";return{...evidenceV2(u,locale,state),items,...(next&&{nextCursor:next}),rawLocationPersisted:false,returnRoute:"/lounge"};
+}
+export const listSmallBusinessFavoritesV2=onCall({enforceAppCheck:true},async(r)=>listMemberEngagements(r,"favorites"));
+export const listSmallBusinessRecentViewsV2=onCall({enforceAppCheck:true},async(r)=>listMemberEngagements(r,"recents"));
+function inquiryView(u:string,locale:string,x:any){const expired=["prepared","awaiting_provider"].includes(x.state)&&Date.parse(x.expiresAt)<=Date.now(),state=expired?"expired":x.state;return{...evidenceV2(u,locale,expired?"stale":"current"),inquiryId:x.inquiryId,inquiryVersion:x.inquiryVersion,inquiryState:state,businessId:x.businessId,profileVersion:x.profileVersion,locationId:x.locationId,locationVersion:x.locationVersion,preview:"smallBusiness.inquiry.ownerValidationRequired",providerState:x.providerState||"not_commissioned",expiresAt:x.expiresAt,transmission:false,requiresFreshOwnerValidation:true,requiresExplicitConfirmation:true,personalDataIncluded:false,returnRoute:"/lounge"};}
+export const prepareSmallBusinessInquiryV2=onCall({enforceAppCheck:true},async(r)=>{
+  const u=uid(r),locale=localeV2(r.data?.locale);exactKeys(r.data,["commandId","businessId","expectedProfileVersion","locationId","expectedLocationVersion","locale","payloadFingerprint"],"INQUIRY_REQUEST");
+  const commandId=strictId(r.data.commandId,"COMMAND"),businessId=strictId(r.data.businessId,"BUSINESS"),profileVersion=strictVersion(r.data.expectedProfileVersion,"EXPECTED_PROFILE_VERSION"),locationId=strictId(r.data.locationId,"LOCATION"),locationVersionValue=strictVersion(r.data.expectedLocationVersion,"EXPECTED_LOCATION_VERSION"),canonical={commandId,businessId,expectedProfileVersion:profileVersion,locationId,expectedLocationVersion:locationVersionValue,locale},payloadFingerprint=fingerprint(r.data.payloadFingerprint,canonical),owner=memberRef(u),inquiryId=`sbi_${digest([owner,commandId]).slice(0,32)}`,ref=db.collection("small_business_inquiries_v2").doc(inquiryId),history=ref.collection("history").doc(commandId),issuedAt=new Date().toISOString(),expiresAt=new Date(Date.now()+15*60*1000).toISOString(),material={schema:MOBILE_SCHEMA_V2,inquiryId,inquiryVersion:1,businessId,profileVersion,locationId,locationVersion:locationVersionValue,locale,opaqueMemberRef:owner,state:"prepared",providerState:"not_commissioned",expiresAt,transmission:false,personalDataIncluded:false,payloadFingerprint,immutableRequest:true};
+  return db.runTransaction(async(tx)=>{const [old,h]=await Promise.all([tx.get(ref),tx.get(history),activeBusinessVersion(tx,businessId,profileVersion,locationId,locationVersionValue)]);if(h.exists){if(h.data()?.payloadFingerprint!==payloadFingerprint)throw new HttpsError("already-exists","REPLAY_PAYLOAD_CHANGED");return inquiryView(u,locale,old.data());}if(old.exists)throw new HttpsError("already-exists","INQUIRY_ID_REUSED");tx.create(ref,{...material,issuedAt,createdAt:stamp(),updatedAt:stamp()});tx.create(history,{commandId,action:"prepare",payloadFingerprint,inquiryVersion:1,state:"prepared",issuedAt,createdAt:stamp(),immutable:true});return inquiryView(u,locale,material);});
+});
+async function ownedInquiry(r:any){const u=uid(r),id=strictId(r.data?.inquiryId,"INQUIRY"),s=await db.collection("small_business_inquiries_v2").doc(id).get();if(!s.exists||s.data()?.opaqueMemberRef!==memberRef(u))throw new HttpsError("not-found","Inquiry unavailable.");return{ref:s.ref,x:s.data()!};}
+export const getSmallBusinessInquiryV2=onCall({enforceAppCheck:true},async(r)=>{const u=uid(r),locale=localeV2(r.data?.locale);exactKeys(r.data,["inquiryId","locale"],"INQUIRY_READ_REQUEST");const q=await ownedInquiry(r),s=await db.collection("small_businesses").doc(q.x.businessId).get(),b=s.data(),l=b?.profile?.locations?.find((z:any)=>z.locationId===q.x.locationId);if(!s.exists||b?.status!=="active"||!locationActive(l))return{...evidenceV2(u,locale,"tombstone"),inquiryId:q.x.inquiryId,inquiryVersion:q.x.inquiryVersion,inquiryState:q.x.state,businessId:q.x.businessId,profileVersion:q.x.profileVersion,locationId:q.x.locationId,locationVersion:q.x.locationVersion,preview:"smallBusiness.discovery.unavailable",providerState:"not_commissioned",expiresAt:q.x.expiresAt,transmission:false,returnRoute:"/lounge"};return inquiryView(u,locale,q.x);});
+export const listSmallBusinessInquiryHistoryV2=onCall({enforceAppCheck:true},async(r)=>{const u=uid(r),locale=localeV2(r.data?.locale);exactKeys(r.data,["locale","cursor","limit"],"INQUIRY_HISTORY_REQUEST");const paging=page(r.data,["inquiry-history",memberRef(u),locale]),snap=await db.collection("small_business_inquiries_v2").where("opaqueMemberRef","==",memberRef(u)).limit(200).get(),docs=snap.docs.sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0)||a.id.localeCompare(b.id)),items=[];for(const d of docs.slice(paging.offset,paging.offset+paging.limit)){const x=d.data(),s=await db.collection("small_businesses").doc(x.businessId).get(),b=s.data(),l=b?.profile?.locations?.find((z:any)=>z.locationId===x.locationId);items.push({businessId:x.businessId,savedProfileVersion:x.profileVersion,currentProfileVersion:b?.version??null,locationId:x.locationId,savedLocationVersion:x.locationVersion,currentLocationVersion:locationActive(l)?locationVersion(b,l):null,state:!s.exists||b?.status!=="active"||!locationActive(l)?"tombstone":Date.parse(x.expiresAt)<=Date.now()?"expired":x.state,issuedAt:x.issuedAt,freshUntil:x.expiresAt});}const next=paging.offset+paging.limit<docs.length?paging.cursor(paging.offset+paging.limit):undefined;return{...evidenceV2(u,locale,items.some((x:any)=>x.state==="tombstone")?"tombstone":items.length?"current":"empty"),items,...(next&&{nextCursor:next}),transmission:false,returnRoute:"/lounge"};});
+export const cancelSmallBusinessInquiryV2=onCall({enforceAppCheck:true},async(r)=>{const u=uid(r);exactKeys(r.data,["commandId","inquiryId","expectedVersion","payloadFingerprint"],"INQUIRY_CANCEL_REQUEST");const inquiryId=strictId(r.data.inquiryId,"INQUIRY"),commandId=strictId(r.data.commandId,"COMMAND"),expected=strictVersion(r.data.expectedVersion,"EXPECTED_VERSION"),canonical={commandId,inquiryId,expectedVersion:expected},payloadFingerprint=fingerprint(r.data.payloadFingerprint,canonical),ref=db.collection("small_business_inquiries_v2").doc(inquiryId),history=ref.collection("history").doc(commandId),owner=memberRef(u);return db.runTransaction(async(tx)=>{const [s,h]=await Promise.all([tx.get(ref),tx.get(history)]),x=s.data();if(!s.exists||x?.opaqueMemberRef!==owner)throw new HttpsError("not-found","Inquiry unavailable.");await activeBusinessVersion(tx,x.businessId,x.profileVersion,x.locationId,x.locationVersion);if(h.exists){if(h.data()?.payloadFingerprint!==payloadFingerprint)throw new HttpsError("already-exists","REPLAY_PAYLOAD_CHANGED");return inquiryView(u,x.locale,x);}if(x.inquiryVersion!==expected||Date.parse(x.expiresAt)<=Date.now())throw new HttpsError("failed-precondition","INQUIRY_TRANSITION_DENIED");const next=(()=>{try{return inquiryTransition(x.state,"cancel");}catch(e){return fail(e);}})(),version=expected+1;tx.update(ref,{state:next,inquiryVersion:version,cancelledAt:stamp(),updatedAt:stamp()});tx.create(history,{commandId,action:"cancel",payloadFingerprint,inquiryVersion:version,state:next,createdAt:stamp(),immutable:true});return inquiryView(u,x.locale,{...x,state:next,inquiryVersion:version});});});
 export const getSmallBusinessReportingAdminV1 = onCall(
   { enforceAppCheck: true },
   async (r) => {

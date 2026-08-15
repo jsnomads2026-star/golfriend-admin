@@ -274,3 +274,26 @@ test("dual-role interleaving cannot replace request authority", () => {
   const calls = compactSrc.match(/authority:a\.commandAuthority/g) || [];
   assert.equal(calls.length, 10, `all mutations must pass authority, found ${calls.length}`);
 });
+test("V2 Small Business producer surface is version bound and V1 remains exported",()=>{
+  for(const name of["discoverSmallBusinessesV2","getSmallBusinessDetailV2","recordSmallBusinessEngagementV2","listSmallBusinessFavoritesV2","listSmallBusinessRecentViewsV2","prepareSmallBusinessInquiryV2","getSmallBusinessInquiryV2","listSmallBusinessInquiryHistoryV2","cancelSmallBusinessInquiryV2"])assert.match(index,new RegExp(`\\b${name}\\b`));
+  const v2=compactSrc.slice(compactSrc.indexOf("exportconstdiscoverSmallBusinessesV2"),compactSrc.indexOf("exportconstgetSmallBusinessReportingAdminV1"));
+  assert.match(compactSrc,/profileVersion:strictVersion\(x\.version/);
+  assert.match(v2,/x\.profile\?\.category===f\.category/);
+  assert.match(v2,/expectedProfileVersion/);
+  assert.match(v2,/activeBusinessVersion\(tx,businessId,expectedProfileVersion,locationId,expectedLocationVersion\)/);
+  assert.doesNotMatch(v2,/contactEmail|contactPhone|representativeUid|latitude|longitude/);
+});
+test("V2 engagement and inquiry mutations are transactional replay and suspension safe",()=>{
+  const v2=compactSrc.slice(compactSrc.indexOf("exportconstrecordSmallBusinessEngagementV2"),compactSrc.indexOf("exportconstgetSmallBusinessReportingAdminV1"));
+  assert.match(v2,/runTransaction/);
+  assert.match(v2,/REPLAY_PAYLOAD_CHANGED/);
+  assert.match(compactSrc,/BUSINESS_SUSPENDED_OR_UNAVAILABLE/);
+  assert.match(v2,/transmission:false/);
+  assert.match(v2,/requiresFreshOwnerValidation:true/);
+  assert.match(v2,/requiresExplicitConfirmation:true/);
+  assert.match(v2,/personalDataIncluded:false/);
+  for(const token of["payloadFingerprint","locationId","expectedLocationVersion","inquiryVersion","issuedAt","freshUntil","awaiting_provider","expired","memberBinding","transmission:false"])assert.ok(compactSrc.includes(token),token);
+  assert.match(v2,/activeBusinessVersion\(tx,businessId,expectedProfileVersion,locationId,expectedLocationVersion\)/);
+});
+test("V2 protected collections deny every direct client",()=>{for(const collection of["small_business_engagements_v2","small_business_inquiries_v2"])assert.match(rules,new RegExp(`match /${collection}/\\{document=\\*\\*\\} \\{ allow read, write: if false; \\}`));});
+test("V2 saved projections have scope-bound pagination, deterministic ties and tombstones",()=>{const v2=compactSrc.slice(compactSrc.indexOf("functionpage"),compactSrc.indexOf("exportconstgetSmallBusinessReportingAdminV1"));for(const token of["digest([scope,offset])","nextCursor","memberRef(u),locale","commandId).localeCompare","a.id.localeCompare(b.id)","state:\"tombstone\""])assert.ok(v2.includes(token),token);assert.doesNotMatch(v2,/cursor!==undefined\)thrownewHttpsError/);assert.match(v2,/l.status===undefined\|\|l.status===\"active\"/);assert.match(v2,/Number.parseInt\(digest\(\{locationId/);});
