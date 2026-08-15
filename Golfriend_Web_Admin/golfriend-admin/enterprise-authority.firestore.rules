@@ -17,5 +17,12 @@ service cloud.firestore {
     match /enterprise_member_links/{document=**} { allow read, write: if false; }
     match /enterprise_member_link_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_verified_golfers/{document=**} { allow read, write: if false; }
+    match /enterprise_onboarding_applications/{document=**} { allow read, write: if false; }
+    match /enterprise_onboarding_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_onboarding_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_agreement_policies/{document=**} { allow read, write: if false; }
+    match /enterprise_economy_config/{document=**} { allow read, write: if false; }
+    match /enterprise_trial_offers/{document=**} { allow read, write: if false; }
+    match /enterprise_trials/{document=**} { allow read, write: if false; }
   }
 }
