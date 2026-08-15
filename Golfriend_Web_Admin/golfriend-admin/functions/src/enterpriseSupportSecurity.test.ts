@@ -1,0 +1,10 @@
+import assert from"node:assert/strict";import{readFileSync}from"node:fs";import{resolve}from"node:path";import test from"node:test";
+const runtime=readFileSync(resolve(process.cwd(),"src/enterpriseSupportRuntime.ts"),"utf8"),rules=readFileSync(resolve(process.cwd(),"../enterprise-authority.firestore.rules"),"utf8");
+test("all support callables enforce App Check",()=>assert.equal((runtime.match(/onCall\(\{enforceAppCheck:true\}/g)||[]).length,8));
+test("authenticated UID is mandatory",()=>assert.match(runtime,/if\(!request\.auth\?\.uid\)throw new HttpsError\("unauthenticated"/));
+test("exact partner support grant uses GF-EN-004",()=>assert.match(runtime,/resolveEnterpriseCourseAuthority\(uid,scope\.membershipId,scope\.organizationId,scope\.propertyId,scope\.courseId,"partner_support"\)/));
+test("verified representative binds the application and membership",()=>{assert.match(runtime,/a\.actorMembershipId!==scope\.membershipId/);assert.match(runtime,/ad\.actorMembershipId!==scope\.membershipId/)});
+test("evidence requires registry scope application owner and status",()=>{for(const value of ["e.applicationId!==s.applicationId","e.ownerMembershipId!==s.scope.membershipId","e.status!==\"available\""])assert.ok(runtime.includes(value))});
+test("projection hides non-public Admin messages",()=>assert.match(runtime,/m\.author==="admin"&&m\.public===true/));
+test("client datastore access is denied",()=>{for(const name of ["enterprise_support_requests","enterprise_support_commands","enterprise_support_receipts","enterprise_support_evidence_registry"])assert.ok(rules.includes(`match /${name}/{document=**} { allow read, write: if false; }`))});
+test("no notification sender or Admin assignment authority is present",()=>{assert.doesNotMatch(runtime,/sendMail|sendSms|sendPush|adminAssignee|assignedAdmin|changePartnerStatus|activateTrial/)});

@@ -25,5 +25,9 @@ service cloud.firestore {
     match /enterprise_economy_config_versions/{document=**} { allow read, write: if false; }
     match /enterprise_trial_offers/{document=**} { allow read, write: if false; }
     match /enterprise_trials/{document=**} { allow read, write: if false; }
+    match /enterprise_support_requests/{document=**} { allow read, write: if false; }
+    match /enterprise_support_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_support_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_support_evidence_registry/{document=**} { allow read, write: if false; }
   }
 }
