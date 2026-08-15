@@ -50,6 +50,7 @@
     "verify:marketing-library": "node scripts/marketing-library-verify.mjs",
     "verify:partner-onboarding": "node scripts/partner-onboarding-v2-verify.mjs",
     "verify:verified-course-onboarding-ui": "node scripts/verified-course-onboarding-ui-verify.mjs",
+    "test:enterprise-onboarding-contract": "node scripts/verified-course-onboarding-ui-verify.mjs",
     "verify:enterprise-authority": "node --test src/components/B2B/enterprise/organizationAuthorityModel.test.ts && node scripts/enterprise-authority-ui-verify.mjs",
     "verify:enterprise-authority-producer": "node scripts/enterprise-authority-producer-verify.mjs",
     "verify:enterprise-tournament-ui": "node scripts/enterprise-tournament-ui-verify.mjs",

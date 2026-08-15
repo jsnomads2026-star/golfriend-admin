@@ -444,6 +444,7 @@ import EnterpriseCourseMemberOperations from './enterpriseCourseMember/Enterpris
 import VenueManager from './enterprise/VenueManager';
 import StaffRoles from './enterprise/StaffRoles';
 import PartnerAuthorityConsole from './PartnerAuthorityConsole';
+import VerifiedCourseOnboarding from './VerifiedCourseOnboarding';
 import CourseAvailabilityV2 from './CourseAvailabilityV2';
 import PlayBookingLifecycleV2 from './PlayBookingLifecycleV2';
 import BookingOperationsReportV2 from './BookingOperationsReportV2';
@@ -624,7 +625,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'raffle' && <PolicyUnavailable feature="Raffle Draw" category="unresolved-policy" callable="drawRaffleWinner" />}
         {activeTab === 'crm' && <AdLeadsInbox partnerUid={authUid} />}
         {activeTab === 'org' && <EnterpriseCourseMemberOperations />}
-        {activeTab === 'venues' && <><PartnerAuthorityConsole /><CourseAvailabilityV2 /><VenueManager partnerUid={authUid} /></>}
+        {activeTab === 'venues' && <><VerifiedCourseOnboarding /><PartnerAuthorityConsole /><CourseAvailabilityV2 /><VenueManager partnerUid={authUid} /></>}
         {activeTab === 'staff' && <StaffRoles partnerUid={authUid} />}
         {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
         {activeTab === 'billing' && <BillingBoundary partnerUid={authUid} />}
