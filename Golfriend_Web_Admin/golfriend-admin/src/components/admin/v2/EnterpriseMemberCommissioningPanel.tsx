@@ -28,12 +28,12 @@ export default function EnterpriseMemberCommissioningPanel({provider=firebaseEnt
  return <section className="emc" aria-labelledby="emc-title">
   <header className="emc-header"><div><p className="emc-eyebrow">{t.title}</p><h3 id="emc-title">{t.title}</h3><p>{t.intro}</p></div><button type="button" onClick={()=>void load()} disabled={busy||state==='loading'}>{t.refresh}</button></header>
   <div className="emc-status" role="status" aria-live="polite">{state==='loading'&&t.loading}{notice}</div>
-  {state==='offline'&&<StateMessage text={t.offline} retry={t.retry} onRetry={()=>void load()}/>} 
+  {state==='offline'&&<StateMessage text={t.offline} retry={t.retry} onRetry={()=>void load()}/>}
   {state==='unavailable'||state==='error'?<StateMessage text={state==='error'?t.failed:t.unavailable} retry={t.retry} onRetry={()=>void load()}/>:null}
   {state==='empty'&&<p className="emc-empty">{t.empty}</p>}
   {state==='ready'&&<>
    <TemplateTable templates={templates} selected={selected} setSelected={setSelected} t={t}/>
-   {selected&&<TemplateActions template={selected} busy={busy} run={run} provider={provider} t={t}/>} 
+   {selected&&<TemplateActions template={selected} busy={busy} run={run} provider={provider} t={t}/>}
   </>}
   <ProposalForm busy={busy} run={run} provider={provider} t={t}/>
   <BoundarySummary snapshot={snapshot} t={t}/>
