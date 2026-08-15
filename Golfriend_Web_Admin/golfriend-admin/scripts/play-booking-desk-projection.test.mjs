@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { classifyPlayBookingDeskError, createBookingAcknowledgementReceipt, parsePlayBookingDeskResponse, PLAY_BOOKING_DESK_STATUSES } from '../src/components/B2B/bookingDeskProjection.mjs';
+import { createHash } from 'node:crypto';
+import { classifyPlayBookingDeskError, createBookingAcknowledgementReceipt, parseBookingDeskActionResult, parseBookingDeskMessageResult, parsePlayBookingDeskResponse, PLAY_BOOKING_DESK_STATUSES, validateBookingAcknowledgementReceipt } from '../src/components/B2B/bookingDeskProjection.mjs';
 
 let passed = 0;
 const test = (name, run) => { run(); passed += 1; console.log(`PASS ${name}`); };
@@ -34,6 +35,18 @@ test('projects optional provider course terms and reference only when valid', ()
   assert.deepEqual(result.bookings[0].provider, {providerId:'desk_1',displayName:'Course Desk'});
   assert.equal(result.bookings[0].terms, 'Cancel before the stated deadline.');
   assert.equal(result.bookings[0].reference, 'receipt_1');
+});
+
+test('rejects contradictory duplicated terms and references',()=>{
+  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({terms:'A',cancellationTerms:'B'})]})).state,'unavailable');
+  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({reference:'one',receiptRef:'two'})]})).state,'unavailable');
+  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({terms:'A',cancellationTerms:'A',reference:'one',receiptRef:'one'})]})).state,'ready');
+});
+
+test('intersects supplied permissions with the frozen role ceiling',()=>{
+  const support=parsePlayBookingDeskResponse(response({role:'support'})),analyst=parsePlayBookingDeskResponse(response({role:'analyst'}));
+  assert.deepEqual(support.permissions,{read:true,message:true,confirm:false,alternative:false,cancel:false,complete:false});
+  assert.deepEqual(analyst.permissions,{read:true,message:false,confirm:false,alternative:false,cancel:false,complete:false});
 });
 
 test('rejects unknown, private, identity and financial fields recursively', () => {
@@ -79,8 +92,32 @@ test('creates stable immutable non-authoritative acknowledgement receipts', () =
   assert.equal(first.authority, 'client_projection');
   assert.equal(first.transmissionIncluded, false);
   assert(Object.isFrozen(first));
+  assert.equal(validateBookingAcknowledgementReceipt(first),true);
+  assert.equal(validateBookingAcknowledgementReceipt({...first,version:5}),false);
+  assert.equal(validateBookingAcknowledgementReceipt({...first,receiptId:'bda_0000000000000000'}),false);
   assert.throws(()=>createBookingAcknowledgementReceipt({...input,memberUid:'secret'}));
   assert.throws(()=>createBookingAcknowledgementReceipt({...input,version:0}));
 });
 
-console.log(`${passed}/9 play booking desk projection tests PASS`);
+const serverId=(prefix,bookingId,commandId)=>`${prefix}_${createHash('sha256').update(`${bookingId}|${commandId}`).digest('hex').slice(0,32)}`;
+test('strictly binds action result to booking action command transition version and receipt',()=>{
+  const expected={bookingId:'booking_1',action:'confirm',commandId:'command_1',currentVersion:4,currentStatus:'pending'};
+  const raw={success:true,bookingId:'booking_1',status:'confirmed',version:5,receiptId:serverId('pbr','booking_1','command_1'),notificationStatus:'PROVIDER_UNCONFIGURED'};
+  const result=parseBookingDeskActionResult(raw,expected);
+  assert.equal(result.state,'verified');assert.equal(result.status,'confirmed');assert(Object.isFrozen(result));
+  for(const changed of [{success:false},{bookingId:'booking_2'},{status:'cancelled'},{version:6},{receiptId:'pbr_'+'0'.repeat(32)},{notificationStatus:'sent'},{unknown:true}])assert.equal(parseBookingDeskActionResult({...raw,...changed},expected).state,'unavailable');
+  assert.equal(parseBookingDeskActionResult({...raw,status:'alternative_proposed'},expected).state,'unavailable');
+  const alternative={...raw,status:'alternative_proposed',receiptId:serverId('pbr','booking_1','command_2')};
+  assert.equal(parseBookingDeskActionResult(alternative,{...expected,action:'alternative',commandId:'command_2'}).state,'verified');
+});
+
+test('strictly binds message result to booking command and acknowledged facts',()=>{
+  const expected={bookingId:'booking_1',commandId:'message_1',currentVersion:3,currentStatus:'confirmed'};
+  const raw={success:true,messageId:serverId('pbm','booking_1','message_1'),notificationStatus:'queued'};
+  const result=parseBookingDeskMessageResult(raw,expected);assert.equal(result.state,'verified');assert.equal(result.version,3);
+  assert.equal(parseBookingDeskMessageResult({...raw,messageId:'pbm_'+'0'.repeat(32)},expected).state,'unavailable');
+  assert.equal(parseBookingDeskMessageResult({...raw,success:false},expected).state,'unavailable');
+  assert.equal(parseBookingDeskMessageResult({...raw,unknown:true},expected).state,'unavailable');
+});
+
+console.log(`${passed}/13 play booking desk projection tests PASS`);
