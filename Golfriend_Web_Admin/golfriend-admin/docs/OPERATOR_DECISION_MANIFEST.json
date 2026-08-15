@@ -14,10 +14,14 @@
     "unresolved placeholder for its owner and its resolution. NO REAL PERSON IS NAMED HERE and",
     "no decision is pre-answered — assigning an owner is itself an operator act. The validator",
     "in scripts/commissioning-decision-validator.mjs refuses commissioning while any required",
-    "decision is unresolved, so the package cannot be commissioned by forgetting."
+    "decision is unresolved, so the package cannot be commissioned by forgetting.",
+    "v3.0.0 adds, for every decision, the four things an operator actually needs to act:",
+    "the required owner ROLE, the EVIDENCE that would resolve it, what it DEPENDS on, and the",
+    "exact FAIL-CLOSED behaviour until then. Owners remain __UNRESOLVED__ — naming a real",
+    "person would record an approval nobody gave, and choosing the person IS the decision."
   ],
   "manifestId": "GF-OPERATOR-DECISIONS-001",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "raisedOn": "2026-08-15",
   "raisedBy": "Admin Enterprise acquisition / Shared Authority Hardening lane",
   "status": "awaiting_operator_decisions",
@@ -56,7 +60,16 @@
           "approvedBy": "__UNRESOLVED__",
           "effectiveFrom": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "a written retention period with a policy version",
+        "the approver and the date",
+        "the legal basis"
+      ],
+      "dependsOn": [
+        "D3 legal hold authority — a hold must outrank retention, so hold authority is settled first"
+      ],
+      "failClosedBehaviour": "retentionDecision() returns retention_policy_unavailable for any policy that is absent, unapproved or version-less. No eligibility is calculated and nothing expires."
     },
     {
       "id": "D2",
@@ -89,7 +102,17 @@
           "policyVersion": "__UNRESOLVED__",
           "approvedBy": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "the deletion authority role",
+        "hard deletion or tombstoning",
+        "a policy version and approver"
+      ],
+      "dependsOn": [
+        "D1 retention duration — there is nothing to delete until a period exists",
+        "D3 legal hold authority"
+      ],
+      "failClosedBehaviour": "There is NO deletion path in the codebase. The port refuses, and scripts/commissioning-boundary-verify.mjs asserts that no deletion primitive exists in the server binding."
     },
     {
       "id": "D3",
@@ -122,7 +145,14 @@
           "requiredEvidenceFields": "__UNRESOLVED__",
           "policyVersion": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "who may place and lift a hold",
+        "the fields a hold record must carry",
+        "a policy version"
+      ],
+      "dependsOn": [],
+      "failClosedBehaviour": "legalHoldState is three-valued. UNKNOWN blocks every transition; a FAILED read is unknown and never degrades to \"not held\"."
     },
     {
       "id": "D4",
@@ -159,7 +189,16 @@
           "approvedBy": "__UNRESOLVED__",
           "approvedOn": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "per-jurisdiction legal approval with wording and opt-out mechanism",
+        "a version string",
+        "approver and date"
+      ],
+      "dependsOn": [
+        "D3 legal hold authority"
+      ],
+      "failClosedBehaviour": "No jurisdiction is approved. jurisdictionDecision() requires legallyApproved === true AND a non-blank version; a truthy value such as \"pending\" does not read as approval. Every jurisdiction is unsendable."
     },
     {
       "id": "D5",
@@ -192,7 +231,19 @@
           "providerContractRef": "__UNRESOLVED__",
           "approvedBy": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "founder authorization to transmit at all",
+        "the provider and contract reference",
+        "approver and date"
+      ],
+      "dependsOn": [
+        "D4 jurisdiction approval",
+        "D1 retention duration",
+        "D2 deletion authority",
+        "D3 legal hold authority"
+      ],
+      "failClosedBehaviour": "TRANSMISSION_ENABLED is false and no transmitter exists — no mail client, no outbound HTTP. Even a fully approved draft in an approved jurisdiction reports not sendable with reason transmission_not_permitted."
     },
     {
       "id": "D6",
@@ -214,7 +265,7 @@
       "doesNotBlock": [
         "current operation, because enforcement is not yet switched on"
       ],
-      "knownInconsistency": "The Partner Portal lane already declares enforceAppCheck: true on ~59 privileged callables while the Admin lane declares it nowhere. Same project, two postures. Either App Check IS provisioned — in which case the Admin callables are unprotected — or it is not, in which case every Portal callable would reject in production. This must be resolved before either lane deploys.",
+      "knownInconsistency": "The Partner Portal declares enforceAppCheck on ~56 privileged callables while the Admin lane declares it nowhere, and no client attestation provider exists in either. Either those callables would reject in production, or App Check is provisioned and the Admin callables are unprotected. This must be resolved before either lane deploys.",
       "blocking": true,
       "resolution": {
         "status": "unresolved",
@@ -228,7 +279,17 @@
           "enforcementDate": "__UNRESOLVED__",
           "rolloutStage": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "the attestation provider and its configuration",
+        "the project id it mints for",
+        "a monitoring period before enforcement",
+        "the enforcement date"
+      ],
+      "dependsOn": [
+        "D8 CI workflow — enforcement should not be switched on without a gate watching it"
+      ],
+      "failClosedBehaviour": "COMMISSIONING_STAGE is not_provisioned and REQUIRED_IN_PRODUCTION is true, so decideAppCheck REFUSES rather than silently allowing. No evidence can make the current stage allow. EXPECTED_PROJECT_ID is asserted against .firebaserc so enabling enforcement cannot silently refuse every real token."
     },
     {
       "id": "D7",
@@ -247,7 +308,7 @@
       "doesNotBlock": [
         "the change itself, which is correct; this is a data-readiness step"
       ],
-      "severity": "This is the highest-risk item in the manifest: if no Director record carries a canonical Active status, there is no in-product way back in.",
+      "severity": "Highest risk in the manifest. The role allowlist added in this remediation widens the exposure: a record with a non-canonical ROLE now also loses access, and the dry-run reports those separately (non_canonical_spelling, unknown_role, obsolete_role) because the repair differs.",
       "blocking": true,
       "resolution": {
         "status": "unresolved",
@@ -258,7 +319,14 @@
         "suppliedValues": {
           "a": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "a completed dry-run against a real export with zero activation blockers",
+        "confirmation that at least one Director retains access",
+        "a record of every repaired document"
+      ],
+      "dependsOn": [],
+      "failClosedBehaviour": "The allowlist denies any record without a canonical Active status AND a canonical role. Both in-product recovery paths require an ACTIVE Director. scripts/admin-status-migration-dryrun.mjs refuses activation while any privileged record is non-conforming or no Director survives, and writes a repair plan it cannot execute."
     },
     {
       "id": "D8",
@@ -293,7 +361,58 @@
           "gatesInvoked": "__UNRESOLVED__",
           "approvedBy": "__UNRESOLVED__"
         }
-      }
+      },
+      "evidenceRequired": [
+        "the workflow file that runs the aggregate gates",
+        "the branches it triggers on",
+        "confirmation that a failing gate blocks the merge"
+      ],
+      "dependsOn": [],
+      "failClosedBehaviour": "A workflow is now provided at .github/workflows/admin-authority-release.yml, but ADOPTING it — deciding the trigger branches and making it required — is an ownership act this lane cannot perform. The validator cross-checks the actual workflow state, so this decision cannot be marked resolved while no workflow runs the gates."
+    },
+    {
+      "id": "D9",
+      "topic": "Firestore integrated ruleset ownership",
+      "owner": "rules owner",
+      "question": "Who authors and deploys the single integrated ruleset covering every protected Admin and Portal collection?",
+      "whyCodeCannotDecide": "Firestore replaces a ruleset wholesale, so authoring a partial one and deploying it would delete the rules for every collection it omits. This lane owns no canonical rules file and must not create one.",
+      "requiredValues": [
+        "integratedRulesetPath",
+        "sha256",
+        "coverageAttestation",
+        "approvedBy"
+      ],
+      "port": "firebase.json firestore.rules binding; scripts/rules-artifact-safety-verify.mjs",
+      "currentBehaviour": "firebase.json binds NO ruleset, so no deploy from this tree can replace the project ruleset. The 21-line enterprise ruleset is rejected as a candidate for omitting 19 protected collections.",
+      "blocks": [
+        "any Firestore rules deploy"
+      ],
+      "doesNotBlock": [
+        "local verification"
+      ],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "Firestore rules owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "integratedRulesetPath": "__UNRESOLVED__",
+          "sha256": "__UNRESOLVED__",
+          "coverageAttestation": "__UNRESOLVED__",
+          "approvedBy": "__UNRESOLVED__"
+        }
+      },
+      "evidenceRequired": [
+        "an integrated ruleset covering all 19 protected collections",
+        "its sha256, pinned in docs/INTEGRATED_RULES_ARTIFACT.json",
+        "a rules-suite run covering the 15-case test contract"
+      ],
+      "dependsOn": [
+        "D7 legacy status repair — rules that deny a locked-out admin compound the outage"
+      ],
+      "failClosedBehaviour": "No ruleset is bound in firebase.json, so a deploy cannot replace the project ruleset. renderDeployCommand() refuses to emit a deploy command while no complete, safe, hash-pinned artifact is bound."
     }
   ],
   "invariants": [
@@ -307,18 +426,18 @@
   ],
   "commissioning": {
     "status": "blocked",
-    "rule": "Commissioning is refused while ANY blocking decision is unresolved. There is no partial commissioning and no override flag.",
+    "rule": "Commissioning is refused while ANY blocking decision is unresolved. There is no partial commissioning and no override. Resolving a decision requires evidence recorded outside this document wherever external corroboration is possible.",
     "validator": "scripts/commissioning-decision-validator.mjs",
-    "unresolvedCount": 8,
+    "unresolvedCount": 9,
     "requiredOrder": [
-      "D7 legacy status repair — first, because activating the allowlist without it can lock out every Director",
-      "D8 CI workflow — second, so every later step is continuously verified rather than checked once",
-      "D6 App Check provisioning — third; the Portal already declares enforceAppCheck on ~56 callables with no provider, so this is the largest live gap",
-      "Firestore integrated ruleset (see the rules requirement) — fourth, before any deploy",
-      "D3 legal hold authority — fifth",
-      "D1/D2 retention and deletion — sixth",
-      "D4 jurisdiction approval — seventh",
-      "D5 transmission authorization — last, and only after all of the above"
+      "D7 legacy status repair — FIRST. Activating the status AND role allowlists without it can lock out every Director, and there is no in-product recovery.",
+      "D8 CI workflow adoption — SECOND, so every later step is continuously verified rather than checked once by hand.",
+      "D6 App Check provisioning — THIRD. The Portal already declares enforceAppCheck on ~56 callables with no provider; this is the largest live gap.",
+      "D9 Firestore integrated ruleset — FOURTH, and before any deploy.",
+      "D3 legal hold authority — FIFTH. Holds outrank retention, so this settles before retention.",
+      "D1 and D2 retention and deletion — SIXTH.",
+      "D4 jurisdiction approval — SEVENTH.",
+      "D5 transmission authorization — LAST, and only after every item above."
     ]
   }
 }

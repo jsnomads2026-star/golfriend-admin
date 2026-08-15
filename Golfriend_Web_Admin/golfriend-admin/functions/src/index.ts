@@ -1456,7 +1456,12 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
   }
 
   const reporterUid = request.auth.uid;
-  const reporterEmail = (request.auth.token?.email || "").toLowerCase();
+  // Gated AT THE READ, like every other address binding here. The gate used to sit eight
+  // lines further down, which was safe in effect but not locally checkable — and a property
+  // that can only be confirmed by reading the whole function is the kind that quietly
+  // stops holding.
+  const reporterEmailVerified = request.auth.token?.email_verified === true;
+  const reporterEmail = reporterEmailVerified ? (request.auth.token?.email || "").toLowerCase() : "";
   const { targetUid, gameId, reason } = request.data || {};
 
   if (!targetUid || typeof targetUid !== 'string') {
@@ -1473,11 +1478,7 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
   // 2. AUTHORIZATION: reporter must be platform staff (admin_users) OR an active
   //    commercial partner/course operator (b2b_partners keyed by uid/email).
   const candidateIds = [reporterUid];
-  // The address may only stand in for an identity once Firebase says it was VERIFIED.
-  // b2b_partners is email-keyed during the webhook-buffer window, so an unverified address
-  // was enough to be treated as that active partner — simply by registering it.
-  const reporterEmailVerified = request.auth?.token?.email_verified === true;
-  if (reporterEmail && reporterEmailVerified) {
+  if (reporterEmail) {
     candidateIds.push(reporterEmail);
     candidateIds.push(reporterEmail.charAt(0).toUpperCase() + reporterEmail.slice(1));
   }

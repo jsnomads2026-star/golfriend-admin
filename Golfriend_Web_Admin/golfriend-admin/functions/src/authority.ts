@@ -51,6 +51,51 @@ export const KNOWN_INACTIVE_STATUSES: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * THE CANONICAL ADMIN ROLE REGISTRY — versioned, exact, and closed.
+ *
+ * `isActiveStaff` previously accepted ANY non-empty string as a role, so a Director hiring
+ * with role 'intern' — or a typo, or a role from a different vocabulary — produced a
+ * principal that passed every privileged gate in the system. A role is an authorization
+ * input; it cannot be free text.
+ *
+ * The vocabulary is DERIVED, not invented:
+ *   - 'Director' is the master gate in the hire-staff and set-status callables;
+ *   - 'Manager' and 'Support' are the only two options the HR console offers
+ *     ("Manager (Operations & Disputes)", "Support (Photo Validation Only)").
+ * No other value is written to admin_users anywhere in this repository. Roles such as
+ * 'primary_owner', 'manager' or 'course_manager' belong to partner_memberships — a
+ * DIFFERENT vocabulary for a different principal class, and admitting one here would let a
+ * partner role satisfy an Admin gate.
+ *
+ * ADDING A ROLE IS A REVIEWED CHANGE: bump the version, and expect the shared-authority
+ * contract vectors and the migration classifier to require updating with it.
+ */
+export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
+
+export const CANONICAL_ADMIN_ROLES: readonly string[] = Object.freeze([
+  'Director',
+  'Manager',
+  'Support',
+]);
+
+/**
+ * Roles that WERE valid and no longer are. Empty today because none has been retired; the
+ * list exists so retiring one is an explicit act rather than a silent deletion, and so a
+ * record still carrying a retired role is denied for a nameable reason.
+ */
+export const OBSOLETE_ADMIN_ROLES: readonly string[] = Object.freeze([]);
+
+/**
+ * EXACT match. Deliberately not case-folded, trimmed or normalized: every one of those
+ * would WIDEN authority — 'director', ' Director ' and 'DIRECTOR' would begin to grant
+ * powers they have never had. A non-canonical spelling fails closed, and the migration
+ * dry-run reports it so an operator can correct the record rather than the predicate.
+ */
+export function isCanonicalAdminRole(value: unknown): boolean {
+  return typeof value === 'string' && CANONICAL_ADMIN_ROLES.indexOf(value) !== -1;
+}
+
+/**
  * Normalize a status for comparison: NFC, trimmed, lower-cased.
  *
  * This folds only CANONICALLY EQUIVALENT spellings — ' Active ' and 'ACTIVE' are the
@@ -84,8 +129,12 @@ export function isActiveStaff(adminDoc: AdminUserDoc | null | undefined): boolea
   if (KNOWN_INACTIVE_STATUSES.indexOf(status) !== -1) return false; // known-inactive → deny
   if (ACTIVE_STAFF_STATUSES.indexOf(status) === -1) return false;   // anything unrecognized → deny
 
-  // ROLE SECOND, and only as a separate question: is a role assigned at all?
+  // ROLE SECOND, and only as a separate question: is a CANONICAL role assigned?
   if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false; // no role → deny
+  // An unrecognized role is not a role. Accepting any non-empty string meant a principal
+  // hired as 'intern' passed every privileged gate in the system.
+  if (OBSOLETE_ADMIN_ROLES.indexOf(adminDoc.role) !== -1) return false;               // retired → deny
+  if (!isCanonicalAdminRole(adminDoc.role)) return false;                             // unknown → deny
   return true;
 }
 

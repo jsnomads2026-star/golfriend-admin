@@ -1,0 +1,149 @@
+# ==========================================
+# Admin authority release gate.
+#
+# Every control in the shared-authority package runs here. Before this workflow existed the
+# gates were green only because a human typed them, and the decision manifest recorded that
+# gap as D8 — this is the artifact that closes it.
+#
+# It runs no deploy, provisions nothing, contacts no Firebase project and needs no secret.
+# Every job is static analysis, a pure unit suite, or a stubbed-infrastructure harness.
+# ==========================================
+name: Admin authority release
+
+on:
+  push:
+    branches:
+      - 'integration/**'
+      - 'mock/**'
+      - 'feat/admin-**'
+  pull_request:
+    branches: ['**']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: Golfriend_Web_Admin/golfriend-admin
+
+jobs:
+  authority:
+    name: Shared authority + Portal call sites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+
+      # TypeScript first: a type error invalidates every behavioural result below.
+      - name: TypeScript (app)
+        run: npx tsc -b
+      - name: TypeScript (functions)
+        run: npx tsc -p functions
+
+      # The shared predicate and its two implementations.
+      - name: Shared authority contract (drift detection)
+        run: npm run verify:shared-authority-contract
+      - name: Admin authority matrix (allowlist + mutation classification)
+        run: npm run verify:admin-authority-matrix
+      - name: Functions unit suites (incl. hostile role tests)
+        run: npm test
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+
+      # Behavioural authority at the real Portal call sites.
+      - name: Portal call-site authority matrix
+        run: npm run verify:portal-authority-callsites
+
+      # Identity binding: no authority may derive from a mutable address.
+      - name: Verified-identity regression
+        run: npm run verify:identity-binding
+
+  safety:
+    name: Rules, App Check, lifecycle, privacy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+
+      - name: Hostile Firestore ruleset evaluation
+        run: npm run verify:rules-artifact
+      - name: Deploy configuration safety
+        run: npm run verify:deploy-config
+      - name: App Check commissioning port
+        run: npm run test:appcheck
+      - name: Commissioning boundary (every blocked capability fails closed)
+        run: npm run verify:commissioning-boundary
+      - name: Operator decision validator
+        run: npm run verify:commissioning-decisions
+      - name: Lifecycle, replay and content disposal
+        run: npm run verify:outreach-intent
+      - name: Outreach production binding + privacy projection
+        run: npm run verify:outreach-binding
+      - name: Status migration dry-run (read-only)
+        run: npm run verify:status-migration
+
+  world:
+    name: Monday Test World + coverage honesty
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+
+      - name: World determinism and integrity
+        run: npm run verify:monday-world
+
+      # The digest is regenerated and compared to the committed manifest. Without this the
+      # fixture could drift while the recorded digest stayed put.
+      - name: Digest matches the committed manifest
+        run: npm run verify:world-digest
+
+      - name: Scenarios executed against real modules
+        run: npm run verify:monday-scenarios
+
+      # THE COVERAGE-HONESTY GATE. Fails if any scenario group claimed as executed has no
+      # resolvable module or assertion target. A previous commit claimed 205 scenarios were
+      # executed when 169 of them ran against nothing.
+      - name: Executed-versus-declared coverage report
+        run: npm run verify:coverage-honesty
+
+  release:
+    name: Full Admin release gate
+    runs-on: ubuntu-latest
+    needs: [authority, safety, world]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+
+      - name: Admin release gate (build + full gate + dependency audit)
+        run: npm run gate:admin-release
+
+      # Whitespace and secrets. Both are cheap and both have caught real problems here.
+      - name: Whitespace / diff hygiene
+        run: git diff --check
+        working-directory: .
+      - name: Secret scan
+        working-directory: .
+        run: |
+          set -o pipefail
+          if git grep -nIE '(-----BEGIN [A-Z ]*PRIVATE KEY|sk_live_|xox[baprs]-|ghp_[0-9A-Za-z]{36}|"type": *"service_account")' -- . ':!*node_modules*'; then
+            echo "::error::secret material found in the working tree"
+            exit 1
+          fi
+          echo "no private keys, live tokens or service accounts found"

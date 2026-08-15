@@ -2,7 +2,7 @@
   "worldId": "monday-test-world.authority",
   "worldVersion": "1.0.0",
   "seed": "monday-authority-default-seed",
-  "digest": "sha256:9f0066141a19a8e3e07d68fd0d93ef7a256642f3e64ae21e83ad8a0b59341aef",
+  "digest": "sha256:e3902a8d929a0a2d0b358083f2e7f7e4520a07d522eb140cd702cb4331b0e143",
   "counts": {
     "identities": 29,
     "organizations": 4,
@@ -115,13 +115,13 @@
     },
     {
       "principalId": "dev_mock_mtw_prn_unknown_role",
-      "label": "Unknown-role user (active, role outside the known vocabulary)",
+      "label": "Unknown-role user (active, role outside the canonical registry)",
       "contactEmail": "mtw-unknown-role@example.test",
       "emailVerified": true,
       "expect": {
-        "staff": true,
+        "staff": false,
         "director": false,
-        "portal": "authorized"
+        "portal": "unauthorized"
       }
     },
     {

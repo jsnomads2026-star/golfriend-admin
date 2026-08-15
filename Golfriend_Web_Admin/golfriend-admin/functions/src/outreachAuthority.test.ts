@@ -30,7 +30,7 @@ const CONTENT: Record<string, string | null> = {
 const DIGEST = outreachContentDigest(CONTENT).digest as string;
 
 const staff = (uid: string): CallerContext =>
-  ({ uid, adminDoc: { role: "Ops", status: "Active" }, appCheckVerified: true });
+  ({ uid, adminDoc: { role: "Support", status: "Active" }, appCheckVerified: true });
 const director = (uid: string): CallerContext =>
   ({ uid, adminDoc: { role: "Director", status: "Active" }, appCheckVerified: true });
 
@@ -65,12 +65,12 @@ check("forged role", () => {
   assert.equal(authorizeCaller(forged)?.code, "not_admin");
   assert.equal(authorizeCaller(forged, true)?.code, "not_admin");
   // A suspended or role-less document fails closed even when it exists.
-  assert.equal(authorizeCaller({ uid: "u", adminDoc: { role: "Ops", status: "Suspended" }, appCheckVerified: true })?.code, "not_admin");
+  assert.equal(authorizeCaller({ uid: "u", adminDoc: { role: "Support", status: "Suspended" }, appCheckVerified: true })?.code, "not_admin");
   assert.equal(authorizeCaller({ uid: "u", adminDoc: { status: "Active" }, appCheckVerified: true })?.code, "not_admin");
   // Staff is not Director: revocation requires the higher tier.
   assert.equal(authorizeCaller(staff("u"), true)?.code, "insufficient_role");
   assert.equal(authorizeCaller(director("u"), true), null);
-  assert.equal(authorizeCaller({ uid: null, adminDoc: { role: "Ops", status: "Active" }, appCheckVerified: true })?.code, "unauthenticated");
+  assert.equal(authorizeCaller({ uid: null, adminDoc: { role: "Support", status: "Active" }, appCheckVerified: true })?.code, "unauthenticated");
 });
 
 // --- 2. SEPARATION OF DUTIES KEYED ON TARGET STATE, NOT THE VERB --------------------
@@ -119,11 +119,11 @@ check("forged reviewer reference", () => {
     // The previous version of this block passed `reviewerKey: null`, so all five iterations
     // asserted the same trivial fact and no surrogate guard was exercised at all.
     assert.equal(decideAssignment({
-      caller: { uid: surrogate, adminDoc: { role: "Ops", status: "Active" }, appCheckVerified: true },
+      caller: { uid: surrogate, adminDoc: { role: "Support", status: "Active" }, appCheckVerified: true },
       record: draft(), expectedVersion: 2, reviewerKey: "other-uid", legalHold: false,
     }).code, "payload_rejected", surrogate);
     // Same for a transition: a surrogate presented as the actor is refused.
-    assert.equal(move({ uid: surrogate, adminDoc: { role: "Ops", status: "Active" }, appCheckVerified: true }, { assignedReviewerKey: identityKey(surrogate) }).code, "payload_rejected", surrogate);
+    assert.equal(move({ uid: surrogate, adminDoc: { role: "Support", status: "Active" }, appCheckVerified: true }, { assignedReviewerKey: identityKey(surrogate) }).code, "payload_rejected", surrogate);
   }
   assert.equal(presentsSurrogate("actor_9f2a"), false);
   assert.equal(presentsSurrogate("real-person@example.com"), false);

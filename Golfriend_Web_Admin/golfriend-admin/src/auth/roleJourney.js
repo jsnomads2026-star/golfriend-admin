@@ -16,6 +16,22 @@ export const ACTIVE_ADMIN_STATUSES = ['active'];
 /** The one status that means an active commercial partnership, normalized. */
 export const ACTIVE_PARTNER_STATUS = 'active_partner';
 
+/**
+ * Canonical admin_users roles. Mirrors CANONICAL_ADMIN_ROLES in functions/src/authority.ts;
+ * scripts/shared-authority-contract-verify.mjs asserts the two lists are identical, so a
+ * divergence is a gate failure rather than a portal that authorizes someone the server
+ * refuses. Derived from the hire-staff Director gate and the two HR console options — never
+ * from the partner_memberships vocabulary, which is a different principal class.
+ */
+export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
+export const CANONICAL_ADMIN_ROLES = ['Director', 'Manager', 'Support'];
+export const OBSOLETE_ADMIN_ROLES = [];
+
+/** EXACT match. Case-folding or trimming here would widen authority, not harden it. */
+export function isCanonicalAdminRole(value) {
+  return typeof value === 'string' && CANONICAL_ADMIN_ROLES.includes(value);
+}
+
 /** Statuses known to mean "not authorized". Documentation and defence in depth only. */
 export const KNOWN_INACTIVE_ADMIN_STATUSES = [
   'suspended', 'inactive', 'deactivated', 'revoked', 'expired',
@@ -46,7 +62,9 @@ export function isActiveAdminDoc(adminDoc) {
   if (!adminDoc || typeof adminDoc !== 'object' || Array.isArray(adminDoc)) return false;
   const status = normalizeStaffStatus(adminDoc.status);
   if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) return false;
-  return typeof adminDoc.role === 'string' && adminDoc.role.trim() !== '';
+  if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false;
+  if (OBSOLETE_ADMIN_ROLES.includes(adminDoc.role)) return false;
+  return isCanonicalAdminRole(adminDoc.role);
 }
 
 /** Director tier. Exact role match, for the same reason the server uses one. */
@@ -102,7 +120,9 @@ export function resolvePortalAccess(input = {}) {
     if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) {
       return { state: 'unauthorized', surface: 'admin' };
     }
-    if (!adminDoc.role || typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') {
+    // A non-canonical role is unauthorized, exactly as the server treats it. Reporting it
+    // as authorized would render an admin shell whose every action then failed.
+    if (!isCanonicalAdminRole(adminDoc.role)) {
       return { state: 'unauthorized', surface: 'admin' };
     }
     return { state: 'authorized', surface: 'admin', role: adminDoc.role };

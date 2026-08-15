@@ -11,36 +11,69 @@
     "",
     "Implementations are listed under `implementations`. Adding a surface means adding it",
     "there — an implementation that is not listed is not verified, and the verifier fails if",
-    "a listed one is missing."
+    "a listed one is missing.",
+    "v2.0.0 closes the role vocabulary. Previously any non-empty string was a role, so a",
+    "principal hired as \"intern\" passed every privileged gate. CANONICAL_ADMIN_ROLES is now",
+    "an explicit, versioned allowlist and vectors V24-V26 change verdict accordingly — they",
+    "used to assert that case-variant roles were staff, which was the defect written down."
   ],
   "contractId": "GF-SHARED-AUTHORITY-001",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "effectiveFrom": "2026-08-15",
   "status": "active",
-
   "statusNormalization": {
-    "steps": ["reject non-string", "Unicode NFC", "trim", "toLowerCase"],
-    "rejectsToNull": ["non-string", "empty after trim", "whitespace-only"],
+    "steps": [
+      "reject non-string",
+      "Unicode NFC",
+      "trim",
+      "toLowerCase"
+    ],
+    "rejectsToNull": [
+      "non-string",
+      "empty after trim",
+      "whitespace-only"
+    ],
     "rationale": "Folds only canonically equivalent spellings. Confusables (Cyrillic А, fullwidth Ａ) are different strings under NFC and therefore remain refused, which is correct: a value that merely looks right is not right.",
     "note": "toLowerCase is locale-invariant in JS. Turkish dotted/dotless I produces a false NEGATIVE (denial), never a false positive."
   },
-
   "acceptedStatuses": {
-    "values": ["active"],
+    "values": [
+      "active"
+    ],
     "comparedAfter": "statusNormalization",
     "storedCanonicalForm": "Active",
     "derivation": "The only status ever written: the hire-staff callable writes 'Active'; setEmployeeStatus refuses any value other than 'Active' or 'Suspended' before writing.",
     "widening": "Adding a value here widens who may act as platform staff and is a reviewed change, never incidental."
   },
-
   "roleComparison": {
     "mode": "exact",
     "caseFold": false,
     "trim": false,
-    "rationale": "Case-folding a role WIDENS authority — 'director' would begin to grant Director powers it never had. Hardening must not widen. A non-canonical spelling fails closed.",
-    "directorRole": "Director"
+    "registryVersion": "2026-08-15.v1",
+    "canonicalRoles": [
+      "Director",
+      "Manager",
+      "Support"
+    ],
+    "obsoleteRoles": [],
+    "directorRole": "Director",
+    "derivation": "Derived, not invented: 'Director' is the master gate in the hire-staff and set-status callables; 'Manager' and 'Support' are the only options the HR console offers. No other value is written to admin_users anywhere in the repository.",
+    "foreignVocabularies": {
+      "partner_memberships": [
+        "primary_owner",
+        "manager",
+        "viewer",
+        "owner",
+        "organization_admin",
+        "course_manager",
+        "booking_staff",
+        "tournament_staff"
+      ],
+      "rule": "A partner_memberships role is a DIFFERENT principal class and must never satisfy an Admin gate."
+    },
+    "rationale": "Case-folding, trimming or normalizing a role WIDENS authority — \"director\" would begin to grant Director powers it has never had. Hardening must not widen. A non-canonical spelling fails closed and the migration dry-run reports it, so the record is corrected rather than the predicate.",
+    "widening": "Adding a role means bumping registryVersion and updating these vectors and the migration classifier together."
   },
-
   "principalBinding": {
     "source": "request.auth.uid, verified by the Functions runtime",
     "roleSource": "admin_users/{uid}, read server-side inside the transaction where one exists",
@@ -51,26 +84,48 @@
       "any environment-variable bypass",
       "client-supplied role assignment"
     ],
-    "evaluationOrder": ["app check (when enforced)", "authentication", "status", "role", "resource scope"],
+    "evaluationOrder": [
+      "app check (when enforced)",
+      "authentication",
+      "status",
+      "role",
+      "resource scope"
+    ],
     "rule": "Status is evaluated BEFORE role. A valid role can never rescue an inactive account."
   },
-
   "suspensionBehaviour": {
     "immediate": true,
     "appliesTo": "every privileged call site, including the callables that create or modify staff",
-    "recoveryPaths": ["hireStaff", "setEmployeeStatus"],
+    "recoveryPaths": [
+      "hireStaff",
+      "setEmployeeStatus"
+    ],
     "recoveryRequires": "an ACTIVE Director",
     "knownConsequence": "If every Director record is inactive or status-less, there is no in-product recovery path. This is intentional (no break-glass) and is why the status migration verifier must run before activation."
   },
-
   "cacheDisposal": {
     "trigger": "any change to the authority fingerprint",
-    "fingerprintComponents": ["uid", "role", "status", "scope", "requestVersion", "appCheck", "online"],
-    "failsClosedWhen": ["identity unknown on either side", "uid absent", "online === false", "appCheck === false"],
-    "disposes": ["cached server-scoped content", "pending command intents"],
+    "fingerprintComponents": [
+      "uid",
+      "role",
+      "status",
+      "scope",
+      "requestVersion",
+      "appCheck",
+      "online"
+    ],
+    "failsClosedWhen": [
+      "identity unknown on either side",
+      "uid absent",
+      "online === false",
+      "appCheck === false"
+    ],
+    "disposes": [
+      "cached server-scoped content",
+      "pending command intents"
+    ],
     "rationale": "Content scoped to an identity at a moment stops being authorized the instant that identity changes. Retaining it is a disclosure, not a cache."
   },
-
   "commandRetirement": {
     "idScope": "one stable id per user INTENT (draft, decision, expected version, content reference)",
     "retiredOn": "an AUTHORITATIVE server outcome only",
@@ -78,74 +133,437 @@
     "singleFlight": "separate from reservation — a failed attempt must still permit a retry",
     "rationale": "Retiring an id on a transport failure mints a new id on retry, which applies an accepted-but-response-lost command a second time."
   },
-
   "auditEvidence": {
-    "required": ["actor key (normalized, non-identifying)", "from/to state", "from/to version", "content digest", "command id", "timestamp"],
-    "forbidden": ["draft subject or body", "member identity", "private notes", "precise personal movement"],
+    "required": [
+      "actor key (normalized, non-identifying)",
+      "from/to state",
+      "from/to version",
+      "content digest",
+      "command id",
+      "timestamp"
+    ],
+    "forbidden": [
+      "draft subject or body",
+      "member identity",
+      "private notes",
+      "precise personal movement"
+    ],
     "immutability": "append-only; create-only writes, never update or delete"
   },
-
   "implementations": [
     {
       "id": "server",
       "path": "functions/src/authority.ts",
-      "exports": ["isActiveStaff", "isActiveDirector", "normalizeStaffStatus", "ACTIVE_STAFF_STATUSES"],
+      "exports": [
+        "isActiveStaff",
+        "isActiveDirector",
+        "normalizeStaffStatus",
+        "ACTIVE_STAFF_STATUSES"
+      ],
       "consumers": "all Admin and Portal privileged callables",
       "authoritative": true
     },
     {
       "id": "client",
       "path": "src/auth/roleJourney.js",
-      "exports": ["isActiveAdminDoc", "isActiveDirectorDoc", "normalizeStaffStatus", "ACTIVE_ADMIN_STATUSES", "resolvePortalAccess"],
+      "exports": [
+        "isActiveAdminDoc",
+        "isActiveDirectorDoc",
+        "normalizeStaffStatus",
+        "ACTIVE_ADMIN_STATUSES",
+        "resolvePortalAccess"
+      ],
       "consumers": "Admin portal shell and client surfaces",
       "authoritative": false,
       "note": "Rendering decisions only. The server re-derives authority on every callable; nothing here grants anything."
     }
   ],
-
   "conformanceVectors": {
     "$comment": "Executed against EVERY implementation. `staff` and `director` are the required verdicts. Drift between implementations is a gate failure.",
     "cases": [
-      { "id": "V01", "doc": { "role": "Director", "status": "Active" }, "staff": true, "director": true },
-      { "id": "V02", "doc": { "role": "Manager", "status": "Active" }, "staff": true, "director": false },
-      { "id": "V03", "doc": { "role": "Support", "status": "active" }, "staff": true, "director": false },
-      { "id": "V04", "doc": { "role": "Director", "status": "ACTIVE" }, "staff": true, "director": true },
-      { "id": "V05", "doc": { "role": "Director", "status": " Active " }, "staff": true, "director": true },
-      { "id": "V06", "doc": { "role": "Director", "status": "Suspended" }, "staff": false, "director": false },
-      { "id": "V07", "doc": { "role": "Director", "status": "suspended" }, "staff": false, "director": false },
-      { "id": "V08", "doc": { "role": "Director", "status": "Inactive" }, "staff": false, "director": false },
-      { "id": "V09", "doc": { "role": "Director", "status": "Deactivated" }, "staff": false, "director": false },
-      { "id": "V10", "doc": { "role": "Director", "status": "Revoked" }, "staff": false, "director": false },
-      { "id": "V11", "doc": { "role": "Director", "status": "Expired" }, "staff": false, "director": false },
-      { "id": "V12", "doc": { "role": "Director", "status": "Disabled" }, "staff": false, "director": false },
-      { "id": "V13", "doc": { "role": "Director", "status": "Deleted" }, "staff": false, "director": false },
-      { "id": "V14", "doc": { "role": "Director", "status": "Archived" }, "staff": false, "director": false },
-      { "id": "V15", "doc": { "role": "Director", "status": "probation" }, "staff": false, "director": false },
-      { "id": "V16", "doc": { "role": "Director", "status": "active_partner" }, "staff": false, "director": false },
-      { "id": "V17", "doc": { "role": "Director", "status": "" }, "staff": false, "director": false },
-      { "id": "V18", "doc": { "role": "Director", "status": "   " }, "staff": false, "director": false },
-      { "id": "V19", "doc": { "role": "Director" }, "staff": false, "director": false, "note": "MISSING status — the legacy shape the old denylist admitted" },
-      { "id": "V20", "doc": { "status": "Active" }, "staff": false, "director": false, "note": "role-less" },
-      { "id": "V21", "doc": { "role": "", "status": "Active" }, "staff": false, "director": false },
-      { "id": "V22", "doc": { "role": "   ", "status": "Active" }, "staff": false, "director": false },
-      { "id": "V23", "doc": null, "staff": false, "director": false },
-      { "id": "V24", "doc": { "role": "director", "status": "Active" }, "staff": true, "director": false, "note": "role case is NOT folded — staff yes, Director no" },
-      { "id": "V25", "doc": { "role": "DIRECTOR", "status": "Active" }, "staff": true, "director": false },
-      { "id": "V26", "doc": { "role": "Director ", "status": "Active" }, "staff": true, "director": false, "note": "trailing space is a different role" },
-      { "id": "V27", "doc": { "role": "Director", "status": "Аctive" }, "staff": false, "director": false, "note": "Cyrillic А U+0410 confusable" },
-      { "id": "V28", "doc": { "role": "Director", "status": "Ａctive" }, "staff": false, "director": false, "note": "fullwidth Ａ U+FF21" },
-      { "id": "V29", "doc": { "role": "Director", "status": "Active-ish" }, "staff": false, "director": false },
-      { "id": "V30", "doc": { "role": "Director", "status": "not suspended" }, "staff": false, "director": false }
+      {
+        "id": "V01",
+        "doc": {
+          "role": "Director",
+          "status": "Active"
+        },
+        "staff": true,
+        "director": true
+      },
+      {
+        "id": "V02",
+        "doc": {
+          "role": "Manager",
+          "status": "Active"
+        },
+        "staff": true,
+        "director": false
+      },
+      {
+        "id": "V03",
+        "doc": {
+          "role": "Support",
+          "status": "active"
+        },
+        "staff": true,
+        "director": false
+      },
+      {
+        "id": "V04",
+        "doc": {
+          "role": "Director",
+          "status": "ACTIVE"
+        },
+        "staff": true,
+        "director": true
+      },
+      {
+        "id": "V05",
+        "doc": {
+          "role": "Director",
+          "status": " Active "
+        },
+        "staff": true,
+        "director": true
+      },
+      {
+        "id": "V06",
+        "doc": {
+          "role": "Director",
+          "status": "Suspended"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V07",
+        "doc": {
+          "role": "Director",
+          "status": "suspended"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V08",
+        "doc": {
+          "role": "Director",
+          "status": "Inactive"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V09",
+        "doc": {
+          "role": "Director",
+          "status": "Deactivated"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V10",
+        "doc": {
+          "role": "Director",
+          "status": "Revoked"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V11",
+        "doc": {
+          "role": "Director",
+          "status": "Expired"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V12",
+        "doc": {
+          "role": "Director",
+          "status": "Disabled"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V13",
+        "doc": {
+          "role": "Director",
+          "status": "Deleted"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V14",
+        "doc": {
+          "role": "Director",
+          "status": "Archived"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V15",
+        "doc": {
+          "role": "Director",
+          "status": "probation"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V16",
+        "doc": {
+          "role": "Director",
+          "status": "active_partner"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V17",
+        "doc": {
+          "role": "Director",
+          "status": ""
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V18",
+        "doc": {
+          "role": "Director",
+          "status": "   "
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V19",
+        "doc": {
+          "role": "Director"
+        },
+        "staff": false,
+        "director": false,
+        "note": "MISSING status — the legacy shape the old denylist admitted"
+      },
+      {
+        "id": "V20",
+        "doc": {
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "role-less"
+      },
+      {
+        "id": "V21",
+        "doc": {
+          "role": "",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V22",
+        "doc": {
+          "role": "   ",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V23",
+        "doc": null,
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V24",
+        "doc": {
+          "role": "director",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "role case is NOT folded; with a closed registry a non-canonical spelling is not staff at all"
+      },
+      {
+        "id": "V25",
+        "doc": {
+          "role": "DIRECTOR",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "uppercase is a different string and therefore a different, unrecognized role"
+      },
+      {
+        "id": "V26",
+        "doc": {
+          "role": "Director ",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "a trailing space is a different role; previously this was staff because any non-empty string was"
+      },
+      {
+        "id": "V27",
+        "doc": {
+          "role": "Director",
+          "status": "Аctive"
+        },
+        "staff": false,
+        "director": false,
+        "note": "Cyrillic А U+0410 confusable"
+      },
+      {
+        "id": "V28",
+        "doc": {
+          "role": "Director",
+          "status": "Ａctive"
+        },
+        "staff": false,
+        "director": false,
+        "note": "fullwidth Ａ U+FF21"
+      },
+      {
+        "id": "V29",
+        "doc": {
+          "role": "Director",
+          "status": "Active-ish"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V30",
+        "doc": {
+          "role": "Director",
+          "status": "not suspended"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V31",
+        "doc": {
+          "role": "Manager",
+          "status": "Active"
+        },
+        "staff": true,
+        "director": false,
+        "note": "canonical"
+      },
+      {
+        "id": "V32",
+        "doc": {
+          "role": "Support",
+          "status": "Active"
+        },
+        "staff": true,
+        "director": false,
+        "note": "canonical"
+      },
+      {
+        "id": "V33",
+        "doc": {
+          "role": "intern",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "THE regression: a principal hired as intern passed every privileged gate"
+      },
+      {
+        "id": "V34",
+        "doc": {
+          "role": "primary_owner",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "partner_memberships vocabulary must not satisfy an Admin gate"
+      },
+      {
+        "id": "V35",
+        "doc": {
+          "role": "manager",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "partner role, lowercase — neither canonical nor this principal class"
+      },
+      {
+        "id": "V36",
+        "doc": {
+          "role": "admin",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false
+      },
+      {
+        "id": "V37",
+        "doc": {
+          "role": "Directоr",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "Cyrillic о confusable in the role"
+      },
+      {
+        "id": "V38",
+        "doc": {
+          "role": "Ｄirector",
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "fullwidth D confusable"
+      },
+      {
+        "id": "V39",
+        "doc": {
+          "role": "Manager",
+          "status": "Suspended"
+        },
+        "staff": false,
+        "director": false,
+        "note": "status still beats a canonical role"
+      },
+      {
+        "id": "V40",
+        "doc": {
+          "role": 42,
+          "status": "Active"
+        },
+        "staff": false,
+        "director": false,
+        "note": "malformed role type"
+      }
     ]
   },
-
   "driftDetection": {
     "method": "Every implementation is executed against every conformance vector; any disagreement between an implementation and the contract, or between two implementations, fails the gate.",
     "verifier": "scripts/shared-authority-contract-verify.mjs",
     "alsoChecks": [
       "the accepted-status list is identical in every implementation",
       "the normalizers agree on every vector plus non-string inputs",
-      "no implementation has gained an accepted status the contract does not list"
+      "no implementation has gained an accepted status the contract does not list",
+      "the canonical role registry is identical in every implementation",
+      "no canonical role is also listed as obsolete",
+      "no partner_memberships role appears in the admin registry"
     ]
   }
 }

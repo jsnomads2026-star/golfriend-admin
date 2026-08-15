@@ -16,7 +16,7 @@
 // ==========================================
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -53,6 +53,20 @@ if (command === 'seed') {
 
 if (command === 'reset') {
   console.log(JSON.stringify(reset(), null, 2));
+  process.exit(0);
+}
+
+if (command === 'digest-check') {
+  // The COMMITTED manifest must match the live fixture. verify never read the manifest, so
+  // a fixture edit without a manifest regeneration drifted silently and no gate noticed.
+  const manifestPath = resolve(ROOT, 'docs/MONDAY_AUTHORITY_WORLD_MANIFEST.json');
+  assert.ok(existsSync(manifestPath), 'the world manifest has not been generated');
+  const recorded = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const live = digestOf(seed());
+  assert.equal(recorded.digest, live, `the committed manifest digest (${recorded.digest}) does not match the live fixture (${live}) — run: npm run mock:monday-manifest`);
+  assert.equal(recorded.counts.identities, seed().identities.length, 'the manifest identity count is stale');
+  assert.equal(recorded.counts.totalScenarios, SCENARIO_COUNT, 'the manifest scenario count is stale');
+  console.log(`  ok the committed manifest matches the live fixture: ${live}`);
   process.exit(0);
 }
 

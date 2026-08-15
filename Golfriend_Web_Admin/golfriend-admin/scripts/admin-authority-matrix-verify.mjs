@@ -205,7 +205,12 @@ const MUTATIONS = [
   // labels for guards that protect availability or robustness instead.
   ['status normalization', 'lockout', /const normalized = value\.normalize\('NFC'\)\.trim\(\)\.toLowerCase\(\);/, 'const normalized = value;'],
   ['active-state allowlist', 'bypass', /if \(ACTIVE_STAFF_STATUSES\.indexOf\(status\) === -1\) return false;.*/, ''],
-  ['role verification', 'bypass', /if \(typeof adminDoc\.role !== 'string' \|\| adminDoc\.role\.trim\(\) === ''\) return false;.*/, ''],
+  // The CANONICAL-ROLE ALLOWLIST is what prevents the escalation now. The empty-string
+  // guard above it became a safety net the moment the registry closed the vocabulary —
+  // reclassified rather than left claiming a weight it no longer carries.
+  ['canonical-role allowlist', 'bypass', /if \(!isCanonicalAdminRole\(adminDoc\.role\)\) return false;.*/, ''],
+  ['obsolete-role denial', 'holds', /if \(OBSOLETE_ADMIN_ROLES\.indexOf\(adminDoc\.role\) !== -1\) return false;.*/, ''],
+  ['empty-role guard', 'holds', /if \(typeof adminDoc\.role !== 'string' \|\| adminDoc\.role\.trim\(\) === ''\) return false;.*/, ''],
   ['director role check', 'bypass', /return isActiveStaff\(adminDoc\) && adminDoc!\.role === 'Director';/, 'return isActiveStaff(adminDoc);'],
   ['missing-document denial', 'crash', /if \(!adminDoc \|\| typeof adminDoc !== 'object'\) return false;.*/, ''],
   // Safety nets: the allowlist already refuses everything these refuse. They exist so the
@@ -246,6 +251,21 @@ const matrixOutcome = async (mod) => {
     }
     if (mod.isActiveStaff({ role: 'Director' }) !== false) return 'bypass';
     if (mod.isActiveStaff({ status: 'Active' }) !== false) return 'bypass';
+    // A non-canonical role must be refused, or removing the allowlist is undetectable.
+    for (const junk of ['intern', 'primary_owner', 'director', 'admin', 'Ops']) {
+      if (mod.isActiveStaff({ role: junk, status: 'Active' }) !== false) return 'bypass';
+    }
+    // ...and every canonical role must still work, or the allowlist is a lockout.
+    for (const canonical of ['Director', 'Manager', 'Support']) {
+      if (mod.isActiveStaff({ role: canonical, status: 'Active' }) !== true) return 'lockout';
+    }
+    // A non-canonical role must be refused, or the allowlist mutation is undetectable.
+    for (const junk of ['intern', 'primary_owner', 'director', 'admin']) {
+      if (mod.isActiveStaff({ role: junk, status: 'Active' }) !== false) return 'bypass';
+    }
+    for (const canonical of ['Director', 'Manager', 'Support']) {
+      if (mod.isActiveStaff({ role: canonical, status: 'Active' }) !== true) return 'lockout';
+    }
     if (mod.isActiveStaff(['Active']) !== false) return 'bypass';
     if (mod.isActiveStaff(null) !== false) return 'bypass';
     if (mod.isActiveStaff(undefined) !== false) return 'bypass';

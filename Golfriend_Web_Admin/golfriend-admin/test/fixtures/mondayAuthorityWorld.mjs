@@ -175,15 +175,16 @@ export const IDENTITIES = Object.freeze([
   }),
   Object.freeze({
     principalId: 'dev_mock_mtw_prn_unknown_role',
-    label: 'Unknown-role user (active, role outside the known vocabulary)',
+    label: 'Unknown-role user (active, role outside the canonical registry)',
     contactEmail: 'mtw-unknown-role@example.test',
     emailVerified: true,
-    // NOTE: the predicate accepts any non-empty role, so this identity IS staff today.
-    // The fixture records that truthfully rather than asserting the behaviour we might
-    // prefer — and OPERATOR_DECISION_MANIFEST records the missing role allowlist.
+    // This fixture previously recorded staff:true and documented the defect: the
+    // predicate accepted ANY non-empty role, so a principal hired as 'intern' passed
+    // every privileged gate. CANONICAL_ADMIN_ROLES now closes that, and the required
+    // verdict changes with it.
     adminDoc: Object.freeze({ role: 'intern', status: 'Active' }),
     partner: null,
-    expect: Object.freeze({ staff: true, director: false, portal: 'authorized' }),
+    expect: Object.freeze({ staff: false, director: false, portal: 'unauthorized' }),
   }),
   Object.freeze({
     principalId: 'dev_mock_mtw_prn_case_variant',
@@ -527,6 +528,8 @@ export function seed(options = {}) {
       label: `Filler staff ${slot}`,
       contactEmail: `mtw-filler-${slot}@example.test`,
       emailVerified: true,
+      // Both are canonical roles; a filler principal must not rely on a role the registry
+      // does not recognise.
       adminDoc: Object.freeze({ role: roll > 0.5 ? 'Support' : 'Manager', status: 'Active' }),
       partner: null,
       expect: Object.freeze({ staff: true, director: false, portal: 'authorized' }),

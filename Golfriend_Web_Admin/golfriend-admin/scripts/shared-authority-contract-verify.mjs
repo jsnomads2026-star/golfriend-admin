@@ -141,7 +141,26 @@ for (const impl of IMPLEMENTATIONS) {
   }
   assert.equal(impl.director({ role: 'Director', status: 'Active' }), true, impl.id);
 }
-ok('role comparison is exact in every implementation; no spelling variant gains Director authority');
+// The role REGISTRY must be identical in both implementations, and must not overlap the
+// partner vocabulary — a foreign role satisfying an Admin gate is a principal-class error.
+assert.deepEqual([...server.CANONICAL_ADMIN_ROLES], contract.roleComparison.canonicalRoles, 'the server role registry has drifted from the contract');
+assert.deepEqual([...client.CANONICAL_ADMIN_ROLES], contract.roleComparison.canonicalRoles, 'the client role registry has drifted from the contract');
+assert.equal(server.ADMIN_ROLE_REGISTRY_VERSION, contract.roleComparison.registryVersion, 'the server registry version has drifted');
+assert.equal(client.ADMIN_ROLE_REGISTRY_VERSION, contract.roleComparison.registryVersion, 'the client registry version has drifted');
+for (const foreign of contract.roleComparison.foreignVocabularies.partner_memberships) {
+  assert.equal(server.CANONICAL_ADMIN_ROLES.includes(foreign), false, foreign + ' is a partner role in the admin registry');
+  assert.equal(server.isActiveStaff({ role: foreign, status: 'Active' }), false, foreign);
+  assert.equal(client.isActiveAdminDoc({ role: foreign, status: 'Active' }), false, foreign);
+}
+for (const obsolete of server.OBSOLETE_ADMIN_ROLES) {
+  assert.equal(server.CANONICAL_ADMIN_ROLES.includes(obsolete), false, obsolete + ' is both canonical and obsolete');
+}
+// The registry must be CLOSED: a role outside it cannot authorize, in either implementation.
+for (const invented of ['intern', 'admin', 'root', 'Analyst', 'Ops', 'Directors']) {
+  assert.equal(server.isActiveStaff({ role: invented, status: 'Active' }), false, invented);
+  assert.equal(client.isActiveAdminDoc({ role: invented, status: 'Active' }), false, invented);
+}
+ok(`role comparison is exact; both registries are ${contract.roleComparison.registryVersion} with ${contract.roleComparison.canonicalRoles.length} canonical roles, no partner-vocabulary overlap, and no invented role authorizes`);
 
 // ---- 5. PRINCIPAL BINDING PROHIBITIONS ARE HONOURED ---------------------------------
 // The contract forbids reading identity or authorization from client input. Checked against

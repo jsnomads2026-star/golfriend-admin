@@ -6,7 +6,8 @@
 // ==========================================
 import assert from 'node:assert';
 import {
-  ACTIVE_STAFF_STATUSES, KNOWN_INACTIVE_STATUSES,
+  ACTIVE_STAFF_STATUSES, ADMIN_ROLE_REGISTRY_VERSION, CANONICAL_ADMIN_ROLES,
+  KNOWN_INACTIVE_STATUSES, OBSOLETE_ADMIN_ROLES, isCanonicalAdminRole,
   isActiveStaff, isActiveDirector, normalizeStaffStatus,
 } from './authority.js';
 
@@ -86,6 +87,90 @@ check('a valid role never overrides an inactive status', () => {
   assert.equal(ACTIVE_STAFF_STATUSES.length, 1, 'widening the active set is a reviewed change, not a drive-by');
   assert.deepEqual([...ACTIVE_STAFF_STATUSES], ['active']);
 });
+// ---- THE ROLE REGISTRY IS AN ALLOWLIST -----------------------------------------------
+// `isActiveStaff` used to accept ANY non-empty string, so a principal hired as 'intern'
+// passed every privileged gate in the system. These are the shapes that exploited it.
+check('every canonical role authorizes, and the registry is versioned and closed', () => {
+  assert.equal(ADMIN_ROLE_REGISTRY_VERSION, '2026-08-15.v1');
+  assert.deepEqual([...CANONICAL_ADMIN_ROLES], ['Director', 'Manager', 'Support']);
+  for (const role of CANONICAL_ADMIN_ROLES) {
+    assert.equal(isActiveStaff({ role, status: 'Active' }), true, role);
+    assert.equal(isCanonicalAdminRole(role), true, role);
+  }
+  // Exactly one of them is Director tier.
+  assert.equal(CANONICAL_ADMIN_ROLES.filter((r) => isActiveDirector({ role: r, status: 'Active' })).length, 1);
+});
+
+check('EMPTY and MALFORMED roles are denied', () => {
+  for (const role of ['', '   ', '\t', '\n', null, undefined, 0, 1, true, false, {}, [], ['Director'], () => 'Director']) {
+    assert.equal(isActiveStaff({ role: role as never, status: 'Active' }), false, String(role));
+    assert.equal(isCanonicalAdminRole(role), false, String(role));
+  }
+  assert.equal(isActiveStaff({ status: 'Active' }), false, 'absent role');
+});
+
+check('CASE VARIANTS of a canonical role are denied — folding would widen authority', () => {
+  for (const role of ['director', 'DIRECTOR', 'DiReCtOr', 'manager', 'MANAGER', 'support', 'SUPPORT']) {
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+    assert.equal(isActiveDirector({ role, status: 'Active' }), false, role);
+  }
+  // Whitespace padding is likewise a different role, not the same one.
+  for (const role of [' Director', 'Director ', ' Director ', '\tDirector', 'Direc tor']) {
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, JSON.stringify(role));
+  }
+});
+
+check('UNICODE-CONFUSABLE roles are denied', () => {
+  // Cyrillic А (U+0410) in 'Director'; Cyrillic М (U+041C) in 'Manager'; fullwidth S.
+  for (const role of ['Directоr', 'Dirесtor', 'Нanager', 'Ｓupport', 'Ｄirector', 'Director​', '﻿Director']) {
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, JSON.stringify(role));
+    assert.equal(isCanonicalAdminRole(role), false, JSON.stringify(role));
+  }
+  // And the genuine spelling still works, so the refusals above are the guard.
+  assert.equal(isActiveStaff({ role: 'Director', status: 'Active' }), true);
+});
+
+check('OBSOLETE roles are denied, and retiring one is an explicit act', () => {
+  assert.deepEqual([...OBSOLETE_ADMIN_ROLES], [], 'no role has been retired yet');
+  // No canonical role may also be listed as obsolete — that would be a contradiction the
+  // predicate would resolve silently.
+  for (const role of OBSOLETE_ADMIN_ROLES) {
+    assert.equal(CANONICAL_ADMIN_ROLES.includes(role), false, `${role} is both canonical and obsolete`);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+  }
+});
+
+check('CROSS-ORGANIZATION and partner roles cannot satisfy an Admin gate', () => {
+  // partner_memberships vocabulary. A different principal class entirely; admitting one
+  // here would let a partner role pass an Admin gate.
+  for (const role of ['primary_owner', 'manager', 'owner', 'viewer', 'organization_admin',
+    'course_manager', 'booking_staff', 'tournament_staff', 'enterprise', 'small_business']) {
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+    assert.equal(isActiveDirector({ role, status: 'Active' }), false, role);
+  }
+  // Nor may a partner STATUS satisfy the status allowlist.
+  assert.equal(isActiveStaff({ role: 'Director', status: 'active_partner' }), false);
+});
+
+check('UNAUTHORIZED and invented roles are denied', () => {
+  for (const role of ['intern', 'contractor', 'admin', 'Admin', 'root', 'superuser', 'Ops',
+    'Analyst', 'Owner', 'Directors', 'Director2', 'Super Director', 'Manager (Operations)']) {
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+  }
+  // The specific regression: a Director could hire someone as 'intern' and that principal
+  // passed every privileged gate.
+  assert.equal(isActiveStaff({ role: 'intern', status: 'Active' }), false,
+    "a principal hired as 'intern' must not be platform staff");
+});
+
+check('an inactive status still beats a canonical role', () => {
+  for (const role of CANONICAL_ADMIN_ROLES) {
+    for (const status of ['Suspended', 'Inactive', '', 'Archived']) {
+      assert.equal(isActiveStaff({ role, status }), false, `${role}/${status}`);
+    }
+  }
+});
+
 check('Director role matching stays exact — hardening must not widen', () => {
   // Case-folding the ROLE would grant Director powers to spellings that never had them.
   for (const role of ['director', 'DIRECTOR', ' Director ', 'Director ']) {

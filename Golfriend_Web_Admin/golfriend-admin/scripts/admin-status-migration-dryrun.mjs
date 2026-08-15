@@ -37,6 +37,8 @@ const manifestPath = outputFlag >= 0 ? args[outputFlag + 1] : resolve(ROOT, 'doc
 /** The contract is the single source of what counts as active. */
 const contract = JSON.parse(readFileSync(resolve(ROOT, 'docs/SHARED_AUTHORITY_CONTRACT.json'), 'utf8'));
 const ACCEPTED = contract.acceptedStatuses.values;
+const CANONICAL_ROLES = contract.roleComparison.canonicalRoles;
+const OBSOLETE_ROLES = contract.roleComparison.obsoleteRoles || [];
 const KNOWN_INACTIVE = ['suspended', 'inactive', 'deactivated', 'revoked', 'expired', 'disabled', 'deleted', 'removed', 'terminated', 'pending', 'unknown'];
 
 const normalize = (value) => {
@@ -75,9 +77,30 @@ export function hasAssignedRole(record) {
   return !!record && typeof record.role === 'string' && record.role.trim() !== '';
 }
 
+/**
+ * Classify the ROLE as stored. The predicate now accepts only the canonical registry, so a
+ * record carrying any other value loses access — and an operator needs to know which,
+ * separately from the status problem, because the repair is different.
+ */
+export function classifyRole(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return 'malformed_record';
+  if (!Object.prototype.hasOwnProperty.call(record, 'role') || record.role === null || record.role === undefined) return 'missing_role';
+  if (typeof record.role !== 'string') return 'malformed_role';
+  if (record.role.trim() === '') return 'blank_role';
+  if (CANONICAL_ROLES.includes(record.role)) return 'canonical_role';
+  if (OBSOLETE_ROLES.includes(record.role)) return 'obsolete_role';
+  // A canonical role in the wrong case or with padding is a NEAR MISS: the operator's fix
+  // is a one-character correction, not a decision about whether this person is staff.
+  const folded = record.role.normalize('NFC').trim().toLowerCase();
+  if (CANONICAL_ROLES.some((r) => r.toLowerCase() === folded)) return 'non_canonical_spelling';
+  return 'unknown_role';
+}
+
 /** Would the shared predicate authorize this record after the change? */
 export function wouldAuthorize(record) {
-  return classify(record) === 'active' && hasAssignedRole(record);
+  // Mirrors isActiveStaff exactly: canonical status AND canonical role. Checking only that
+  // a role was assigned made this tool report access for records the predicate denies.
+  return classify(record) === 'active' && classifyRole(record) === 'canonical_role';
 }
 
 export function analyze(records) {
@@ -86,6 +109,8 @@ export function analyze(records) {
     active: 0, missing_status: 0, blank_status: 0, malformed_status: 0,
     malformed_record: 0, unknown_status: 0, inactive_total: 0,
     role_less: 0, would_authorize: 0, would_lose_access: 0,
+    canonical_role: 0, non_canonical_spelling: 0, unknown_role: 0,
+    obsolete_role: 0, malformed_role: 0, missing_role: 0, blank_role: 0,
   };
   const byInactiveValue = {};
   const repairs = [];
@@ -105,6 +130,8 @@ export function analyze(records) {
       byInactiveValue[verdict.slice(9)] = (byInactiveValue[verdict.slice(9)] || 0) + 1;
     } else counts[verdict] = (counts[verdict] || 0) + 1;
 
+    const roleVerdict = classifyRole(record);
+    if (roleVerdict !== 'malformed_record') counts[roleVerdict] = (counts[roleVerdict] || 0) + 1;
     if (!roled) counts.role_less += 1;
     if (authorized) counts.would_authorize += 1;
 
@@ -113,16 +140,21 @@ export function analyze(records) {
     const deliberatelyInactive = verdict.startsWith('inactive_');
     if (!authorized && !deliberatelyInactive) {
       counts.would_lose_access += 1;
-      const isPrivileged = record && typeof record.role === 'string' && record.role.trim() !== '';
+      const isPrivileged = roleVerdict === 'canonical_role' || roleVerdict === 'non_canonical_spelling';
       if (isPrivileged) privilegedNonConforming += 1;
       repairs.push({
         ref: shortRef(uid),
         classification: verdict,
         hasAssignedRole: roled,
+        roleClassification: roleVerdict,
         // The ROLE TIER is reported because recovery capability depends on it. The role
         // string itself is a job title, not personal data; no name, uid or contact appears.
         roleTier: record && record.role === 'Director' ? 'Director' : (roled ? 'non-director' : 'none'),
-        requiredOperatorAction: verdict === 'missing_status' || verdict === 'blank_status'
+        requiredOperatorAction: roleVerdict === 'non_canonical_spelling'
+          ? `Correct the role spelling to one of: ${CANONICAL_ROLES.join(', ')} (exact case).`
+          : roleVerdict === 'unknown_role' || roleVerdict === 'obsolete_role'
+            ? `This role is not in the canonical registry. Assign one of: ${CANONICAL_ROLES.join(', ')}, or remove the record if this person is no longer staff.`
+            : verdict === 'missing_status' || verdict === 'blank_status'
           ? "Set status to the canonical 'Active' if this person is genuinely still staff; otherwise set 'Suspended'."
           : verdict === 'unknown_status'
             ? "Replace the unrecognized status with the canonical 'Active' or 'Suspended'."
@@ -131,7 +163,7 @@ export function analyze(records) {
               : 'Assign a role, or remove the record if this person is no longer staff.',
       });
     }
-    if (record && record.role === 'Director' && authorized) directorsRetainingAccess += 1;
+    if (record && record.role === contract.roleComparison.directorRole && authorized) directorsRetainingAccess += 1;
   }
 
   return { counts, byInactiveValue, repairs, directorsRetainingAccess, privilegedNonConforming };
@@ -182,6 +214,13 @@ const HOSTILE = [
   { uid: 'n', data: null, expect: 'malformed_record', authorize: false },
   { uid: 'o', data: [], expect: 'malformed_record', authorize: false },
   { uid: 'p', data: { role: 'Manager', status: ' active ' }, expect: 'active', authorize: true },
+  // ROLE shapes. The predicate now requires a canonical role, so a record with a junk or
+  // mis-spelled role loses access even when its status is perfect.
+  { uid: 'q', data: { role: 'intern', status: 'Active' }, expect: 'active', authorize: false },
+  { uid: 'r', data: { role: 'director', status: 'Active' }, expect: 'active', authorize: false },
+  { uid: 's', data: { role: 'primary_owner', status: 'Active' }, expect: 'active', authorize: false },
+  { uid: 't', data: { role: 42, status: 'Active' }, expect: 'active', authorize: false },
+  { uid: 'u', data: { role: 'Support', status: 'Active' }, expect: 'active', authorize: true },
 ];
 for (const fixture of HOSTILE) {
   assert.equal(classify(fixture.data), fixture.expect, `classify ${fixture.uid}`);
@@ -191,7 +230,24 @@ for (const fixture of HOSTILE) {
 for (const fixture of HOSTILE) {
   if (fixture.authorize) assert.equal(classify(fixture.data), 'active', fixture.uid);
 }
-console.log(`  ok classifier self-check: ${HOSTILE.length} hostile record shapes, every non-active one fails closed`);
+// The ROLE classifier is checked against the same fixtures, so a record can be reported as
+// "active status, unusable role" rather than simply refused with no explanation.
+for (const [data, expected] of [
+  [{ role: 'Director', status: 'Active' }, 'canonical_role'],
+  [{ role: 'director', status: 'Active' }, 'non_canonical_spelling'],
+  [{ role: 'DIRECTOR', status: 'Active' }, 'non_canonical_spelling'],
+  [{ role: ' Support ', status: 'Active' }, 'non_canonical_spelling'],
+  [{ role: 'intern', status: 'Active' }, 'unknown_role'],
+  [{ role: 'primary_owner', status: 'Active' }, 'unknown_role'],
+  [{ role: '', status: 'Active' }, 'blank_role'],
+  [{ role: 42, status: 'Active' }, 'malformed_role'],
+  [{ status: 'Active' }, 'missing_role'],
+  [null, 'malformed_record'],
+]) {
+  assert.equal(classifyRole(data), expected, JSON.stringify(data));
+  if (expected !== 'canonical_role') assert.equal(wouldAuthorize(data), false, JSON.stringify(data));
+}
+console.log(`  ok classifier self-check: ${HOSTILE.length} hostile record shapes and 10 role shapes, every non-canonical one fails closed`);
 
 // Activation refusal is proved on a fixture where a privileged record is non-conforming.
 const lockoutFixture = analyze([{ uid: 'x', data: { role: 'Director' } }]);

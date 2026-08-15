@@ -130,7 +130,9 @@ assert.ok(manifest.invariants.length >= 5);
 for (const invariant of manifest.invariants) assert.ok(invariant.length > 20, 'an invariant is too vague to check');
 // Every declared port actually exists.
 for (const decision of manifest.decisions) {
-  const referenced = String(decision.port).match(/[\w/.-]+\.(ts|mjs|js)/g) || [];
+  // `json` must be matched BEFORE `js`, or `firebase.json` is parsed as `firebase.js` and
+  // the check reports a port that does not exist.
+  const referenced = String(decision.port).match(/[\w/.-]+\.(json|mjs|tsx?|js)\b/g) || [];
   for (const file of referenced) {
     assert.ok(existsSync(resolve(ROOT, file)), `${decision.id} names a port in ${file}, which does not exist`);
   }

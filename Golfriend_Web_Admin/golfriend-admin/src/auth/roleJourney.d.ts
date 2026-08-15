@@ -35,4 +35,10 @@ export function normalizeStaffStatus(value: unknown): string | null;
 export function isActiveAdminDoc(adminDoc: { role?: string; status?: string } | null | undefined): boolean;
 export function isActiveDirectorDoc(adminDoc: { role?: string; status?: string } | null | undefined): boolean;
 
+export const ADMIN_ROLE_REGISTRY_VERSION: string;
+export const CANONICAL_ADMIN_ROLES: string[];
+export const OBSOLETE_ADMIN_ROLES: string[];
+export function isCanonicalAdminRole(value: unknown): boolean;
+export const ACTIVE_PARTNER_STATUS: string;
+
 export const STATE_COPY: Record<string, { title: string; tone: 'info' | 'error' }>;

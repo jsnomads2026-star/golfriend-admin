@@ -66,6 +66,19 @@ const isRoleNotPerson = (value) => typeof value === 'string'
 for (const decision of manifest.decisions) {
   assert.ok(decision.resolution, `${decision.id} has no resolution block`);
   assert.ok(['unresolved', 'resolved'].includes(decision.resolution.status), `${decision.id} has an unknown status`);
+  // Every decision must tell an operator what EVIDENCE resolves it, what it DEPENDS on,
+  // and what happens MEANWHILE. Without those three it is a note, not a decision, and an
+  // operator cannot act on it without coming back to ask.
+  assert.ok(Array.isArray(decision.evidenceRequired) && decision.evidenceRequired.length > 0,
+    `${decision.id} names no required evidence`);
+  assert.ok(Array.isArray(decision.dependsOn), `${decision.id} declares no dependency list`);
+  assert.ok(typeof decision.failClosedBehaviour === 'string' && decision.failClosedBehaviour.length > 40,
+    `${decision.id} does not state its fail-closed behaviour`);
+  for (const dependency of decision.dependsOn) {
+    const dependencyId = String(dependency).split(' ')[0];
+    assert.ok(manifest.decisions.some((d) => d.id === dependencyId),
+      `${decision.id} depends on ${dependencyId}, which is not a decision in this manifest`);
+  }
   if (decision.resolution.status === 'unresolved') {
     assert.equal(decision.resolution.assignedOwner, UNRESOLVED, `${decision.id} is unresolved but names an owner`);
     for (const [field, value] of Object.entries(decision.resolution.suppliedValues || {})) {
@@ -144,12 +157,18 @@ if (existsSync(workflowsDir)) {
   }
 }
 const d8 = manifest.decisions.find((d) => d.id === 'D8');
-assert.equal(
-  workflowRunsGates, d8.resolution.status === 'resolved',
-  workflowRunsGates
-    ? 'a workflow now runs the authority gates, so D8 must be marked resolved'
-    : 'D8 is marked resolved but no workflow runs the authority gates',
-);
+// ONE DIRECTION ONLY. Providing a workflow file is not the same as an owner ADOPTING it:
+// choosing the trigger branches and making the check required is the decision, and this
+// lane cannot make it. So a resolved D8 requires a workflow that runs the gates, but a
+// workflow that runs the gates does not by itself resolve D8. The earlier bidirectional
+// assertion demanded that authoring the file marked the decision made — which would have
+// been this lane recording an operator's decision on their behalf.
+if (d8.resolution.status === 'resolved') {
+  assert.ok(workflowRunsGates, 'D8 is marked resolved but no workflow runs the authority gates');
+}
+// The workflow this lane provides must at least exist and name the aggregate gates, or the
+// decision cannot be actioned at all.
+assert.ok(workflowRunsGates, 'no workflow invokes the aggregate authority gates; D8 cannot be actioned');
 ok('every blocked capability is still fail-closed in the code: transmission off, no jurisdiction approved, retention refused, unknown hold blocks, App Check not provisioned, activation refused, CI gap recorded truthfully');
 
 // ---- 5. EDITING ONLY THE DOCUMENT CANNOT COMMISSION THE PACKAGE --------------------
@@ -159,6 +178,8 @@ ok('every blocked capability is still fail-closed in the code: transmission off,
 // self-agreement dressed as a proof.
 //
 // This re-runs the ACTUAL rule against the forged manifest and requires it to be caught.
+const boundRuleset = !!(JSON.parse(readFileSync(resolve(ROOT, 'firebase.json'), 'utf8')).firestore || {}).rules;
+const migrationRefusesActivation = migration.activationDecision(migration.analyze([{ uid: 'probe', data: { role: 'Director' } }])).activate === false;
 function commissioningVerdict(candidate, ciRunsGates) {
   const problems = [];
   const outstanding = candidate.decisions.filter((d) => d.resolution.status === 'unresolved');
@@ -168,9 +189,19 @@ function commissioningVerdict(candidate, ciRunsGates) {
   for (const decision of candidate.decisions) {
     if (decision.resolution.status !== 'resolved') continue;
     // A resolved decision must be corroborated OUTSIDE the document wherever that is
-    // possible. D8 is the case where it is: CI either runs the gates or it does not.
+    // possible, so editing JSON alone cannot commission anything. Each of these reads a
+    // fact the manifest does not control.
     if (decision.id === 'D8' && !ciRunsGates) {
       problems.push('D8 is marked resolved but no workflow runs the authority gates');
+    }
+    if (decision.id === 'D6' && appCheck.COMMISSIONING_STAGE === 'not_provisioned') {
+      problems.push('D6 is marked resolved but App Check reports not_provisioned in code');
+    }
+    if (decision.id === 'D9' && !boundRuleset) {
+      problems.push('D9 is marked resolved but firebase.json binds no integrated ruleset');
+    }
+    if (decision.id === 'D7' && migrationRefusesActivation) {
+      problems.push('D7 is marked resolved but the migration dry-run still refuses activation on a non-conforming record');
     }
   }
   return problems;
@@ -191,7 +222,7 @@ forged.commissioning.status = 'ready';
 forged.commissioning.unresolvedCount = 0;
 const caught = commissioningVerdict(forged, workflowRunsGates);
 assert.ok(caught.length > 0, 'a wholly forged manifest satisfied the commissioning rule — the document alone can commission the package');
-assert.ok(caught.some((p) => /D8/.test(p)), `the forgery was caught, but not by the external corroboration: ${caught.join('; ')}`);
+assert.ok(caught.some((p) => /D6|D7|D9/.test(p)), `the forgery was caught, but not by an external corroboration: ${caught.join('; ')}`);
 ok(`a forged manifest is caught by external corroboration (${caught[0]}); the honest manifest passes the same rule`);
 
 console.log(`\nCommissioning decision validation PASS: ${checks} checks.`);

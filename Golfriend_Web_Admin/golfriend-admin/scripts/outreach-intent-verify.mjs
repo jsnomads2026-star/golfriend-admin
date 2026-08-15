@@ -297,8 +297,8 @@ const INTENT = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, 
   const countIn = (db, prefix) => [...db.data.keys()].filter((k) => k.startsWith(`${prefix}/`)).length;
 
   const db = makeDb();
-  db.data.set('admin_users/author', { role: 'Ops', status: 'Active' });
-  db.data.set('admin_users/reviewer', { role: 'Ops', status: 'Active' });
+  db.data.set('admin_users/author', { role: 'Support', status: 'Active' });
+  db.data.set('admin_users/reviewer', { role: 'Support', status: 'Active' });
   db.data.set('enterprise_legal_holds/d1', { active: false });
   const server = createOutreachStore(db);
   await server.createDraft({ caller: ctx('author'), draftId: 'd1', content: CONTENT, jurisdiction: 'TH', expiresAt: null, commandId: 'c1', now: at });
