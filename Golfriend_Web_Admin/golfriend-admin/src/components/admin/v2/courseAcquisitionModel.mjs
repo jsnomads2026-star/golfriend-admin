@@ -4,6 +4,8 @@
 //   - No commission is effective without a signed, effective-dated agreement.
 //   - Internal contact details and internal notes never leave via a shareable artifact.
 //   - Approval/handoff never grants partner status; staff provisioning stays authoritative.
+import{validateCommissionBps}from'../../../economy/economyConfig.mjs';
+
 // The canonical eight-locale set is owned by `src/i18n/locales.ts` and is NOT redeclared here.
 // This model validates locale SHAPE only; canonical membership is enforced at the TS boundary
 // via `coerceLocale`/`isCanonicalLocale`, and asserted against the canonical source by the gate.
@@ -14,9 +16,9 @@ export const CONTRACT_STATES=Object.freeze(['none','pilot_proposed','pilot_activ
 // `signed_pending_effective` is deliberately EXCLUDED: a state that records the agreement as
 // pending cannot simultaneously report an effective commission.
 export const COMMISSION_BEARING_STATES=Object.freeze(['pilot_active','effective']);
-/** A commission rate must be positive and no more than 100%. The rate itself is the
- *  onboarding domain's to grant; this only rejects impossible values. */
-export const MAX_COMMISSION_BPS=10000;
+// The commission ceiling is NOT a constant here. A generic "up to 100%" allowance would let a
+// contract record a rate the pricing authority never granted, so the bound is read from the
+// central versioned economy configuration for the evaluation day.
 export const OUTREACH_CHANNELS=Object.freeze(['email_draft','call_note','meeting_note','postal_draft','inbound_enquiry','unknown']);
 export const NOTE_VISIBILITIES=Object.freeze(['internal','shareable']);
 export const ATTRIBUTION_LEVELS=Object.freeze(['authoritative','unverified','unavailable']);
@@ -116,9 +118,10 @@ export function discloseMetric(value,attribution,{requireAuthoritative=false}={}
 export function commissionState(contract,at){const c=normalizeContract(contract);const day=isoDay(at);const no=(reason)=>({effective:false,commissionBps:null,reason,authority:c.authority});if(!day)return no('invalid_evaluation_date');if(!COMMISSION_BEARING_STATES.includes(c.state))return no('contract_state_not_commission_bearing');if(!c.signed)return no('no_signed_agreement');if(!c.effectiveFrom)return no('no_effective_date');if(day<c.effectiveFrom)return no('not_yet_effective');if(c.effectiveUntil&&day>c.effectiveUntil)return no('agreement_lapsed');if(!c.activatedAt)return no('activation_not_verified');
   // A pilot that has run past its recorded end date no longer carries a commission.
   if(c.pilotEndsAt&&day>c.pilotEndsAt&&c.state==='pilot_active')return no('pilot_window_closed');
-  if(c.commissionBps===null||c.commissionBps<=0)return no('no_agreed_rate');
-  if(c.commissionBps>MAX_COMMISSION_BPS)return no('implausible_rate');
-  return{effective:true,commissionBps:c.commissionBps,reason:'signed_effective_and_activated',authority:c.authority};}
+  if(c.commissionBps===null)return no('no_agreed_rate');
+  const rate=validateCommissionBps(c.commissionBps,day);
+  if(!rate.valid)return{effective:false,commissionBps:null,reason:rate.reason==='rate_not_positive'?'no_agreed_rate':rate.reason,authority:c.authority,policyVersion:rate.policyVersion};
+  return{effective:true,commissionBps:c.commissionBps,reason:'signed_effective_and_activated',authority:c.authority,policyVersion:rate.policyVersion};}
 
 /** An unsigned course is never invoiceable; it receives opportunity evidence instead. */
 export function invoiceEligibility(prospect,at){const p=normalizeProspect(prospect);const commission=commissionState(p.contract,at);return{invoiceAllowed:commission.effective,commissionBps:commission.commissionBps,reason:commission.reason,entitlement:commission.effective?'commission_invoice_permitted':'opportunity_evidence_only',notice:commission.effective?'A signed, effective-dated agreement with verified activation is recorded by the partner-onboarding domain.':'Unsigned course: opportunity evidence only. No invoice, charge or commission may be raised.'};}

@@ -9,7 +9,6 @@ import {
   ATTRIBUTION_LEVELS,
   COMMISSION_BEARING_STATES,
   CONTRACT_STATES,
-  MAX_COMMISSION_BPS,
   commissionState,
   containsPersonalData,
   conversionHandoff,
@@ -81,9 +80,11 @@ for (const state of COMMISSION_BEARING_STATES) assert.equal(commissionState({ ..
 // A pilot that has run past its recorded end date no longer carries a commission.
 assert.equal(commissionState({ state: 'pilot_active', signed: true, effectiveFrom: '2019-01-01', activatedAt: '2019-01-01', pilotEndsAt: '2019-04-01', commissionBps: 300 }, '2026-08-15').reason, 'pilot_window_closed');
 assert.equal(commissionState({ state: 'pilot_active', signed: true, effectiveFrom: '2026-01-01', activatedAt: '2026-01-01', pilotEndsAt: '2026-12-31', commissionBps: 300 }, '2026-08-15').effective, true);
-// An impossible rate is not an agreed rate.
+// A rate is bounded by the CENTRAL economy configuration, not by a literal in this module.
 assert.equal(commissionState({ ...effectiveContract, commissionBps: 0 }, '2026-08-15').reason, 'no_agreed_rate');
-assert.equal(commissionState({ ...effectiveContract, commissionBps: MAX_COMMISSION_BPS + 1 }, '2026-08-15').reason, 'implausible_rate');
+assert.equal(commissionState({ ...effectiveContract, commissionBps: 301 }, '2026-08-15').reason, 'rate_exceeds_authorized_ceiling');
+assert.equal(commissionState({ ...effectiveContract, commissionBps: 10000 }, '2026-08-15').reason, 'rate_exceeds_authorized_ceiling');
+assert.equal(commissionState(effectiveContract, '2026-08-15').policyVersion, '2026-08-15.v1');
 // Dates are validated as real calendar days, not merely ISO-shaped strings.
 for (const bad of ['0000-00-00', '2026-13-01', '2026-02-30', '2026-00-10']) {
   assert.equal(commissionState({ ...effectiveContract, effectiveFrom: bad }, '2026-08-15').reason, 'no_effective_date', `${bad} must not pass as an effective date`);
