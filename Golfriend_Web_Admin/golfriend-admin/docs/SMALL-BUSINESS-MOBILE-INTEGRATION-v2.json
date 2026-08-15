@@ -25,7 +25,9 @@
     "required": ["schema", "version", "state", "locale", "issuedAt", "freshUntil", "memberBinding", "authoritativeStatus"],
     "businessEvidence": ["businessId", "profileVersion", "profileDigest"],
     "locationEvidence": ["locationId", "locationVersion"],
-    "freshness": "Clients must reject expired, member-mismatched, schema-mismatched, status-mismatched, or version-mismatched projections."
+    "promotionAllowlist": ["promotionId", "locationIds", "contentDigest", "disclosure", "effectiveAt", "expiresAt"],
+    "detailResponse": ["schema", "version", "state", "locale", "issuedAt", "freshUntil", "memberBinding", "authoritativeStatus", "items", "promotions", "rawLocationPersisted", "returnRoute"],
+    "freshness": "Clients must reject expired, member-mismatched, schema-mismatched, status-mismatched, version-mismatched, or undeclared projections."
   },
   "requests": {
     "discovery": ["locale", "filter", "cursor", "limit"],
