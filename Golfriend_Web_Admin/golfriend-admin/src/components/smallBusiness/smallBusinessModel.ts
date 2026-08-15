@@ -1,0 +1,16 @@
+export const SMALL_BUSINESS_SCHEMA = 'golfriend.small-business.v1' as const;
+export const SMALL_BUSINESS_LOCALES = ['en','th','ko','ja','zh','es','fr','de'] as const;
+export type SmallBusinessLocale = typeof SMALL_BUSINESS_LOCALES[number];
+export type BusinessStatus = 'draft'|'submitted'|'changes_requested'|'approved'|'active'|'suspended'|'expired'|'rejected'|'closed';
+export type BusinessCategory = 'golf_cafe'|'restaurant'|'coach'|'fitter'|'repair_shop'|'retailer'|'other';
+export interface BusinessCard {businessId:string;displayName:string;category:BusinessCategory;city:string;country:string;verificationState:'verified'|'pending'|'unverified';disclosure:'partner'|'sponsored';availability:'known'|'unknown';offer?:{title:string;validUntil:string};}
+export interface LocationProjection {locationId:string;label:string;city:string;country:string;hours:Array<{day:string;opens?:string;closes?:string;closed:boolean}>;}
+export interface ReceiptProjection {receiptId:string;action:string;version:number;occurredAt:string;immutable:true;}
+export interface PlanProjection {planId:string;version:number;effectiveFrom:string;effectiveUntil?:string;features:string[];status:'available'|'unavailable';priceDisplay?:string;}
+export interface PortalProjection {schema:typeof SMALL_BUSINESS_SCHEMA;state:'current'|'empty'|'unavailable'|'conflict';business?:{businessId:string;version:number;displayName:string;category:BusinessCategory;status:BusinessStatus;serviceArea:string;supportedLocales:SmallBusinessLocale[]};locations:LocationProjection[];plans:PlanProjection[];promotions:Array<{promotionId:string;version:number;status:'draft'|'pending_review'|'approved'|'active'|'expired'|'rejected';locale:SmallBusinessLocale;jurisdiction:string;effectiveAt:string;expiresAt:string;contentDigest:string;disclosure:'sponsored'}>;receipts:ReceiptProjection[];supportReference?:string;}
+export interface AdminQueueItem {businessId:string;displayName:string;category:BusinessCategory;country:string;status:BusinessStatus;version:number;submittedAt?:string;evidenceCount:number;}
+export interface AdminQueueProjection {schema:typeof SMALL_BUSINESS_SCHEMA;state:'current'|'empty'|'unavailable';items:AdminQueueItem[];nextCursor?:string;supportReference?:string;}
+export interface DiscoveryProjection {schema:typeof SMALL_BUSINESS_SCHEMA;state:'current'|'empty'|'unavailable';items:BusinessCard[];nextCursor?:string;supportReference?:string;}
+export const commandId = (scope:string) => `${scope}_${crypto.randomUUID()}`;
+export function isSafeCard(value:BusinessCard):boolean {return Boolean(value.businessId&&value.displayName&&value.category&&value.city&&value.country&&['partner','sponsored'].includes(value.disclosure)&&['known','unknown'].includes(value.availability))&&!('contact' in value)&&!('coordinates' in value);}
+export function isPortalProjection(value:unknown):value is PortalProjection {const v=value as PortalProjection;return v?.schema===SMALL_BUSINESS_SCHEMA&&['current','empty','unavailable','conflict'].includes(v.state)&&Array.isArray(v.locations)&&Array.isArray(v.plans)&&Array.isArray(v.promotions)&&Array.isArray(v.receipts)&&v.receipts.every(r=>r.immutable===true);}
