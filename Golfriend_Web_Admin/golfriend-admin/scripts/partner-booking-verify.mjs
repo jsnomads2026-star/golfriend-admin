@@ -105,9 +105,9 @@ t("legacy exports reconciled", () => {
   assert.match(index, /managePlayBookingV2 as respondBooking/);
   assert.match(index, /sendPlayBookingMessageV2 as sendBookingMessage/);
 });
-t("Portal small", () => assert.match(small, /PlayBookingLifecycleV2/));
+t("Portal small", () => assert.match(small, /EnterpriseBookingCoordinationDesk/));
 t("Portal enterprise", () =>
-  assert.match(enterprise, /PlayBookingLifecycleV2/),
+  assert.match(enterprise, /EnterpriseBookingCoordinationDesk/),
 );
 t("Admin mounted", () => assert.match(app, /PlayBookingLifecycleV2 admin/));
 t("eight locales", () =>

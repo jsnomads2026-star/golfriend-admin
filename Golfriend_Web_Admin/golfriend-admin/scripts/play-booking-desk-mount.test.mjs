@@ -5,8 +5,8 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const small = read('src/components/B2B/SmallBusinessDashboard.tsx');
 const enterprise = read('src/components/B2B/EnterpriseDashboard.tsx');
 
-assert.match(small, /<PlayBookingLifecycleV2\s*\/>/);
-assert.match(enterprise, /<PlayBookingLifecycleV2\s*\/>/);
+assert.match(small, /<EnterpriseBookingCoordinationDesk\s*\/>/);
+assert.match(enterprise, /<EnterpriseBookingCoordinationDesk\s*\/>/);
 assert.doesNotMatch(small, /BookingRequests/);
 assert.doesNotMatch(enterprise, /BookingRequests/);
 assert.doesNotMatch(small, /respondBooking|cancelBooking|sendBookingMessage/);
