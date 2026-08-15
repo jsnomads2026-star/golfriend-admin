@@ -67,7 +67,7 @@
     "historyAllowlist": ["businessId", "savedProfileVersion", "currentProfileVersion", "locationId", "savedLocationVersion", "currentLocationVersion", "state", "issuedAt", "freshUntil"],
     "forbidden": ["rawUid", "staff", "contact", "email", "phone", "rawCoordinates", "memberProfile", "privateEvidence", "providerCredential", "subscription", "correctionReview", "jhcc"]
   },
-  "navigation": {"origin": "/lounge", "back": "/lounge", "exit": "/lounge", "acceptanceSideEffects": false},
+  "navigation": {"origin": "/v2", "back": "/v2", "exit": "/v2", "acceptanceSideEffects": false},
   "locales": ["en", "th", "ko", "ja", "zh", "es", "fr", "de"],
   "localeKeys": ["smallBusiness.discovery.title", "smallBusiness.discovery.empty", "smallBusiness.discovery.offline", "smallBusiness.discovery.unavailable", "smallBusiness.discovery.retry", "smallBusiness.discovery.partnerDisclosure", "smallBusiness.discovery.sponsoredDisclosure", "smallBusiness.discovery.availabilityUnknown", "smallBusiness.detail.favorite", "smallBusiness.detail.unfavorite", "smallBusiness.detail.inquiry", "smallBusiness.detail.returnToLounge", "smallBusiness.inquiry.ownerValidationRequired", "smallBusiness.inquiry.prepared", "smallBusiness.inquiry.awaitingProvider", "smallBusiness.inquiry.cancelled", "smallBusiness.inquiry.expired", "smallBusiness.saved.unavailable"]
 }
