@@ -1,9 +1,12 @@
 const RESPONSE_SCHEMA = 'golfriend.play-booking.v2';
 const BOUNDARY = 'PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP';
 const ROLES = new Set(['primary_owner', 'manager', 'course_staff', 'support', 'analyst']);
+const ENTERPRISE_ROLES = new Set(['organization_owner','organization_admin','course_manager','booking_staff','analyst_viewer']);
 const STATUSES = new Set(['pending', 'confirmed', 'rejected', 'changed', 'cancelled', 'expired']);
 const ACTIONS = new Set(['confirm', 'alternative', 'cancel', 'complete', 'message', 'acknowledge']);
 const RESPONSE_KEYS = new Set(['schema', 'role', 'permissions', 'bookings', 'notificationProviderConfigured', 'boundary', 'courseIds', 'delegatedCourseIds']);
+const ENTERPRISE_SCOPE_VERSION = 'golfriend.enterprise-booking-scope.v1';
+const RESPONSE_KEYS_V2 = new Set(['schema','role','permissions','bookings','notificationProviderConfigured','boundary','courseIds','delegatedCourseIds','propertyIds','membershipId','projectionVersion','sourceVersion','generatedAt','expiresAt','freshness']);
 const PERMISSION_KEYS = Object.freeze(['read', 'message', 'confirm', 'alternative', 'cancel', 'complete']);
 const ROLE_PERMISSIONS = freezePermissions({
   primary_owner: { read:true, message:true, confirm:true, alternative:true, cancel:true, complete:true },
@@ -11,6 +14,13 @@ const ROLE_PERMISSIONS = freezePermissions({
   course_staff: { read:true, message:true, confirm:true, alternative:true, cancel:false, complete:true },
   support: { read:true, message:true, confirm:false, alternative:false, cancel:false, complete:false },
   analyst: { read:true, message:false, confirm:false, alternative:false, cancel:false, complete:false },
+});
+const ENTERPRISE_ROLE_PERMISSIONS = freezePermissions({
+  organization_owner:{read:true,message:true,confirm:true,alternative:true,cancel:true,complete:true},
+  organization_admin:{read:true,message:true,confirm:true,alternative:true,cancel:true,complete:true},
+  course_manager:{read:true,message:true,confirm:true,alternative:true,cancel:false,complete:false},
+  booking_staff:{read:true,message:true,confirm:true,alternative:true,cancel:false,complete:false},
+  analyst_viewer:{read:true,message:false,confirm:false,alternative:false,cancel:false,complete:false},
 });
 const BOOKING_KEYS = new Set(['bookingId', 'slotId', 'courseId', 'date', 'time', 'timeZone', 'status', 'version', 'memberDisplayName', 'alternative', 'lastMessageAt', 'courseName', 'provider', 'cancellationTerms', 'terms', 'receiptRef', 'reference']);
 const PROVIDER_KEYS = new Set(['providerId', 'displayName']);
@@ -47,11 +57,11 @@ function containsForbiddenKey(value) {
   return Object.entries(value).some(([key, nested]) => FORBIDDEN_KEY.test(key) || containsForbiddenKey(nested));
 }
 
-function permissions(value, role) {
+function permissions(value, role, ceilings=ROLE_PERMISSIONS) {
   if (!exact(value, new Set(PERMISSION_KEYS))) return null;
   if (PERMISSION_KEYS.some(key => typeof value[key] !== 'boolean')) return null;
   if (value.read !== true) return null;
-  const ceiling = ROLE_PERMISSIONS[role];
+  const ceiling = ceilings[role];
   if (!ceiling) return null;
   return freeze(Object.fromEntries(PERMISSION_KEYS.map(key => [key, value[key] === true && ceiling[key] === true])));
 }
@@ -107,7 +117,20 @@ function delegatedCourseIds(raw) {
   return ids.every(Boolean) && new Set(ids).size === ids.length ? freeze(ids) : null;
 }
 
+function exactIds(value,max=100){if(!Array.isArray(value)||value.length===0||value.length>max)return null;const values=value.map(id);return values.every(Boolean)&&new Set(values).size===values.length?freeze(values):null}
+
+function parseEnterpriseResponse(raw) {
+  if (!exact(raw, RESPONSE_KEYS_V2) || containsForbiddenKey(raw) || raw.schema!==RESPONSE_SCHEMA || raw.boundary!==BOUNDARY || raw.projectionVersion!==ENTERPRISE_SCOPE_VERSION || raw.freshness!=='fresh' || !ENTERPRISE_ROLES.has(raw.role) || typeof raw.notificationProviderConfigured!=='boolean' || !Array.isArray(raw.bookings) || raw.bookings.length>200) return unavailable('response_invalid');
+  const membershipId=id(raw.membershipId),sourceVersion=bounded(raw.sourceVersion,64),generatedAt=iso(raw.generatedAt),expiresAt=iso(raw.expiresAt),courseIds=exactIds(raw.courseIds),delegated=exactIds(raw.delegatedCourseIds),propertyIds=exactIds(raw.propertyIds);
+  if(!membershipId||!sourceVersion||!/^[a-f0-9]{64}$/.test(sourceVersion)||!generatedAt||!expiresAt||Date.parse(generatedAt)>=Date.parse(expiresAt)||Date.parse(expiresAt)<=Date.now()||!courseIds||!delegated||!propertyIds||delegated.some(courseId=>!courseIds.includes(courseId)))return unavailable('scope_invalid');
+  const allowed=permissions(raw.permissions,raw.role,ENTERPRISE_ROLE_PERMISSIONS);if(!allowed)return unavailable('permissions_invalid');
+  const parsedBookings=raw.bookings.map(booking);if(parsedBookings.some(item=>item===null))return unavailable('booking_projection_invalid');const bookings=parsedBookings.filter(item=>item!==COMPLETED_OUT_OF_QUEUE);
+  if(bookings.some(item=>!courseIds.includes(item.courseId)))return unavailable('cross_course_projection');
+  return freeze({state:'ready',schema:RESPONSE_SCHEMA,projectionVersion:ENTERPRISE_SCOPE_VERSION,role:raw.role,permissions:allowed,notificationProviderConfigured:raw.notificationProviderConfigured,boundary:BOUNDARY,membershipId,courseIds,delegatedCourseIds:delegated,propertyIds,sourceVersion,generatedAt,expiresAt,freshness:'fresh',bookings:freeze(bookings)});
+}
+
 export function parsePlayBookingDeskResponse(raw) {
+  if(record(raw)&&Object.prototype.hasOwnProperty.call(raw,'projectionVersion'))return parseEnterpriseResponse(raw);
   if (!exact(raw, RESPONSE_KEYS) || containsForbiddenKey(raw)) return unavailable('response_invalid');
   if (raw.schema !== RESPONSE_SCHEMA || raw.boundary !== BOUNDARY || !ROLES.has(raw.role) || typeof raw.notificationProviderConfigured !== 'boolean' || !Array.isArray(raw.bookings) || raw.bookings.length > 200) return unavailable('response_invalid');
   const allowed = permissions(raw.permissions, raw.role);

@@ -7,6 +7,15 @@ const test = (name, run) => { run(); passed += 1; console.log(`PASS ${name}`); }
 const permissions = { read:true, message:true, confirm:true, alternative:true, cancel:true, complete:true };
 const booking = (overrides = {}) => ({ bookingId:'booking_1', slotId:'slot_1', courseId:'course_1', date:'2026-08-20', time:'07:30', timeZone:'Asia/Bangkok', status:'pending', version:1, memberDisplayName:'Warm Golfer', alternative:null, lastMessageAt:null, ...overrides });
 const response = (overrides = {}) => ({ schema:'golfriend.play-booking.v2', role:'manager', permissions, bookings:[booking()], notificationProviderConfigured:false, boundary:'PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP', ...overrides });
+const enterpriseResponse=(overrides={})=>({schema:'golfriend.play-booking.v2',projectionVersion:'golfriend.enterprise-booking-scope.v1',role:'organization_admin',permissions,bookings:[booking()],notificationProviderConfigured:false,boundary:'PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP',courseIds:['course_1'],delegatedCourseIds:['course_1'],propertyIds:['property_1'],membershipId:'membership_1',sourceVersion:'a'.repeat(64),generatedAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+60_000).toISOString(),freshness:'fresh',...overrides});
+
+test('adapts the exact fresh enterprise authority projection',()=>{const result=parsePlayBookingDeskResponse(enterpriseResponse());assert.equal(result.state,'ready');assert.equal(result.projectionVersion,'golfriend.enterprise-booking-scope.v1');assert.equal(result.membershipId,'membership_1');assert.deepEqual(result.courseIds,['course_1']);assert(Object.isFrozen(result.propertyIds))});
+
+test('enterprise role ceilings cannot be elevated by response permissions',()=>{for(const role of['course_manager','booking_staff']){const result=parsePlayBookingDeskResponse(enterpriseResponse({role}));assert.deepEqual(result.permissions,{read:true,message:true,confirm:true,alternative:true,cancel:false,complete:false})}const analyst=parsePlayBookingDeskResponse(enterpriseResponse({role:'analyst_viewer'}));assert.deepEqual(analyst.permissions,{read:true,message:false,confirm:false,alternative:false,cancel:false,complete:false})});
+
+test('enterprise projection rejects stale unknown and cross-course authority',()=>{assert.equal(parsePlayBookingDeskResponse(enterpriseResponse({expiresAt:new Date(Date.now()-1).toISOString()})).state,'unavailable');assert.equal(parsePlayBookingDeskResponse(enterpriseResponse({freshness:'stale'})).state,'unavailable');assert.equal(parsePlayBookingDeskResponse(enterpriseResponse({unknown:true})).state,'unavailable');assert.equal(parsePlayBookingDeskResponse(enterpriseResponse({bookings:[booking({courseId:'course_2'})]})).reason,'cross_course_projection');assert.equal(parsePlayBookingDeskResponse(enterpriseResponse({delegatedCourseIds:['course_2']})).state,'unavailable')});
+
+test('enterprise projection rejects private and unrecognized operation or receipt facts',()=>{for(const extra of[{memberUid:'private'},{pendingOperation:{operationId:'x'}},{receipts:[]}])assert.equal(parsePlayBookingDeskResponse(enterpriseResponse(extra)).state,'unavailable')});
 
 test('accepts exact authoritative response and freezes every projection', () => {
   const result = parsePlayBookingDeskResponse(response());
@@ -130,4 +139,4 @@ test('strictly binds message result to booking command and acknowledged facts',(
   assert.equal(parseBookingDeskMessageResult({...raw,unknown:true},expected).state,'unavailable');
 });
 
-console.log(`${passed}/14 play booking desk projection tests PASS`);
+console.log(`${passed}/18 play booking desk projection tests PASS`);
