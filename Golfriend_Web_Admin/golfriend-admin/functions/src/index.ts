@@ -1791,3 +1791,5 @@ export const photoWatchtower = functionsV1
     logger.error("Watchtower AI Vision Error:", error);
   }
 });
+
+export { getEconomyRateCard, publishEconomyRateCard, rollbackEconomyRateCard, quoteEconomyAction, settleEconomyAction } from "./economyAuthority.js";
