@@ -13,10 +13,12 @@ import {
   version,
 } from "./partnerBookingDomain.js";
 import { validateCommand, validateVersion } from "./partnerActivationDomain.js";
+import {assertExactCallableEnvelope} from "./callableEnvelope.js";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(),
   notifier = defineString("PARTNER_NOTIFICATION_PROVIDER", { default: "" }),
   now = () => admin.firestore.FieldValue.serverTimestamp();
+function exact(data:unknown,required:readonly string[],optional:readonly string[]=[]){try{assertExactCallableEnvelope(data,required,optional)}catch{throw new HttpsError("invalid-argument","Request envelope invalid.")}}
 function uid(r: any) {
   if (!r.auth?.uid)
     throw new HttpsError("unauthenticated", "Sign in required.");
@@ -59,6 +61,7 @@ const safeBooking = (x: any) => ({
 export const requestPlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
+    exact(r.data,["commandId","slotId"]);
     const memberUid = uid(r),
       cmd = command(r),
       slotId = String(r.data?.slotId || "");
@@ -146,6 +149,8 @@ export const requestPlayBookingV2 = onCall(
 export const managePlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
+    const requestedAction=String(r.data?.action||"");
+    exact(r.data,["commandId","bookingId","action","expectedVersion"],requestedAction==="alternative"?["alternativeSlotId","message"]:[]);
     const caller = uid(r),
       m = await member(caller),
       cmd = command(r),
@@ -234,6 +239,7 @@ export const managePlayBookingV2 = onCall(
 export const sendPlayBookingMessageV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
+    exact(r.data,["commandId","bookingId","message"]);
     const caller = uid(r),
       cmd = command(r),
       id = String(r.data?.bookingId || ""),
@@ -274,6 +280,7 @@ export const sendPlayBookingMessageV2 = onCall(
 export const getPlayBookingsPortalV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
+    exact(r.data,[]);
     const m = await member(uid(r)),
       snap = await db
         .collection("bookings")
@@ -293,6 +300,7 @@ export const getPlayBookingsPortalV2 = onCall(
 export const getPlayBookingsAdminV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
+    exact(r.data,[]);
     await staff(uid(r));
     const snap = await db.collection("bookings").limit(500).get();
     return {

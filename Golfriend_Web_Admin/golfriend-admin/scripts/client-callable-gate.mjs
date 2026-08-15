@@ -79,10 +79,15 @@ for (const comp of FORBIDDEN_COMPONENTS) {
 }
 
 // 3. Approved journey surfaces remain reachable (regression guard).
-const APPROVED = ['TeeTimeInventory', 'CourseAvailability', 'BookingRequests', 'BookingOversight', 'BookingAudit', 'HRManagement', 'CourseTeeSheet'];
+const APPROVED = ['TeeTimeInventory', 'CourseAvailabilityV2', 'PlayBookingLifecycleV2', 'BookingOversight', 'BookingAudit', 'HRManagement', 'CourseTeeSheet'];
 for (const comp of APPROVED) {
   const hit = [...reachable].find((f) => new RegExp(`[\\\\/]${comp}\\.(tsx|ts|jsx|js)$`).test(f));
   assert(!!hit, `approved journey surface '${comp}' remains reachable`);
+}
+
+for (const legacy of ['CourseAvailability', 'BookingRequests']) {
+  const hit = [...reachable].find((f) => new RegExp(`[\\/]${legacy}\\.(tsx|ts|jsx|js)$`).test(f));
+  assert(!hit, `legacy client-authority surface '${legacy}' remains unreachable`);
 }
 
 console.log(`\n  (reachable modules from entry: ${reachable.size})`);
