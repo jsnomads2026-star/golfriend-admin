@@ -14,7 +14,11 @@ export const EVIDENCE_SCHEMA='golfriend.admin.opportunity-evidence.v2';
 export const EVIDENCE_VERSION=2;
 
 /** Signals this domain can report, and what each is actually evidence OF. */
-export const EVIDENCE_SIGNALS=Object.freeze([
+// Deep-frozen: a shallow freeze leaves each element mutable, and mutating one lets a signal be
+// renamed out of the played-round special case while keeping `claim:'play'` — producing a
+// disclosed line labelled as play.
+const deepFreeze=(value)=>{if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.freeze(value);for(const child of Object.values(value))deepFreeze(child);}return value;};
+export const EVIDENCE_SIGNALS=deepFreeze([
   {id:'member_interest',claim:'interest',requiresAuthority:'golfriend_member_activity'},
   {id:'booking_request',claim:'intent',requiresAuthority:'booking_ledger'},
   {id:'confirmed_course_response',claim:'course_response',requiresAuthority:'course_response_ledger'},
@@ -48,10 +52,15 @@ const int=(v)=>Number.isInteger(v)&&v>=0?v:null;
  */
 export function assessPlayedEvidence({authorities=[],inferredFrom=[]}={}){
   const held=Array.isArray(authorities)?authorities:[];
-  const usedInference=inferredFrom.filter((source)=>NON_PLAY_INFERENCE_SOURCES.includes(source));
-  if(usedInference.length)return Object.freeze({available:false,reason:'play_may_not_be_inferred',playedRounds:0,courseClaim:null,rejectedInference:Object.freeze(usedInference),
-    notice:'Play was inferred from interest or intent signals. That is never evidence of play.'});
-  if(!held.includes(PLAYED_EVIDENCE_AUTHORITY)||!APPROVED_EVIDENCE_AUTHORITIES.includes(PLAYED_EVIDENCE_AUTHORITY))return Object.freeze({available:false,reason:'no_played_evidence_authority',playedRounds:0,courseClaim:null,rejectedInference:Object.freeze([]),
+  // ALLOWLIST, not denylist. A denylist of known-bad sources silently ignores an unrecognised
+  // one ("gps_trace", "photo"), which would become an inference-laundered play authorization
+  // the day a played-evidence authority is approved. ANY inference input refuses.
+  const offered=Array.isArray(inferredFrom)?inferredFrom.map(String):[];
+  if(offered.length)return Object.freeze({available:false,reason:'play_may_not_be_inferred',playedRounds:0,courseClaim:null,
+    rejectedInference:Object.freeze(offered),
+    unrecognisedInference:Object.freeze(offered.filter((source)=>!NON_PLAY_INFERENCE_SOURCES.includes(source))),
+    notice:'Play was inferred from interest, intent or unrecognised signals. None of them is evidence of play.'});
+  if(!held.includes(PLAYED_EVIDENCE_AUTHORITY)||!APPROVED_EVIDENCE_AUTHORITIES.includes(PLAYED_EVIDENCE_AUTHORITY))return Object.freeze({available:false,reason:'no_played_evidence_authority',playedRounds:0,courseClaim:null,rejectedInference:Object.freeze([]),unrecognisedInference:Object.freeze([]),
     notice:'No approved authoritative played-evidence source exists. Played rounds are reported as zero and no course claim is generated.'});
   return Object.freeze({available:true,reason:'authoritative_played_evidence',playedRounds:null,courseClaim:null,rejectedInference:Object.freeze([]),
     notice:'An approved played-evidence authority is present; counts must come from it, never from inference.'});
@@ -73,12 +82,14 @@ function evidenceLine(signal,rawCount,{authorities,cohortMinimum}){
  * Build the internal opportunity evidence report.
  * Every line states what it is evidence OF, so a reader cannot mistake interest for play.
  */
-export function buildEvidenceReport({prospectRef,counts={},authorities=[],cohortMinimum=MIN_AGGREGATE_COUNT,generatedAt,inferredFrom=[]}){
+export function buildEvidenceReport({prospectRef,counts,authorities,cohortMinimum=MIN_AGGREGATE_COUNT,generatedAt,inferredFrom}={}){
+  const safeCounts=counts&&typeof counts==='object'?counts:{};
+  const safeAuthorities=Array.isArray(authorities)?authorities:[];
   const minimum=Number.isInteger(cohortMinimum)&&cohortMinimum>=MIN_AGGREGATE_COUNT?cohortMinimum:MIN_AGGREGATE_COUNT;
-  const played=assessPlayedEvidence({authorities,inferredFrom});
+  const played=assessPlayedEvidence({authorities:safeAuthorities,inferredFrom});
   const lines=EVIDENCE_SIGNALS.map((signal)=>{
     if(signal.id==='played_round')return{id:signal.id,claim:signal.claim,disclosed:false,value:played.available?null:0,reason:played.reason};
-    return evidenceLine(signal,counts[signal.id],{authorities,cohortMinimum:minimum});
+    return evidenceLine(signal,Object.hasOwn(safeCounts,signal.id)?safeCounts[signal.id]:undefined,{authorities:safeAuthorities,cohortMinimum:minimum});
   });
   return Object.freeze({schema:EVIDENCE_SCHEMA,version:EVIDENCE_VERSION,generatedAt,
     // The subject is referenced by surrogate: acquisition evidence never names a golfer, and
@@ -107,6 +118,6 @@ export function evidenceReceipt({report,actorRef,at}){
     evidenceVersion:report.version,disclosedSignalCount:report.disclosed.length,withheldSignalCount:report.withheld.length,
     playedEvidenceAvailable:report.playedEvidence.available,playedEvidenceReason:report.playedEvidence.reason,
     actorRef:surrogateRef(String(actorRef??''),'actor'),at,
-    claims:report.claims,
+    claims:Object.freeze({play:false,revenue:false,commission:false,invoice:false,legalProofOfPlay:false}),
     notice:'Evidence preparation receipt. No invoice, commission claim or proof of play is asserted.'});
 }
