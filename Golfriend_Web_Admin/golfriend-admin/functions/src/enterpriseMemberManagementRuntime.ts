@@ -1,18 +1,18 @@
 import *as admin from "firebase-admin";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {resolveEnterpriseCourseAuthority} from "./enterpriseAuthorityRuntime.js";
-import {ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, MEMBER_STATES, commandId, invitationTransition, memberDigest, minimumMember, normalizeChange, normalizeInvitation, page, previewCsv, receiptId, scopeId, strictCommand, strictVersion} from "./enterpriseMemberManagementDomain.js";
+import {ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, MEMBER_STATES, commandId, invitationTransition, memberDigest, minimumMember, minimumReceipt, minimumRequest, normalizeChange, normalizeInvitation, page, previewCsv, receiptId, scopeId, strictCommand, strictVersion} from "./enterpriseMemberManagementDomain.js";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(), stamp = () => admin.firestore.FieldValue.serverTimestamp();
 const fail = (e: any): never => {if (e instanceof HttpsError) throw e;
 const m = String(e?.message || e);
 throw new HttpsError(m.includes("REPLAY") ? "already-exists" : "invalid-argument", m)};
-function context(x: any) {const allowed = new Set(["membershipId", "organizationId", "propertyId", "courseId"]);
+function context(x: any) {const allowed = new Set(["actorMembershipId", "organizationId", "propertyId", "courseId"]);
 if (!x || Object.keys(x).some(k => !allowed.has(k))) throw Error("CONTEXT_INVALID");
 const out: any = {};
 for (const k of allowed) {const v = String(x[k] || "");
 if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$/.test(v)) throw Error("CONTEXT_INVALID");
-out[k] = v} return out}
+out[k] = v} return {...out, membershipId: out.actorMembershipId}}
 function actor(r: any) {if (!r.auth?.uid) throw new HttpsError("unauthenticated", "Authentication required.");
 return r.auth.uid as string}
 async function scoped(r: any) {try {const uid = actor(r), scope = context(r.data?.context), authority = await resolveEnterpriseCourseAuthority(uid, scope.membershipId, scope.organizationId, scope.propertyId, scope.courseId, "member_management"), sid = scopeId(scope.organizationId, scope.propertyId, scope.courseId), applicationId = `eoa_${memberDigest([scope.organizationId, scope.propertyId, scope.courseId]).slice(0, 32)}`;
@@ -23,6 +23,7 @@ if (!activePartner && !activeTrial) throw new HttpsError("failed-precondition", 
 if (!Number.isSafeInteger(a.version) || a.version < 1) throw new HttpsError("unavailable", "Authoritative course version unavailable.");
 return {uid, scope, authority, sid, courseVersion: a.version, entitlement: activePartner ? "active" : "active_trial"}} catch (e) {return fail(e)} }
 const members = (sid: string) => db.collection("enterprise_course_member_scopes").doc(sid).collection("members"), requestRef = (sid: string, id: string) => db.collection("enterprise_course_member_scopes").doc(sid).collection("requests").doc(id);
+async function projection(s:any,items:any[],nextCursor:string|null){const[requests,receipts]=await Promise.all([db.collection("enterprise_course_member_scopes").doc(s.sid).collection("requests").limit(100).get(),db.collection("enterprise_member_management_receipts").where("courseId","==",s.scope.courseId).limit(100).get()]);const exact=(x:any)=>x.organizationId===s.scope.organizationId&&x.propertyId===s.scope.propertyId&&x.courseId===s.scope.courseId&&x.representativeMembershipId===s.scope.membershipId;return{schema:ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA,context:{actorMembershipId:s.scope.actorMembershipId,organizationId:s.scope.organizationId,propertyId:s.scope.propertyId,courseId:s.scope.courseId},state:items.length?"current":"empty",entitlement:s.entitlement,courseVersion:s.courseVersion,members:items,nextCursor,requests:requests.docs.filter(d=>exact(d.data())).map(d=>minimumRequest(d.data())),receipts:receipts.docs.filter(d=>exact(d.data())).map(d=>minimumReceipt(d.data(),d.id)),deliveryProviderStatus:"unavailable",policy:{invitationExpiryDays:7,previewExpiryMinutes:15,roles:["member","junior_member","honorary_member","guest_member"]}}}
 async function listing(s: any, r: any) {const raw = await members(s.sid).limit(501).get();
 if (raw.size > 500) throw new HttpsError("resource-exhausted", "Directory requires narrower filtering.");
 try {let items = raw.docs.map(d => {const x = d.data();
@@ -37,11 +38,11 @@ items = items.filter(x => (!f.state || x.state === f.state) && (!f.role || x.rol
 const binding = memberDigest({scope: s.sid, filter: {search: q, state: f.state || null, role: f.role || null}, sort: "displayName:en,memberReference", courseVersion: s.courseVersion});
 return page(items, r.data?.limit ?? 25, binding, r.data?.cursor)} catch (e) {return fail(e)} }
 export const getEnterpriseCourseMembersV1 = onCall({enforceAppCheck: true}, async r => {const s = await scoped(r);
-return {schema: ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, courseVersion: s.courseVersion, ...await listing(s, r)}});
+const x=await listing(s,r);return projection(s,x.items,x.nextCursor)});
 export const getEnterpriseCourseMemberV1 = onCall({enforceAppCheck: true}, async r => {const s = await scoped(r);
 try {const id = String(r.data?.memberReference || ""), doc = await members(s.sid).doc(id).get(), x = doc.data();
 if (!doc.exists || x?.organizationId !== s.scope.organizationId || x?.propertyId !== s.scope.propertyId || x?.courseId !== s.scope.courseId || x?.memberReference !== id) throw new HttpsError("not-found", "Member unavailable.");
-return {schema: ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, courseVersion: s.courseVersion, member: minimumMember(x)}} catch (e) {return fail(e)} });
+return projection(s,[minimumMember(x)],null)} catch (e) {return fail(e)} });
 async function writeRequest(r: any, action: "invitation" | "resend" | "change") {const s = await scoped(r);
 try {const cid = strictCommand(r.data?.commandId), payload = action === "change" ? normalizeChange(r.data?.request) : normalizeInvitation(r.data?.request);
 if (payload.currentCourseVersion !== s.courseVersion) throw new HttpsError("aborted", "STALE_COURSE_VERSION");
@@ -99,7 +100,7 @@ if (expected !== s.courseVersion) throw new HttpsError("aborted", "STALE_COURSE_
 const preview = previewCsv(r.data?.csv), existing = await members(s.sid).get(), byMember = new Set(existing.docs.map(d => d.id.toLowerCase())), byContact = new Set(existing.docs.map(d => String(d.data()?.contactReferenceHash || ""))), rows = preview.rows.map(x => {const contactHash = memberDigest(x.contactReference), result = byMember.has(x.memberReference.toLowerCase()) || byContact.has(contactHash) ? "conflict" : "valid";
 return {...x, contactReference: `ref_${contactHash.slice(0, 12)}`, result}}), previewId = `emmp_${memberDigest([s.sid, cid, preview.digest]).slice(0, 32)}`, expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60000);
 await db.collection("enterprise_member_import_previews").doc(previewId).create({schema: ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, previewId, organizationId: s.scope.organizationId, propertyId: s.scope.propertyId, courseId: s.scope.courseId, representativeMembershipId: s.scope.membershipId, authoritySourceVersion: s.authority.sourceVersion, courseVersion: s.courseVersion, rowCount: preview.rowCount, rowDigest: preview.digest, rows, expiresAt, createdAt: stamp(), immutable: true});
-return {schema: ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, context: {membershipId: s.scope.membershipId, organizationId: s.scope.organizationId, propertyId: s.scope.propertyId, courseId: s.scope.courseId}, state: "current", entitlement: s.entitlement, courseVersion: s.courseVersion, members: [], nextCursor: null, receipts: [], deliveryProviderStatus: "unavailable", previewId, rows, expiresAt: expiresAt.toDate().toISOString(), createsAuthAccounts: false, sendsInvitations: false, requiresConfirmation: true}} catch (e) {return fail(e)} });
+return {...await projection(s,[],null),state:"current",previewId,rows,expiresAt:expiresAt.toDate().toISOString(),createsAuthAccounts:false,sendsInvitations:false,requiresConfirmation:true}} catch (e) {return fail(e)} });
 export const submitEnterpriseMemberCsvImportRequestV1 = onCall({enforceAppCheck: true}, async r => {const s = await scoped(r);
 try {const cid = strictCommand(r.data?.commandId), expected = strictVersion(r.data?.currentCourseVersion), previewId = String(r.data?.previewId || "");
 if (expected !== s.courseVersion || r.data?.confirmed !== true) throw new HttpsError("aborted", "STALE_OR_UNCONFIRMED_IMPORT");
