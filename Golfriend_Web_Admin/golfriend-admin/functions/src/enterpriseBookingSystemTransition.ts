@@ -36,8 +36,9 @@ export function signEnterpriseBookingCancellationEvidence(unsigned: Json, secret
   return createHmac("sha256", secret).update(stable(unsigned)).digest("hex");
 }
 export function verifyEnterpriseBookingCancellationEvidence(raw: Json, secret: string) {
-  const keys = ["schema", "evidenceId", "authority", "bookingId", "correlationId", "organizationId", "courseId", "bookingVersion", "outcome", "issuedAt", "integrityDigest"];
-  if (!raw || !exact(raw, keys) || raw.schema !== ENTERPRISE_BOOKING_CANCELLATION_EVIDENCE_SCHEMA || raw.authority !== "commissioned_provider" || raw.outcome !== "cancelled" || ![raw.evidenceId, raw.bookingId, raw.correlationId, raw.organizationId, raw.courseId].every(value => ID.test(String(value))) || !Number.isSafeInteger(raw.bookingVersion) || raw.bookingVersion < 1 || !Number.isFinite(Date.parse(raw.issuedAt)) || !SHA.test(String(raw.integrityDigest)) || secret.length < 32) throw new Error("BOOKING_CANCELLATION_EVIDENCE_INVALID");
+  const keys = ["schema", "hmacKeyVersion", "evidenceId", "authority", "bookingId", "correlationId", "organizationId", "courseId", "bookingVersion", "outcome", "issuedAt", "expiresAt", "integrityDigest"];
+  const issued = Date.parse(raw?.issuedAt), expires = Date.parse(raw?.expiresAt);
+  if (!raw || !exact(raw, keys) || raw.schema !== ENTERPRISE_BOOKING_CANCELLATION_EVIDENCE_SCHEMA || raw.hmacKeyVersion !== 1 || raw.authority !== "commissioned_provider" || raw.outcome !== "cancelled" || ![raw.evidenceId, raw.bookingId, raw.correlationId, raw.organizationId, raw.courseId].every(value => ID.test(String(value))) || !Number.isSafeInteger(raw.bookingVersion) || raw.bookingVersion < 1 || !Number.isFinite(issued) || !Number.isFinite(expires) || expires <= issued || expires - issued > 300_000 || !SHA.test(String(raw.integrityDigest)) || secret.length < 32) throw new Error("BOOKING_CANCELLATION_EVIDENCE_INVALID");
   const {integrityDigest, ...unsigned} = raw, expected = signEnterpriseBookingCancellationEvidence(unsigned, secret), a = Buffer.from(String(integrityDigest), "hex"), b = Buffer.from(expected, "hex");
   if (a.length !== b.length || !timingSafeEqual(a, b)) throw new Error("BOOKING_CANCELLATION_EVIDENCE_INVALID");
   return Object.freeze({...unsigned, integrityDigest: String(integrityDigest)});
@@ -49,7 +50,8 @@ export function buildEnterpriseBookingSystemTransition(input: Readonly<{booking:
   let state: "expired" | "cancelled", sourceRef: string;
   if (input.cancellationEvidence) {
     const evidence = verifyEnterpriseBookingCancellationEvidence(input.cancellationEvidence, input.cancellationEvidenceSecret || "") as Json;
-    if (booking.status !== "cancellation_accepted" || evidence.bookingId !== booking.bookingId || evidence.correlationId !== booking.correlationId || evidence.organizationId !== booking.organizationId || evidence.courseId !== booking.courseId || evidence.bookingVersion !== booking.version || Date.parse(String(evidence.issuedAt)) > input.nowMs + 30_000) throw new Error("BOOKING_CANCELLATION_EVIDENCE_INVALID");
+    const issued = Date.parse(String(evidence.issuedAt)), expires = Date.parse(String(evidence.expiresAt));
+    if (booking.status !== "cancellation_accepted" || evidence.bookingId !== booking.bookingId || evidence.correlationId !== booking.correlationId || evidence.organizationId !== booking.organizationId || evidence.courseId !== booking.courseId || evidence.bookingVersion !== booking.version || issued > input.nowMs + 30_000 || issued < input.nowMs - 300_000 || expires <= input.nowMs) throw new Error("BOOKING_CANCELLATION_EVIDENCE_INVALID");
     state = "cancelled";
     sourceRef = String(evidence.evidenceId);
   } else {

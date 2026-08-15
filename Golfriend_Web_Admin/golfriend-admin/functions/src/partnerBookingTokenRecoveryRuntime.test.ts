@@ -13,9 +13,9 @@ const check = (name: string, assertion: () => void) => {
 };
 
 check("Auth App Check secret", () => {
-  assert.match(source, /enforceAppCheck:true,secrets:\[TOKEN\]/);
+  assert.match(source, /enforceAppCheck:true,secrets:\[TOKEN,OUTBOX\]/);
   assert.match(source, /if\(!request\.auth\)/);
-  assert.match(source, /if\(!secret\)/);
+  assert.match(source, /if\(!secret\|\|!outboxSecret\)/);
 });
 check("V2 collections only", () => {
   assert.match(source, /enterprise_booking_operation_authorizations_v2/);
@@ -37,5 +37,12 @@ check("atomic revoke create receipt", () => {
 check("raw token response only", () => {
   assert.doesNotMatch(source, /tx\.(create|update)\([^\n]*confirmationToken/);
   assert.match(source, /confirmationToken:candidate\.token/);
+});
+check("lost completed response replays only from immutable signed authority", () => {
+  assert.match(source, /a\.state==="consumed"/);
+  assert.match(source, /exactEnterpriseBookingOperationReplay/);
+  assert.match(source, /verifyEnterpriseCorrelationEvent/);
+  assert.match(source, /used\.state!=="used"/);
+  assert.match(source, /restarted:true/);
 });
 console.log(`partner booking token recovery runtime: ${count} checks passed.`);
