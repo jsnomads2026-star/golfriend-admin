@@ -60,7 +60,21 @@ const checks = [
       "submitEnterpriseMemberCsvImportRequestV1",
     ].every((x) => service.includes(x)),
   ],
-  ["projection contract compatibility",["context","state","entitlement","courseVersion","members","nextCursor","requests","receipts","deliveryProviderStatus","policy"].every(x=>service.includes(x))],
+  [
+    "projection contract compatibility",
+    [
+      "context",
+      "state",
+      "entitlement",
+      "courseVersion",
+      "members",
+      "nextCursor",
+      "requests",
+      "receipts",
+      "deliveryProviderStatus",
+      "policy",
+    ].every((x) => service.includes(x)),
+  ],
   [
     "honest delivery boundary",
     copy.includes("sends no notification") &&
@@ -109,12 +123,17 @@ const checks = [
   ],
   [
     "independent localized records without English fill",
-    !copy.includes("...en, ...") && (copy.match(/= record\(/g) || []).length === 8,
+    !copy.includes("...en, ...") &&
+      (copy.match(/= record\(/g) || []).length === 8,
   ],
   [
     "privacy-safe resend shape",
     ui.includes("currentMemberVersion: m.version") &&
       !ui.includes("contactReference: m.memberReference"),
+  ],
+  [
+    "preview command rotates only after validation",
+    /validCsvPreview\(next, view\.courseVersion\)[\s\S]{0,180}commands\.current\.delete\("preview"\);[\s\S]{0,100}\} catch/.test(ui),
   ],
 ];
 for (const [n, ok] of checks) {

@@ -190,6 +190,37 @@ export const courseMemberService = {
 };
 const ids = (v: unknown) =>
   typeof v === "string" && v.length > 0 && v.length <= 180;
+export function validCsvPreview(
+  v: unknown,
+  currentCourseVersion: number,
+): v is CsvPreview {
+  if (!v || typeof v !== "object") return false;
+  const p = v as CsvPreview;
+  return (
+    p.schema === COURSE_MEMBER_SCHEMA &&
+    p.courseVersion === currentCourseVersion &&
+    ids(p.previewId) &&
+    !Number.isNaN(Date.parse(p.expiresAt)) &&
+    Date.parse(p.expiresAt) > Date.now() &&
+    p.createsAuthAccounts === false &&
+    p.sendsInvitations === false &&
+    p.requiresConfirmation === true &&
+    Array.isArray(p.rows) &&
+    p.rows.length > 0 &&
+    p.rows.length <= 100 &&
+    p.rows.every(
+      (r) =>
+        Number.isInteger(r.row) &&
+        r.row > 0 &&
+        ids(r.memberReference) &&
+        ids(r.displayName) &&
+        ids(r.contactReference) &&
+        typeof r.locale === "string" &&
+        typeof r.purpose === "string" &&
+        (r.result === "valid" || r.result === "conflict"),
+    )
+  );
+}
 export function validMemberDirectory(
   v: unknown,
   c: MemberContext,

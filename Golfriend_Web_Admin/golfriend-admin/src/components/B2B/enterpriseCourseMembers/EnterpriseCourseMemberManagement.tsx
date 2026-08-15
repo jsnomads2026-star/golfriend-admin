@@ -10,6 +10,7 @@ import type { EnterpriseAuthorityProjection } from "../enterprise/organizationAu
 import {
   courseMemberService,
   newMemberCommandId,
+  validCsvPreview,
   validMemberDirectory,
   type CsvPreview,
   type MemberContext,
@@ -305,7 +306,15 @@ export default function EnterpriseCourseMemberManagement() {
                         {m.displayName}
                       </button>
                     </th>
-                    <td>{m.role?<>{t.role}: <code>{m.role}</code></>:t.unavailable}</td>
+                    <td>
+                      {m.role ? (
+                        <>
+                          {t.role}: <code>{m.role}</code>
+                        </>
+                      ) : (
+                        t.unavailable
+                      )}
+                    </td>
                     <td>{t.states[m.state]}</td>
                     <td>
                       <time dateTime={m.updatedAt}>{m.updatedAt}</time>
@@ -414,7 +423,13 @@ export default function EnterpriseCourseMemberManagement() {
           </button>
         )}
         {detail && (
-          <dialog open aria-label={t.detail} onKeyDown={e=>{if(e.key==="Escape")setDetail(null)}}>
+          <dialog
+            open
+            aria-label={t.detail}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setDetail(null);
+            }}
+          >
             <h4>{t.detail}</h4>
             <p>
               {detail.members[0]?.displayName} ·{" "}
@@ -531,14 +546,16 @@ export default function EnterpriseCourseMemberManagement() {
             void (async () => {
               setBusy(true);
               try {
-                setPreview(
-                  await courseMemberService.previewCsv(
-                    context,
-                    stable("preview"),
-                    csv,
-                    view.courseVersion,
-                  ),
+                const next = await courseMemberService.previewCsv(
+                  context,
+                  stable("preview"),
+                  csv,
+                  view.courseVersion,
                 );
+                if (!validCsvPreview(next, view.courseVersion))
+                  throw Error("preview");
+                setPreview(next);
+                commands.current.delete("preview");
                 setBulkConfirmed(false);
               } catch {
                 setNotice(t.unavailable);
@@ -615,7 +632,8 @@ export default function EnterpriseCourseMemberManagement() {
           <ul>
             {view.receipts.map((r) => (
               <li key={r.receiptId}>
-                <code>{r.receiptId}</code> · {t.receipts}: <code>{r.action}</code> ·{" "}
+                <code>{r.receiptId}</code> · {t.receipts}:{" "}
+                <code>{r.action}</code> ·{" "}
                 <time dateTime={r.occurredAt}>{r.occurredAt}</time>
               </li>
             ))}
