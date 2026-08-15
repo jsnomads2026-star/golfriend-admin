@@ -17,10 +17,6 @@
       ]
     }
   ],
-  "firestore": {
-    "rules": "enterprise-authority.firestore.rules",
-    "indexes": "enterprise-authority.firestore.indexes.json"
-  },
   "hosting": {
     "public": "dist",
     "ignore": [

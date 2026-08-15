@@ -7,6 +7,8 @@
 // matters — enforcement — unproved until the day it is switched on.
 // ==========================================
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   APP_CHECK_DECISIONS, COMMISSIONING_STAGE, COMMISSIONING_STAGES, EXPECTED_PROJECT_ID,
   REQUIRED_IN_PRODUCTION, commissioningReadiness, createReplayMemory, decideAppCheck,
@@ -35,6 +37,14 @@ check('App Check is REQUIRED in production and the current stage says so honestl
   // function that always says no.
   assert.equal(commissioningReadiness('enforced').ready, true);
   assert.deepEqual(commissioningReadiness('enforced').blockers, []);
+});
+
+check('the expected project matches the deploy project', () => {
+  // A mismatch here is not cosmetic: switching enforcement on would refuse EVERY real
+  // token with app_check_project_mismatch. The constant previously named a project this
+  // code is not deployed to.
+  const rc = JSON.parse(readFileSync(resolve(__dirname, '../../.firebaserc'), 'utf8'));
+  assert.equal(EXPECTED_PROJECT_ID, rc.projects.default, 'EXPECTED_PROJECT_ID does not match the .firebaserc default project');
 });
 
 // ---- ABSENT evidence ----------------------------------------------------------------
@@ -91,13 +101,30 @@ check('a replayed token is refused the second time, and replay memory is mandato
 // ---- MISMATCHED PROJECT ---------------------------------------------------------------
 check('evidence minted for another project is refused', () => {
   const memory = createReplayMemory();
-  for (const projectId of ['golfriend-v1', 'some-other-project', 'GOLFRIEND-V2', `${EXPECTED_PROJECT_ID}-staging`]) {
+  for (const projectId of ['golfriend-v2', 'some-other-project', 'GOLFRIEND-V1', `${EXPECTED_PROJECT_ID}-staging`]) {
     const decision = decideAppCheck(valid({ projectId }), 'enforced', memory, NOW);
     assert.equal(decision.ok, false, projectId);
     assert.equal(decision.code, 'app_check_project_mismatch', projectId);
   }
   // Exact match is required; the correct project passes.
   assert.equal(decideAppCheck(valid({ tokenId: 'tok-ok' }), 'enforced', memory, NOW).ok, true);
+});
+
+check('replay memory evicts the OLDEST token, never the whole history', () => {
+  // The previous implementation called seen.clear() at the limit, so every token ever seen
+  // became replayable at once — at a moment an attacker chooses simply by driving enough
+  // distinct tokens through. FIFO eviction bounds memory without opening that window.
+  const memory = createReplayMemory(3);
+  for (const id of ['a', 'b', 'c']) memory.remember(id);
+  assert.equal(memory.seen('a'), true);
+  memory.remember('d');                       // evicts 'a' only
+  assert.equal(memory.seen('a'), false, 'the oldest token should have been evicted');
+  assert.equal(memory.seen('b'), true, 'a full flush would have forgotten b too');
+  assert.equal(memory.seen('c'), true);
+  assert.equal(memory.seen('d'), true);
+  // Re-remembering a known token must not consume an eviction slot.
+  memory.remember('d');
+  assert.equal(memory.seen('b'), true);
 });
 
 // ---- VALID evidence --------------------------------------------------------------------

@@ -10,16 +10,17 @@
 // Director, so if every Director record is non-conforming there is no way back in from the
 // product. That is the risk this verifier exists to measure BEFORE activation.
 //
-// IT WRITES NOTHING. It does not connect to Firestore, does not authenticate, and does not
-// repair. It consumes an operator-supplied export and emits counts plus a repair manifest
-// for a human to execute.
+// IT PERFORMS NO REPAIR AND TOUCHES NO DATABASE. It does not connect to Firestore, does
+// not authenticate, and cannot change a record. It DOES write one file: the repair
+// manifest, to a path the operator chooses with --manifest. Saying "writes nothing" would
+// have been untrue, and an inaccurate safety claim is worse than an accurate limitation.
 //
 // IDENTITIES ARE NOT REPORTED. Only counts, a non-reversible short reference for
 // correlation, and the status classification. No uid, no name, no role-holder identity, no
 // private field ever appears in the output.
 // ==========================================
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -49,7 +50,13 @@ const normalize = (value) => {
  * own export without this file ever carrying an identity. It is a correlation aid, not an
  * identifier and certainly not a credential.
  */
-const shortRef = (uid) => `rec-${createHash('sha256').update(String(uid)).digest('hex').slice(0, 10)}`;
+// A per-run RANDOM salt. A truncated SHA-256 of a uid is NOT one-way when the uid space is
+// guessable — and this codebase keys role documents by email address in places, so an
+// unsalted digest of an address is a dictionary lookup, not a reference. The salt is
+// generated per run and never written out, so the reference correlates rows WITHIN one
+// manifest and cannot be reversed or joined across runs.
+const CORRELATION_SALT = randomBytes(32);
+const shortRef = (uid) => `rec-${createHash('sha256').update(CORRELATION_SALT).update(String(uid)).digest('hex').slice(0, 12)}`;
 
 export function classify(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return 'malformed_record';
@@ -192,7 +199,10 @@ const serialized = JSON.stringify(leaky);
 for (const secret of ['director@golfriend.co', 'A Person', 'a@b.c']) {
   assert.equal(serialized.includes(secret), false, `the analysis leaked ${secret}`);
 }
-assert.match(leaky.repairs[0].ref, /^rec-[0-9a-f]{10}$/);
+assert.match(leaky.repairs[0].ref, /^rec-[0-9a-f]{12}$/);
+// The reference must NOT be a plain digest of the uid — that is reversible for an address.
+const unsalted = createHash('sha256').update('director@golfriend.co').digest('hex').slice(0, 12);
+assert.notEqual(leaky.repairs[0].ref, `rec-${unsalted}`, 'the correlation reference is an unsalted digest and is therefore reversible');
 console.log('  ok identities and private fields are absent from the analysis output');
 
 // ------------------------------------------------------------------- operator run ----

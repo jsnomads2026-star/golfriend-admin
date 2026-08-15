@@ -203,6 +203,46 @@ const INTENT = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, 
   ok('a restart recovers the same command id; a different identity cannot');
 }
 
+// ---- 4b. DISPOSAL MUST NOT DESTROY AN IN-FLIGHT COMMAND ID -------------------------
+// The composed case neither §4 nor §6 covered: an intent is reserved and in flight when the
+// authority fingerprint changes (going offline is the ONE field that genuinely changes at
+// runtime). If disposal sweeps that id, the retry mints a new one and the server applies an
+// accepted-but-response-lost command a SECOND time — the exact defect this module exists to
+// prevent, reachable through the privacy feature meant to protect it.
+{
+  const store = makeStore();
+  const online = createIntentLedger(store, 'uid|role|status|online', deterministic);
+  const reserved = online.reserve(INTENT);
+  assert.equal(online.markInFlight(INTENT), true);
+  assert.equal(store.size(), 1, 'the fixture must have persisted the reservation');
+
+  // The connection drops: the component disposes for the new fingerprint.
+  online.disposeAll();
+  const afterDispose = online.reserve(INTENT);
+  assert.equal(afterDispose.commandId, reserved.commandId,
+    'DISPOSAL DESTROYED AN IN-FLIGHT COMMAND ID — the retry would apply the command twice');
+  assert.equal(store.size(), 1, 'the in-flight reservation must survive disposal');
+
+  // An intent that is NOT in flight is disposed, so this is scoping and not a no-op.
+  const settled = { ...INTENT, draftId: 'other' };
+  online.reserve(settled);
+  assert.equal(store.size(), 2);
+  online.disposeAll();
+  assert.equal(store.size(), 1, 'a non-in-flight intent should have been disposed');
+
+  // ANOTHER identity's pending command is not ours to discard either.
+  const shared = makeStore();
+  const alice = createIntentLedger(shared, 'alice', deterministic);
+  const bob = createIntentLedger(shared, 'bob', deterministic);
+  const aliceId = alice.reserve(INTENT);
+  bob.reserve(INTENT);
+  assert.equal(shared.size(), 2);
+  bob.disposeAll();
+  assert.equal(shared.size(), 1, 'bob disposed alice pending command');
+  assert.equal(alice.reserve(INTENT).commandId, aliceId.commandId, 'alice lost her reserved id');
+  ok('disposal spares in-flight commands and other identities, and still disposes settled ones');
+}
+
 // ---- 5. THE LEDGER + THE SERVER TOGETHER: NO DUPLICATE EFFECT ----------------------
 // This is the end-to-end proof. The client reuses the id; the server replays it. Neither
 // alone is trusted, and the assertion is on the SERVER's records, not on the client.

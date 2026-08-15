@@ -1461,7 +1461,11 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
   // 2. AUTHORIZATION: reporter must be platform staff (admin_users) OR an active
   //    commercial partner/course operator (b2b_partners keyed by uid/email).
   const candidateIds = [reporterUid];
-  if (reporterEmail) {
+  // The address may only stand in for an identity once Firebase says it was VERIFIED.
+  // b2b_partners is email-keyed during the webhook-buffer window, so an unverified address
+  // was enough to be treated as that active partner — simply by registering it.
+  const reporterEmailVerified = request.auth?.token?.email_verified === true;
+  if (reporterEmail && reporterEmailVerified) {
     candidateIds.push(reporterEmail);
     candidateIds.push(reporterEmail.charAt(0).toUpperCase() + reporterEmail.slice(1));
   }

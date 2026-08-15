@@ -43,7 +43,12 @@ export const REQUIRED_IN_PRODUCTION = true;
 export const COMMISSIONING_STAGE: CommissioningStage = 'not_provisioned';
 
 /** The project this deployment belongs to. Evidence from another project is not evidence. */
-export const EXPECTED_PROJECT_ID = 'golfriend-v2';
+// Must match the project this code is actually deployed to. It previously read
+// 'golfriend-v2' while .firebaserc defaults to 'golfriend-v1', so switching enforcement on
+// would have refused EVERY real token with app_check_project_mismatch — a self-inflicted
+// outage disguised as a one-line change. Verified against .firebaserc by
+// scripts/commissioning-boundary-verify.mjs.
+export const EXPECTED_PROJECT_ID = 'golfriend-v1';
 
 export interface AppCheckEvidence {
   /** Present only when the Functions runtime verified a token. */
@@ -86,11 +91,23 @@ export interface ReplayMemory {
 }
 
 export function createReplayMemory(limit = 10000): ReplayMemory {
+  // FIFO eviction, not a full flush. Clearing the whole set at the limit made every
+  // previously-seen token replayable at once, at a moment an attacker can choose simply by
+  // driving enough distinct tokens. Evicting the oldest bounds memory without ever handing
+  // back a window in which the entire history is forgotten.
+  //
+  // NOTE FOR DEPLOYMENT: this is per-instance. A multi-instance deployment needs a shared
+  // store before replay detection is meaningful across instances — recorded as an operator
+  // decision, not silently assumed away.
   const seen = new Set<string>();
   return {
     seen: (tokenId) => seen.has(tokenId),
     remember: (tokenId) => {
-      if (seen.size >= limit) seen.clear();
+      if (seen.has(tokenId)) return;
+      if (seen.size >= limit) {
+        const oldest = seen.values().next().value;
+        if (oldest !== undefined) seen.delete(oldest);
+      }
       seen.add(tokenId);
     },
   };

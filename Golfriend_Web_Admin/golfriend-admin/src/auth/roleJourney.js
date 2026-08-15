@@ -13,6 +13,9 @@
  */
 export const ACTIVE_ADMIN_STATUSES = ['active'];
 
+/** The one status that means an active commercial partnership, normalized. */
+export const ACTIVE_PARTNER_STATUS = 'active_partner';
+
 /** Statuses known to mean "not authorized". Documentation and defence in depth only. */
 export const KNOWN_INACTIVE_ADMIN_STATUSES = [
   'suspended', 'inactive', 'deactivated', 'revoked', 'expired',
@@ -105,10 +108,21 @@ export function resolvePortalAccess(input = {}) {
     return { state: 'authorized', surface: 'admin', role: adminDoc.role };
   }
 
-  // Partner portals derive from the server-owned b2b_partners doc.
+  // Partner portals derive from the server-owned b2b_partners doc — and on the SAME
+  // allowlist shape as the admin branch above. This was a denylist: `if (status && status
+  // !== 'active_partner')` let a FALSY status fall through to authorized, so a partially
+  // written, legacy or webhook-buffered document granted the Enterprise portal. A missing
+  // status is not an active partnership.
   if (!partnerDoc) return { state: 'unauthorized', surface: 'partner' };
-  const status = partnerDoc.status;
-  if (status && status !== 'active_partner') return { state: 'suspended', surface: 'partner' };
+  const partnerStatus = normalizeStaffStatus(partnerDoc.status);
+  if (partnerStatus !== null && partnerStatus !== ACTIVE_PARTNER_STATUS) {
+    return { state: 'suspended', surface: 'partner' };
+  }
+  // Unknown, blank, absent or malformed: unauthorized, not suspended — we do not know that
+  // it was suspended, only that it is not an active partnership.
+  if (partnerStatus !== ACTIVE_PARTNER_STATUS) {
+    return { state: 'unauthorized', surface: 'partner' };
+  }
   const tierRaw = partnerDoc.tier;
   const tier = String(tierRaw || '').toLowerCase();
   const isEnterprise =

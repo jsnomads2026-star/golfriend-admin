@@ -53,10 +53,14 @@ const part = (value: unknown): string => {
  */
 export function authorityFingerprint(identity: AuthorityIdentity | null | undefined): string {
   if (!identity) return 'anonymous';
+  // Length-prefixed, for the same reason intentKey is: a delimiter-joined fingerprint is
+  // ambiguous the moment a component can contain the delimiter, and `role` is an
+  // unvalidated free string. Two identities sharing a fingerprint would share a storage
+  // namespace and a disposal verdict.
   return [
-    part(identity.uid), part(identity.role), part(identity.status), part(identity.scope),
-    part(identity.requestVersion), part(identity.appCheck), part(identity.online),
-  ].join('|');
+    identity.uid, identity.role, identity.status, identity.scope,
+    identity.requestVersion, identity.appCheck, identity.online,
+  ].map((value) => { const text = part(value); return `${text.length}:${text}`; }).join('');
 }
 
 /**
@@ -251,11 +255,16 @@ export function createIntentLedger(
       return reserved.size;
     },
     disposeAll() {
-      // Storage is swept by PREFIX, not by what this instance happens to remember. An
-      // earlier version iterated only the in-memory map, so entries left by a previous
-      // page load survived disposal and could be recovered by whoever came next.
+      // Sweep ONLY this fingerprint's namespace, and NEVER an intent that is still in
+      // flight. The previous version swept every key under the shared prefix regardless of
+      // owner, so an `online` change mid-request destroyed the reserved id and the retry
+      // minted a new one — applying an accepted-but-response-lost command a second time.
+      // That is the exact failure this module exists to prevent.
+      const mine = `${STORAGE_PREFIX}${fingerprint}.`;
       for (const [key] of reserved) {
+        if (inFlight.has(key)) continue;   // a live attempt keeps its id
         try { store.removeItem(storageKey(key)); } catch { /* best-effort */ }
+        reserved.delete(key);
       }
       try {
         const enumerable = store as IntentStore & { length?: number; key?: (index: number) => string | null };
@@ -263,13 +272,17 @@ export function createIntentLedger(
           const doomed: string[] = [];
           for (let index = 0; index < enumerable.length; index += 1) {
             const found = enumerable.key(index);
-            if (found && found.startsWith(STORAGE_PREFIX)) doomed.push(found);
+            // Only this fingerprint's keys. Another identity's pending command is not ours
+            // to discard, and discarding it would break their idempotency too.
+            if (found && found.startsWith(mine)) doomed.push(found);
           }
-          for (const found of doomed) store.removeItem(found);
+          for (const found of doomed) {
+            const suffix = found.slice(mine.length);
+            if (inFlight.has(suffix)) continue;
+            store.removeItem(found);
+          }
         }
       } catch { /* best-effort */ }
-      reserved.clear();
-      inFlight.clear();
     },
   };
 }

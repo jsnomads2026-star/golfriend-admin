@@ -343,7 +343,15 @@ assert.deepEqual(groupOffenders, [], 'a collection-group query reaches a server-
 const indirect = [];
 for (const file of clientFiles) {
   const text = readFileSync(file, 'utf8');
-  if (/['"`]enterprise_['"`]\s*\+/.test(text)) indirect.push(relative(ROOT, file).replace(/\\/g, '/'));
+  // Catches 'enterprise_' + x, 'enterprise' + '_outreach…', template interpolation and
+  // array joins. The previous single pattern caught only the first of those.
+  const INDIRECT_PATTERNS = [
+    /['"`]enterprise_?['"`]\s*\+/,
+    /\+\s*['"`]_?outreach_[a-z]+['"`]/,
+    /`enterprise_\$\{/,
+    /\['"`]enterprise['"`]\s*,\s*['"`]outreach/,
+  ];
+  if (INDIRECT_PATTERNS.some((pattern) => pattern.test(text))) indirect.push(relative(ROOT, file).replace(/\\/g, '/'));
 }
 assert.deepEqual(indirect, [], 'client code assembles an enterprise_ collection name by concatenation: ' + indirect.join(', '));
 
@@ -355,7 +363,13 @@ for (const field of ['subject', 'body', 'sendable', 'legalHold', 'jurisdictionAp
 }
 for (const forbidden of draftContract.neverProjected) {
   assert.equal(draftContract.permittedServerProjection.includes(forbidden), false, 'the contract both permits and forbids ' + forbidden);
-  assert.equal(new RegExp('^\\s+' + forbidden + ':', 'm').test(store.slice(store.indexOf('rows.push({'))), false, 'listDrafts projects ' + forbidden + ', which the contract forbids');
+  // indexOf returns -1 when the literal is reformatted, and slice(-1) yields a ONE-CHARACTER
+  // string against which every assertion below passes vacuously. Anchor the slice explicitly.
+  const projectionStart = store.indexOf('rows.push({');
+  assert.ok(projectionStart > 0, 'could not locate the listDrafts projection — this check would pass vacuously');
+  const projectionBody = store.slice(projectionStart);
+  assert.ok(projectionBody.length > 200, 'the located projection body is implausibly short');
+  assert.equal(new RegExp('^\\s+' + forbidden + ':', 'm').test(projectionBody), false, 'listDrafts projects ' + forbidden + ', which the contract forbids');
 }
 ok(`${SERVER_OWNED_COLLECTIONS.length} server-owned collections: rules requirement complete, no client code references them, Admin SDK only`);
 

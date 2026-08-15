@@ -159,6 +159,13 @@ const CALL_SITES = [
   { surface: 'availability review', module: 'partnerAvailabilityRuntime', callable: 'listCourseAvailabilityAdminV2' },
   { surface: 'partner authority admin', module: 'partnerActivationRuntime', callable: 'listPartnerAuthorityAdmin' },
   { surface: 'partner authority admin', module: 'partnerActivationRuntime', callable: 'setPartnerOrganizationStatus' },
+  // activatePartner was omitted, and it is the single most privileged Portal callable:
+  // it creates partner_organizations, partner_identity_bindings, partner_memberships AND
+  // b2b_partners in one transaction. Choosing the easy sites and calling the set complete
+  // is how a coverage claim becomes untrue.
+  { surface: 'partner activation', module: 'partnerActivationRuntime', callable: 'activatePartner' },
+  { surface: 'delivery orchestration', module: 'bookingProviderPublicationRuntime', callable: 'getBookingProviderPublicationsV2' },
+  { surface: 'CSV conflict resolution', module: 'bookingReportingRuntime', callable: 'getBookingOperationsReceiptV2' },
 ];
 
 /**
