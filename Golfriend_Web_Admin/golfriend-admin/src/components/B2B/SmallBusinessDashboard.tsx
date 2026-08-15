@@ -13,7 +13,7 @@ import PolicyUnavailable from '../common/PolicyUnavailable';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
 import CourseAvailabilityV2 from './CourseAvailabilityV2';
-import PlayBookingLifecycleV2 from './PlayBookingLifecycleV2';
+import EnterpriseBookingCoordinationDesk from './EnterpriseBookingCoordinationDesk';
 import BookingOperationsReportV2 from './BookingOperationsReportV2';
 import BookingProviderPublicationV2 from './BookingProviderPublicationV2';
 import PartnerDocuments from './PartnerDocuments';
@@ -570,7 +570,7 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
       <div style={styles.content}>
         {activeTab === 'onboarding' && <><PartnerAuthorityConsole /><PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} /></>}
         {activeTab === 'availability' && <><CourseAvailabilityV2 /><CourseAvailability partnerUid={authUid} /></>}
-        {activeTab === 'bookings' && <><PlayBookingLifecycleV2 /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /></>}
+        {activeTab === 'bookings' && <><EnterpriseBookingCoordinationDesk /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /></>}
         {activeTab === 'documents' && <PartnerDocuments partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
