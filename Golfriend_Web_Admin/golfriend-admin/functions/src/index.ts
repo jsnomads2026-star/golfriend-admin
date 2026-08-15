@@ -24,7 +24,7 @@ export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSl
 export {requestPlayBookingV2,previewPlayBookingActionV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,sendPlayBookingMessageV2 as sendBookingMessage,getPlayBookingsPortalV2,getPlayBookingsAdminV2,getPlayBookingOperationV2,reconcilePlayBookingOperationV2} from "./partnerBookingRuntime.js";
 export {intakeEnterpriseBookingCorrelationV2} from "./enterpriseBookingCorrelationRuntime.js";
 export {getMyEnterpriseCorrelatedBookingV2} from "./enterpriseBookingGolferIdentityRuntime.js";
-export {transitionEnterpriseCorrelatedBookingV2} from "./enterpriseBookingOutboxRuntime.js";
+export {previewEnterpriseBookingActionV2,manageEnterpriseBookingActionV2} from "./enterpriseBookingV2OperationRuntime.js";
 export {manageEnterpriseBookingProducerV2,auditEnterpriseBookingProducerV2} from "./enterpriseBookingProducerLifecycleRuntime.js";
 export {recoverPlayBookingConfirmationV2} from "./partnerBookingTokenRecoveryRuntime.js";
 export {getBookingOperationsPortalV2,getBookingOperationsAdminV2,reconcileBookingOperationsV2,exportBookingOperationsV2,getBookingOperationsReceiptV2} from "./bookingReportingRuntime.js";
