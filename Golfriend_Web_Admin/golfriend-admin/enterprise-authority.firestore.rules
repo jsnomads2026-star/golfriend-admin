@@ -22,6 +22,7 @@ service cloud.firestore {
     match /enterprise_onboarding_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_agreement_policies/{document=**} { allow read, write: if false; }
     match /enterprise_economy_config/{document=**} { allow read, write: if false; }
+    match /enterprise_economy_config_versions/{document=**} { allow read, write: if false; }
     match /enterprise_trial_offers/{document=**} { allow read, write: if false; }
     match /enterprise_trials/{document=**} { allow read, write: if false; }
   }
