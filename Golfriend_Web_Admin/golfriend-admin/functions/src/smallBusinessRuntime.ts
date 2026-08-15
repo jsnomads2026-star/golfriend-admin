@@ -1393,7 +1393,8 @@ export const discoverSmallBusinessesV2 = onCall({ enforceAppCheck: true }, async
   exactKeys(r.data || {}, ["locale","filter","cursor","limit"], "DISCOVERY_REQUEST");
   let f:any; try { f=normalizeDiscoveryFilter(r.data?.filter); } catch(e) { fail(e); }
   const paging=page(r.data,["discovery",memberRef(u),locale,f]);
-  const snap = await db.collection("small_businesses").where("status", "==", "active").limit(100).get();
+  const snap = await db.collection("small_businesses").where("status", "==", "active").limit(101).get();
+  if(snap.size>100)throw new HttpsError("resource-exhausted","DISCOVERY_SCOPE_REQUIRES_INDEXED_QUERY");
   const rows = snap.docs.map((d) => d.data()).filter((x) =>
     (f.category === undefined || x.profile?.category === f.category) &&
     (f.city === undefined || x.profile?.locations?.some((l: any) => l.city === f.city)) &&
@@ -1419,7 +1420,8 @@ export const recordSmallBusinessEngagementV2 = onCall({ enforceAppCheck: true },
 async function listMemberEngagements(r:any, mode:"favorites"|"recents") {
   const u=uid(r),locale=localeV2(r.data?.locale); exactKeys(r.data||{},["locale","cursor","limit"],"ENGAGEMENT_LIST_REQUEST");
   const paging=page(r.data,[mode,memberRef(u),locale]);
-  const snap=await db.collection("small_business_engagements_v2").where("opaqueMemberRef","==",memberRef(u)).limit(200).get(), latest=new Map<string,any>();
+  const snap=await db.collection("small_business_engagements_v2").where("opaqueMemberRef","==",memberRef(u)).limit(201).get(), latest=new Map<string,any>();
+  if(snap.size>200)throw new HttpsError("resource-exhausted","SAVED_SCOPE_REQUIRES_INDEXED_QUERY");
   for(const d of snap.docs){const x=d.data(), relevant=mode==="favorites"?["favorite","unfavorite"].includes(x.kind):x.kind==="view";if(!relevant)continue;const key=`${x.businessId}:${x.locationId}`,ms=x.createdAt?.toMillis?.()||0,old=latest.get(key);if(!old||ms>old.ms||ms===old.ms&&String(x.commandId)<String(old.commandId))latest.set(key,{...x,ms});}
   const candidates=[...latest.values()].filter((x)=>mode==="favorites"?x.kind==="favorite":true).sort((a,b)=>b.ms-a.ms||String(a.commandId).localeCompare(String(b.commandId))),items=[];
   for(const e of candidates.slice(paging.offset,paging.offset+paging.limit)){const s=await db.collection("small_businesses").doc(e.businessId).get(),x=s.data(),l=x?.profile?.locations?.find((z:any)=>z.locationId===e.locationId);if(s.exists&&x?.status==="active"&&locationActive(l))items.push({...approvedCardV2(x,l),savedProfileVersion:e.savedProfileVersion,currentProfileVersion:x.version,savedLocationVersion:e.savedLocationVersion,currentLocationVersion:locationVersion(x,l),state:x.version===e.savedProfileVersion&&locationVersion(x,l)===e.savedLocationVersion?"current":"stale"});else items.push({businessId:e.businessId,savedProfileVersion:e.savedProfileVersion,currentProfileVersion:x?.version??null,locationId:e.locationId,savedLocationVersion:e.savedLocationVersion,currentLocationVersion:locationActive(l)?locationVersion(x,l):null,state:"tombstone",authoritativeStatus:"unavailable",returnRoute:"/v2"});}
