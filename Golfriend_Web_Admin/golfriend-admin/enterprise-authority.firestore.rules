@@ -33,5 +33,13 @@ service cloud.firestore {
     match /enterprise_member_management_commands/{document=**} { allow read, write: if false; }
     match /enterprise_member_management_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_member_import_previews/{document=**} { allow read, write: if false; }
+    match /enterprise_member_admin_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_member_admin_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_outbox/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_workflows/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_templates/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_policies/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_suppressions/{document=**} { allow read, write: if false; }
+    match /enterprise_member_report_ready_events/{document=**} { allow read, write: if false; }
   }
 }
