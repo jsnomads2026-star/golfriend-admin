@@ -1792,4 +1792,4 @@ export const photoWatchtower = functionsV1
   }
 });
 
-export { getEconomyRateCard, publishEconomyRateCard, rollbackEconomyRateCard, quoteEconomyAction, settleEconomyAction } from "./economyAuthority.js";
+export { getEconomyRateCard, publishEconomyRateCard, rollbackEconomyRateCard, quoteEconomyAction, settleEconomyAction, getEconomyWallet, refundEconomyTransaction, getEconomyProfitability } from "./economyAuthority.js";
