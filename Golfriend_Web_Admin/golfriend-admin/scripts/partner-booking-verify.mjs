@@ -4,6 +4,7 @@ const r = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8"),
   runtime = r("functions/src/partnerBookingRuntime.ts"),
   domain = r("functions/src/partnerBookingDomain.ts"),
   ui = r("src/components/B2B/PlayBookingLifecycleV2.tsx"),
+  locale = r("src/i18n/partner/playBookingDesk.ts"),
   index = r("functions/src/index.ts"),
   small = r("src/components/B2B/SmallBusinessDashboard.tsx"),
   enterprise = r("src/components/B2B/EnterpriseDashboard.tsx"),
@@ -43,7 +44,7 @@ t("Portal enterprise", () =>
 t("Admin mounted", () => assert.match(app, /PlayBookingLifecycleV2 admin/));
 t("eight locales", () =>
   ["en", "th", "ko", "ja", "zh", "es", "fr", "de"].forEach((x) =>
-    assert.match(ui, new RegExp(`${x}:`)),
+    assert.match(locale, new RegExp(`\\b${x}:`)),
   ),
 );
 t("accessible states", () => {
