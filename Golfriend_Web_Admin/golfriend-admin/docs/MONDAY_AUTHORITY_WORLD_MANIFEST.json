@@ -1,0 +1,374 @@
+{
+  "worldId": "monday-test-world.authority",
+  "worldVersion": "1.0.0",
+  "seed": "monday-authority-default-seed",
+  "digest": "sha256:9f0066141a19a8e3e07d68fd0d93ef7a256642f3e64ae21e83ad8a0b59341aef",
+  "counts": {
+    "identities": 29,
+    "organizations": 4,
+    "legacyStatusRecords": 18,
+    "appCheckEvidence": 10,
+    "surfaceScenarios": 169,
+    "organizationScenarios": 13,
+    "lifecycleScenarios": 13,
+    "totalScenarios": 205
+  },
+  "identities": [
+    {
+      "principalId": "dev_mock_mtw_prn_dir_active",
+      "label": "Active Director",
+      "contactEmail": "mtw-director@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": true,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_dir_suspended",
+      "label": "Suspended Director",
+      "contactEmail": "mtw-director-suspended@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "suspended"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_admin_active",
+      "label": "Active Admin (Manager tier)",
+      "contactEmail": "mtw-admin@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_admin_suspended",
+      "label": "Suspended Admin",
+      "contactEmail": "mtw-admin-suspended@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "suspended"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_missing_status",
+      "label": "Missing-status user (the legacy shape the old denylist admitted)",
+      "contactEmail": "mtw-missing-status@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_null_status",
+      "label": "Null-status user",
+      "contactEmail": "mtw-null-status@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_malformed_status",
+      "label": "Malformed-status user (wrong type)",
+      "contactEmail": "mtw-malformed@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_unknown_status",
+      "label": "Unknown-status user (a value nobody wrote down)",
+      "contactEmail": "mtw-unknown-status@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_missing_role",
+      "label": "Missing-role user (active but no role assigned)",
+      "contactEmail": "mtw-missing-role@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_unknown_role",
+      "label": "Unknown-role user (active, role outside the known vocabulary)",
+      "contactEmail": "mtw-unknown-role@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_case_variant",
+      "label": "Whitespace/case status variant (canonically equivalent, therefore accepted)",
+      "contactEmail": "mtw-case-variant@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_confusable",
+      "label": "Confusable status (Cyrillic A — looks active, is not)",
+      "contactEmail": "mtw-confusable@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_dual_role",
+      "label": "Dual-role user (active Admin AND active partner manager)",
+      "contactEmail": "mtw-dual@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_owner",
+      "label": "Active Partner primary owner",
+      "contactEmail": "mtw-partner-owner@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_mgr_active",
+      "label": "Active Partner manager",
+      "contactEmail": "mtw-partner-manager@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_mgr_suspended",
+      "label": "Suspended Partner manager (membership revoked)",
+      "contactEmail": "mtw-partner-manager-suspended@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_denied"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_mgr_suspended_org",
+      "label": "Active manager inside a SUSPENDED organization",
+      "contactEmail": "mtw-partner-suspended-org@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_denied"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_mgr_deactivated_org",
+      "label": "Active manager inside a DEACTIVATED organization",
+      "contactEmail": "mtw-partner-deactivated-org@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_denied"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_mgr_other_org",
+      "label": "Manager of an UNRELATED organization (cross-organization attacks)",
+      "contactEmail": "mtw-partner-other-org@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_partner_rep",
+      "label": "Partner representative (read-only tier)",
+      "contactEmail": "mtw-partner-rep@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_unverified",
+      "label": "Unverified-email user",
+      "contactEmail": "mtw-collision@example.test",
+      "emailVerified": false,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_collision_a",
+      "label": "Duplicate-address identity A — genuine partner, VERIFIED address",
+      "contactEmail": "mtw-collision@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "partner_authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_collision_b",
+      "label": "Duplicate-address identity B — impostor, no authority anywhere",
+      "contactEmail": "mtw-collision@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": false,
+        "director": false,
+        "portal": "unauthorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_filler_001",
+      "label": "Filler staff 001",
+      "contactEmail": "mtw-filler-001@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_filler_002",
+      "label": "Filler staff 002",
+      "contactEmail": "mtw-filler-002@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_filler_003",
+      "label": "Filler staff 003",
+      "contactEmail": "mtw-filler-003@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_filler_004",
+      "label": "Filler staff 004",
+      "contactEmail": "mtw-filler-004@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_filler_005",
+      "label": "Filler staff 005",
+      "contactEmail": "mtw-filler-005@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    },
+    {
+      "principalId": "dev_mock_mtw_prn_filler_006",
+      "label": "Filler staff 006",
+      "contactEmail": "mtw-filler-006@example.test",
+      "emailVerified": true,
+      "expect": {
+        "staff": true,
+        "director": false,
+        "portal": "authorized"
+      }
+    }
+  ],
+  "organizations": [
+    {
+      "organizationId": "dev_mock_mtw_org_active",
+      "status": "active",
+      "version": 3
+    },
+    {
+      "organizationId": "dev_mock_mtw_org_suspended",
+      "status": "suspended",
+      "version": 7
+    },
+    {
+      "organizationId": "dev_mock_mtw_org_deactivated",
+      "status": "deactivated",
+      "version": 11
+    },
+    {
+      "organizationId": "dev_mock_mtw_org_other",
+      "status": "active",
+      "version": 2
+    }
+  ],
+  "surfaces": [
+    "member administration",
+    "template approval",
+    "delivery orchestration",
+    "CSV conflict resolution",
+    "campaigns",
+    "partner queues",
+    "booking oversight",
+    "claim/availability review",
+    "partner activation",
+    "outreach",
+    "admin hiring/status change",
+    "incident reporting",
+    "sponsor dashboard visibility"
+  ]
+}

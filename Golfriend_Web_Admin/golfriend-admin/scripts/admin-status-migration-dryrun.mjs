@@ -153,6 +153,15 @@ export function activationDecision(analysis) {
   return { activate: blockers.length === 0, blockers };
 }
 
+// Everything below runs ONLY when this file is executed directly. Imported as a module it
+// must expose classify/analyze/activationDecision and nothing else — the self-check used to
+// run on import and ended in process.exit(0), which silently terminated any caller.
+const executedDirectly = process.argv[1]
+  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (!executedDirectly) {
+  // Imported: expose the pure API and run nothing.
+} else {
+
 // ------------------------------------------------------------------- self-check ----
 // Hostile fixtures, always executed. They prove the classifier fails closed regardless of
 // whether an operator export is present, so this file is meaningful on every gate run.
@@ -208,7 +217,7 @@ console.log('  ok identities and private fields are absent from the analysis out
 // ------------------------------------------------------------------- operator run ----
 if (!inputPath) {
   console.log('\nNo --input export supplied, so no live record set was analysed.');
-  console.log('This is READ-ONLY by construction: it never connects to Firestore and never writes a repair.');
+  console.log('It never connects to Firestore and never applies a repair. The only file it writes is the manifest.');
   console.log('To assess a real environment, an operator exports admin_users and runs:');
   console.log('  node scripts/admin-status-migration-dryrun.mjs --input ./admin_users_export.json');
   console.log('\nAdmin status migration dry-run PASS (self-check only; no operator export present).');
@@ -247,3 +256,4 @@ console.log(decision.activate
   ? '\nActivation readiness: NO BLOCKERS.'
   : `\nACTIVATION REFUSED:\n  - ${decision.blockers.join('\n  - ')}`);
 process.exit(decision.activate ? 0 : 1);
+}

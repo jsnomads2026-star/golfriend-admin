@@ -9,14 +9,18 @@
     "jurisdiction, or an approval, and does not degrade to a permissive default.",
     "",
     "No deletion is executed by anything in this repository. There is no deletion path at all;",
-    "the retention port decides eligibility and nothing consumes that decision to delete."
+    "the retention port decides eligibility and nothing consumes that decision to delete.",
+    "v2.0.0 makes every decision BLOCKING and machine-checkable. Each carries an explicit",
+    "unresolved placeholder for its owner and its resolution. NO REAL PERSON IS NAMED HERE and",
+    "no decision is pre-answered — assigning an owner is itself an operator act. The validator",
+    "in scripts/commissioning-decision-validator.mjs refuses commissioning while any required",
+    "decision is unresolved, so the package cannot be commissioned by forgetting."
   ],
   "manifestId": "GF-OPERATOR-DECISIONS-001",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "raisedOn": "2026-08-15",
   "raisedBy": "Admin Enterprise acquisition / Shared Authority Hardening lane",
   "status": "awaiting_operator_decisions",
-
   "decisions": [
     {
       "id": "D1",
@@ -24,11 +28,35 @@
       "owner": "Founder + legal counsel",
       "question": "How long may an enterprise outreach draft, and its approval receipts, be retained after creation or after a terminal state?",
       "whyCodeCannotDecide": "A retention period is a legal and commercial commitment. Inventing one would create a policy nobody approved and would silently start deleting evidence.",
-      "requiredValues": ["retentionDays (integer)", "policyVersion (string)", "approvedBy (string)", "effectiveFrom (ISO date)"],
+      "requiredValues": [
+        "retentionDays (integer)",
+        "policyVersion (string)",
+        "approvedBy (string)",
+        "effectiveFrom (ISO date)"
+      ],
       "port": "RETENTION_PORT in src/components/admin/v2/outreachRepository.mjs and retentionDecision() in functions/src/outreachAuthority.ts",
       "currentBehaviour": "retention_policy_unavailable — every retention-dependent operation refuses",
-      "blocks": ["automated retention", "any eligibility-for-deletion calculation"],
-      "doesNotBlock": ["creating, reviewing or approving drafts"]
+      "blocks": [
+        "automated retention",
+        "any eligibility-for-deletion calculation"
+      ],
+      "doesNotBlock": [
+        "creating, reviewing or approving drafts"
+      ],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "retention approval owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "retentionDays": "__UNRESOLVED__",
+          "policyVersion": "__UNRESOLVED__",
+          "approvedBy": "__UNRESOLVED__",
+          "effectiveFrom": "__UNRESOLVED__"
+        }
+      }
     },
     {
       "id": "D2",
@@ -36,11 +64,32 @@
       "owner": "Founder + legal counsel + data protection owner",
       "question": "Who may delete outreach records, under what recorded authority, and is deletion hard or is it tombstoning?",
       "whyCodeCannotDecide": "Receipts are append-only audit evidence. Deleting them is a deliberate legal act, not a maintenance task.",
-      "requiredValues": ["deletionAuthority (role)", "deletionMethod ('hard' | 'tombstone')", "policyVersion", "approvedBy"],
+      "requiredValues": [
+        "deletionAuthority (role)",
+        "deletionMethod ('hard' | 'tombstone')",
+        "policyVersion",
+        "approvedBy"
+      ],
       "port": "DELETION_PORT in src/components/admin/v2/outreachRepository.mjs",
       "currentBehaviour": "fail-closed; NO deletion path exists in the codebase",
-      "blocks": ["any deletion"],
-      "doesNotBlock": []
+      "blocks": [
+        "any deletion"
+      ],
+      "doesNotBlock": [],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "retention/deletion approval owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "deletionAuthority": "__UNRESOLVED__",
+          "deletionMethod": "__UNRESOLVED__",
+          "policyVersion": "__UNRESOLVED__",
+          "approvedBy": "__UNRESOLVED__"
+        }
+      }
     },
     {
       "id": "D3",
@@ -48,11 +97,32 @@
       "owner": "Legal counsel",
       "question": "Who may place and lift a legal hold, and what evidence must a hold record carry?",
       "whyCodeCannotDecide": "A hold is a legal instrument. The code can only enforce one it is told about.",
-      "requiredValues": ["holdAuthority (role)", "requiredEvidenceFields", "policyVersion"],
+      "requiredValues": [
+        "holdAuthority (role)",
+        "requiredEvidenceFields",
+        "policyVersion"
+      ],
       "port": "LEGAL_HOLD_PORT; enterprise_legal_holds collection",
       "currentBehaviour": "three-valued: held / not held / UNKNOWN. Unknown BLOCKS. A failed read never degrades to 'not held'.",
-      "blocks": ["approving or transitioning a draft whose hold state cannot be determined"],
-      "doesNotBlock": ["reading the draft list"]
+      "blocks": [
+        "approving or transitioning a draft whose hold state cannot be determined"
+      ],
+      "doesNotBlock": [
+        "reading the draft list"
+      ],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "legal hold authority owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "holdAuthority": "__UNRESOLVED__",
+          "requiredEvidenceFields": "__UNRESOLVED__",
+          "policyVersion": "__UNRESOLVED__"
+        }
+      }
     },
     {
       "id": "D4",
@@ -60,11 +130,36 @@
       "owner": "Legal counsel, per jurisdiction",
       "question": "For each jurisdiction, is outreach to an unsigned course legally approved, under which wording, opt-out mechanism and policy version?",
       "whyCodeCannotDecide": "This lane is explicitly barred from authoring legal wording, opt-out language or jurisdiction policy. A default-allow would manufacture an approval nobody granted.",
-      "requiredValues": ["jurisdictionCode", "legallyApproved (must be boolean true)", "version (string)", "approvedBy", "approvedOn"],
+      "requiredValues": [
+        "jurisdictionCode",
+        "legallyApproved (must be boolean true)",
+        "version (string)",
+        "approvedBy",
+        "approvedOn"
+      ],
       "port": "enterprise_jurisdiction_approvals/{code}; jurisdictionDecision() in functions/src/outreachAuthority.ts",
       "currentBehaviour": "NO jurisdiction is approved. Every jurisdiction refuses. A truthy-but-not-true value such as 'pending' does not read as approval.",
-      "blocks": ["sendability in every jurisdiction"],
-      "doesNotBlock": ["drafting, review and approval, which record an approval without transmitting anything"]
+      "blocks": [
+        "sendability in every jurisdiction"
+      ],
+      "doesNotBlock": [
+        "drafting, review and approval, which record an approval without transmitting anything"
+      ],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "jurisdiction approval owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "jurisdictionCode": "__UNRESOLVED__",
+          "legallyApproved": "__UNRESOLVED__",
+          "version": "__UNRESOLVED__",
+          "approvedBy": "__UNRESOLVED__",
+          "approvedOn": "__UNRESOLVED__"
+        }
+      }
     },
     {
       "id": "D5",
@@ -72,11 +167,32 @@
       "owner": "Founder",
       "question": "Is outbound transmission to courses authorized at all, and through which provider under which contract?",
       "whyCodeCannotDecide": "Standing instruction for this lane is that nothing is transmitted. Enabling transmission is a founder decision.",
-      "requiredValues": ["transmissionAuthorized (boolean)", "providerContractRef", "approvedBy"],
+      "requiredValues": [
+        "transmissionAuthorized (boolean)",
+        "providerContractRef",
+        "approvedBy"
+      ],
       "port": "TRANSMISSION_ENABLED in functions/src/outreachAuthority.ts",
       "currentBehaviour": "false. There is no transmitter, no mail client and no outbound HTTP in the server binding. Even a fully approved draft in an approved jurisdiction reports not sendable, with the reason transmission_not_permitted.",
-      "blocks": ["all outbound communication"],
-      "doesNotBlock": ["everything else"]
+      "blocks": [
+        "all outbound communication"
+      ],
+      "doesNotBlock": [
+        "everything else"
+      ],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "transmission approval owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "transmissionAuthorized": "__UNRESOLVED__",
+          "providerContractRef": "__UNRESOLVED__",
+          "approvedBy": "__UNRESOLVED__"
+        }
+      }
     },
     {
       "id": "D6",
@@ -84,12 +200,35 @@
       "owner": "Platform operator",
       "question": "Which App Check attestation provider is configured, for which project, and when does enforcement begin?",
       "whyCodeCannotDecide": "Provisioning is a Firebase console action plus a client attestation provider. Neither exists in this repository, and claiming enforcement without them would be a fabricated production state.",
-      "requiredValues": ["attestationProvider", "projectId", "enforcementDate", "rolloutStage ('monitoring' then 'enforced')"],
+      "requiredValues": [
+        "attestationProvider",
+        "projectId",
+        "enforcementDate",
+        "rolloutStage ('monitoring' then 'enforced')"
+      ],
       "port": "COMMISSIONING_STAGE in functions/src/appCheckCommissioning.ts",
       "currentBehaviour": "not_provisioned. REQUIRED_IN_PRODUCTION is true, so the port REFUSES rather than silently allowing; commissioningReadiness() reports not ready with the operator action named.",
-      "blocks": ["a truthful claim that privileged callables are attested"],
-      "doesNotBlock": ["current operation, because enforcement is not yet switched on"],
-      "knownInconsistency": "The Partner Portal lane already declares enforceAppCheck: true on ~59 privileged callables while the Admin lane declares it nowhere. Same project, two postures. Either App Check IS provisioned — in which case the Admin callables are unprotected — or it is not, in which case every Portal callable would reject in production. This must be resolved before either lane deploys."
+      "blocks": [
+        "a truthful claim that privileged callables are attested"
+      ],
+      "doesNotBlock": [
+        "current operation, because enforcement is not yet switched on"
+      ],
+      "knownInconsistency": "The Partner Portal lane already declares enforceAppCheck: true on ~59 privileged callables while the Admin lane declares it nowhere. Same project, two postures. Either App Check IS provisioned — in which case the Admin callables are unprotected — or it is not, in which case every Portal callable would reject in production. This must be resolved before either lane deploys.",
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "App Check client/provider owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "attestationProvider": "__UNRESOLVED__",
+          "projectId": "__UNRESOLVED__",
+          "enforcementDate": "__UNRESOLVED__",
+          "rolloutStage": "__UNRESOLVED__"
+        }
+      }
     },
     {
       "id": "D7",
@@ -97,20 +236,89 @@
       "owner": "Platform operator",
       "question": "Which existing admin_users records lack a canonical Active status, and should each be set Active or Suspended?",
       "whyCodeCannotDecide": "It requires reading production data, which this lane is barred from, and a judgement about who is genuinely still staff.",
-      "requiredValues": ["a completed repair pass against the generated manifest"],
+      "requiredValues": [
+        "a completed repair pass against the generated manifest"
+      ],
       "port": "scripts/admin-status-migration-dryrun.mjs (read-only; generates a plan, applies nothing)",
       "currentBehaviour": "The allowlist denies any record without a canonical Active status, including the status-less shape the previous denylist admitted. Both in-product recovery paths require an ACTIVE Director.",
-      "blocks": ["safe activation of the allowlist in an environment with legacy records"],
-      "doesNotBlock": ["the change itself, which is correct; this is a data-readiness step"],
-      "severity": "This is the highest-risk item in the manifest: if no Director record carries a canonical Active status, there is no in-product way back in."
+      "blocks": [
+        "safe activation of the allowlist in an environment with legacy records"
+      ],
+      "doesNotBlock": [
+        "the change itself, which is correct; this is a data-readiness step"
+      ],
+      "severity": "This is the highest-risk item in the manifest: if no Director record carries a canonical Active status, there is no in-product way back in.",
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "legacy status repair owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "a": "__UNRESOLVED__"
+        }
+      }
+    },
+    {
+      "id": "D8",
+      "topic": "CI workflow ownership for the authority gates",
+      "owner": "platform/CI owner",
+      "question": "Which workflow runs gate:admin-v2 / gate:admin-release, and on which branches, so the authority controls are enforced rather than remembered?",
+      "whyCodeCannotDecide": "Adding a workflow to another lane's CI is a change to how that lane is gated, and choosing the trigger branches is an ownership decision.",
+      "requiredValues": [
+        "workflowFile",
+        "triggerBranches",
+        "gatesInvoked",
+        "approvedBy"
+      ],
+      "port": ".github/workflows (not modified by this lane)",
+      "currentBehaviour": "No workflow invokes npm run gate, gate:admin-v2 or gate:admin-release. Every verifier in this package runs only when a human runs it.",
+      "blocks": [
+        "any claim that the authority controls are continuously enforced"
+      ],
+      "doesNotBlock": [
+        "local verification, which passes"
+      ],
+      "blocking": true,
+      "resolution": {
+        "status": "unresolved",
+        "ownerRole": "CI workflow owner",
+        "assignedOwner": "__UNRESOLVED__",
+        "decidedOn": "__UNRESOLVED__",
+        "decisionRecordRef": "__UNRESOLVED__",
+        "suppliedValues": {
+          "workflowFile": "__UNRESOLVED__",
+          "triggerBranches": "__UNRESOLVED__",
+          "gatesInvoked": "__UNRESOLVED__",
+          "approvedBy": "__UNRESOLVED__"
+        }
+      }
     }
   ],
-
   "invariants": [
     "No duration, jurisdiction, approval or policy value is invented anywhere in this repository.",
     "Every port above fails CLOSED while its decision is outstanding; none degrades to a permissive default.",
     "No deletion is executed. There is no deletion path.",
     "Unknown legal-hold state blocks. It never collapses to 'not held'.",
-    "Unknown jurisdiction is unsendable."
-  ]
+    "Unknown jurisdiction is unsendable.",
+    "No decision in this manifest is pre-answered, and no real person is named. An unresolved owner is recorded as __UNRESOLVED__.",
+    "Commissioning is refused while any blocking decision is unresolved; there is no override."
+  ],
+  "commissioning": {
+    "status": "blocked",
+    "rule": "Commissioning is refused while ANY blocking decision is unresolved. There is no partial commissioning and no override flag.",
+    "validator": "scripts/commissioning-decision-validator.mjs",
+    "unresolvedCount": 8,
+    "requiredOrder": [
+      "D7 legacy status repair — first, because activating the allowlist without it can lock out every Director",
+      "D8 CI workflow — second, so every later step is continuously verified rather than checked once",
+      "D6 App Check provisioning — third; the Portal already declares enforceAppCheck on ~56 callables with no provider, so this is the largest live gap",
+      "Firestore integrated ruleset (see the rules requirement) — fourth, before any deploy",
+      "D3 legal hold authority — fifth",
+      "D1/D2 retention and deletion — sixth",
+      "D4 jurisdiction approval — seventh",
+      "D5 transmission authorization — last, and only after all of the above"
+    ]
+  }
 }
