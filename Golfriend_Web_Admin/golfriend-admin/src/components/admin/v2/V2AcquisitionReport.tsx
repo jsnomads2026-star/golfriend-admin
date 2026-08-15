@@ -27,7 +27,12 @@ const shown = (d: {
     : d.partialCoverage
       ? `${d.value} (partial — ${d.coverage.contributing} of ${d.coverage.total} courses reporting)`
       : String(d.value);
-const today = () => new Date().toISOString().slice(0, 10);
+// The LOCAL calendar day — see V2CourseAcquisition: the UTC day would keep a lapsed
+// authorization reporting as effective for the offset window each morning.
+const today = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 export default function V2AcquisitionReport({
   provider = localPreviewAcquisitionProvider,
   evaluationDate = today(),
@@ -46,7 +51,8 @@ export default function V2AcquisitionReport({
     [periodStart, setPeriodStart] = useState("2026-07-01"),
     [periodEnd, setPeriodEnd] = useState(evaluationDate),
     [report, setReport] = useState<AcquisitionReport | null>(null),
-    [copied, setCopied] = useState(false);
+    [copied, setCopied] = useState(false),
+    [copyFailed, setCopyFailed] = useState(false);
   useEffect(() => {
     void provider.load().then(setSnap, () => setFailed(true));
   }, [provider]);
@@ -64,7 +70,9 @@ export default function V2AcquisitionReport({
         Loading acquisition analytics…
       </div>
     );
-  const generate = () =>
+  const generate = () => {
+    setCopied(false);
+    setCopyFailed(false);
     setReport(
       buildAcquisitionReport({
         prospects,
@@ -74,19 +82,26 @@ export default function V2AcquisitionReport({
         authorization,
       }),
     );
+  };
   const download = (text: string, extension: string) => {
     if (!report) return;
     const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = `golfriend-course-acquisition.${extension}`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   const copy = async () => {
     if (!report) return;
-    await navigator.clipboard.writeText(acquisitionReportToJson(report));
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(acquisitionReportToJson(report));
+      setCopied(true);
+    } catch {
+      setCopyFailed(true);
+    }
   };
   return (
     <div className="acqr">
@@ -236,7 +251,11 @@ export default function V2AcquisitionReport({
                 Download CSV
               </button>
               <button onClick={() => void copy()}>
-                {copied ? "Copied" : "Copy JSON"}
+                {copyFailed
+                  ? "Clipboard unavailable"
+                  : copied
+                    ? "Copied"
+                    : "Copy JSON"}
               </button>
               <button disabled={!transmitter}>
                 Transmit to JHCC unavailable

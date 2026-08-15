@@ -35,7 +35,7 @@ assert.equal(canonicalCodes.length, 8);
 assert.deepEqual(Object.keys(OUTREACH_COPY), canonicalCodes);
 for (const locale of canonicalCodes) {
   const copy = OUTREACH_COPY[locale];
-  for (const key of ['disclaimer', 'evidenceHeading', 'suppressed', 'notAttributed']) {
+  for (const key of ['disclaimer', 'evidenceHeading', 'suppressed', 'notAttributed', 'notRecorded', 'sourceUnavailable']) {
     assert.equal(typeof copy[key], 'string', `${locale}.${key} must be a string`);
     assert.ok(copy[key].trim().length > 0, `${locale}.${key} must not be empty`);
   }
@@ -80,6 +80,36 @@ assert.equal(report.delivery.status, 'unavailable');
 assert.doesNotMatch(opportunityToJson(report), /price|currency|revenue|invoiceAmount|amountDue/i);
 assert.doesNotMatch(opportunityToText(report), /price|currency|revenue/i);
 
+// --- hostile free text must not survive into ANY exported artifact -------
+// The registry's free-text fields are operator-entered and may carry personal data.
+// This drives hostile values through every export path, not just the draft body.
+const hostile = { id: 'h1', courseName: 'Riverbend', country: 'Thailand', region: 'owner Somchai, ops@leak.example', contactRole: 'manager, mobile +66812345678', demand: { attribution: 'authoritative', source: 'ledger for member m_88213 (somchai@x.example) home 13.7563,100.5018', searchInterest: 12, confirmedBookings: 9 } };
+const hostileReport = buildOpportunityReport({ prospect: hostile, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: '2026-08-15' });
+const hostileDraft = renderOutreachTemplate({ kind: 'opportunity_summary', locale: 'en', prospect: hostile, report: hostileReport });
+const LEAKS = /ops@leak\.example|somchai@x\.example|\+66812345678|m_88213|13\.7563/;
+for (const [name, text] of [
+  ['opportunityToJson', opportunityToJson(hostileReport)],
+  ['opportunityToText', opportunityToText(hostileReport)],
+  ['draft subject', hostileDraft.subject],
+  ['draft body', hostileDraft.body],
+]) assert.doesNotMatch(text, LEAKS, `${name} leaked personal data from registry free text`);
+
+// --- a withheld metric states its OWN reason, never a false one ----------
+const noData = { id: 'n1', courseName: 'Quiet Course', demand: { attribution: 'authoritative' } };
+const noDataReport = buildOpportunityReport({ prospect: noData, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: '2026-08-15' });
+assert.ok(noDataReport.metrics.every((m) => m.reason === 'not_recorded'));
+for (const locale of canonicalCodes) {
+  const draft = renderOutreachTemplate({ kind: 'opportunity_summary', locale, prospect: noData, report: noDataReport });
+  // Claiming "below the minimum aggregate" for a metric that was never recorded would
+  // assert golfer volume that does not exist.
+  assert.ok(!draft.body.includes(OUTREACH_COPY[locale].suppressed), `${locale} draft claimed low volume for an unrecorded metric`);
+  assert.ok(draft.body.includes(OUTREACH_COPY[locale].notRecorded), `${locale} draft did not state the real reason`);
+}
+const lowVolume = buildOpportunityReport({ prospect: { ...noData, demand: { attribution: 'authoritative', searchInterest: 2 } }, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: '2026-08-15' });
+assert.ok(renderOutreachTemplate({ kind: 'opportunity_summary', locale: 'en', prospect: noData, report: lowVolume }).body.includes(OUTREACH_COPY.en.suppressed));
+const unattributed = buildOpportunityReport({ prospect: { id: 'u1', courseName: 'U', demand: { attribution: 'unavailable' } }, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: '2026-08-15' });
+assert.ok(renderOutreachTemplate({ kind: 'opportunity_summary', locale: 'en', prospect: { id: 'u1', courseName: 'U' }, report: unattributed }).body.includes(OUTREACH_COPY.en.sourceUnavailable));
+
 // --- drafts are generated, never delivered, and never leak ----------------
 for (const kind of OUTREACH_TEMPLATE_KINDS) {
   for (const locale of canonicalCodes) {
@@ -111,8 +141,9 @@ assert.doesNotMatch(model + types + ui, /\[\s*'en'\s*,\s*'th'\s*,\s*'ko'/);
 assert.match(ui, /import \{ LOCALE_CODES, coerceLocale \} from "\.\.\/\.\.\/\.\.\/i18n\/locales"/);
 
 // No transport, no callable, no client authority, no real email delivery.
-assert.doesNotMatch(model + ui, /firebase|firestore|addDoc|setDoc|updateDoc|deleteDoc|writeBatch|httpsCallable|XMLHttpRequest|sendEmail|nodemailer|smtp|mailto:/i);
-assert.doesNotMatch(model + ui, /fetch\s*\(/);
+const codeOnly = (source) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+assert.doesNotMatch(codeOnly(model + ui), /firebase|firestore|addDoc|setDoc|updateDoc|deleteDoc|writeBatch|httpsCallable|XMLHttpRequest|sendBeacon|WebSocket|EventSource|new Image|sendEmail|nodemailer|smtp|mailto:|<form\s+action/i);
+assert.doesNotMatch(codeOnly(model + ui), /fetch\s*\(/);
 assert.doesNotMatch(model + ui, /email sent|message sent|notification sent|delivered successfully|transmission successful|invoice raised/i);
 
 // Honest UI affordances.

@@ -4,19 +4,19 @@
 //
 // Golfriend Admin manages Golfriend. JHCC manages Jaidee Holding and receives oversight
 // reporting only. This module defines the boundary; it does not implement or impersonate JHCC.
-import{commissionState,CONTRACT_STATES,discloseMetric,MIN_AGGREGATE_COUNT,normalizeProspect,PROSPECT_STAGES}from'./courseAcquisitionModel.mjs';
+import{commissionState,containsPersonalData,CONTRACT_STATES,discloseMetric,MIN_AGGREGATE_COUNT,normalizeProspect,PROSPECT_STAGES,redactText,shareableProspect,WITHHELD_FREE_TEXT}from'./courseAcquisitionModel.mjs';
 
 export const ACQUISITION_REPORT_SCHEMA='golfriend.admin.course-acquisition-report.v1';
 export const ACQUISITION_REPORT_VERSION=1;
 export const JHCC_TRANSMISSION_SCHEMA='golfriend.admin.jhcc-acquisition-report-transmission.v1';
 /** Field names that must never reach JHCC. Mirrors the recorded privacy-safe input contract. */
-export const JHCC_PROHIBITED_FIELDS=Object.freeze(['memberId','memberIds','userId','userIds','uid','playerUid','email','emailAddress','phone','phoneNumber','ip','ipAddress','latitude','longitude','coordinates','deviceId','userAgent','messageBody','note','notes','internalNotes','payment','card','iban','contactEmail','contactPhone']);
-// Value screens: an address-like string, an international or bare long telephone run, or a
-// precise coordinate pair. ISO dates and timestamps are structural, not personal, and are skipped.
-const PII_VALUE_PATTERNS=Object.freeze([/[\w.+-]+@[\w-]+\.[\w.]+/,/\+\d[\d\s()-]{6,}\d/,/\b\d{10,15}\b/,/-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/]);
-const ISO_LIKE=/^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
+export const JHCC_PROHIBITED_FIELDS=Object.freeze(['memberId','memberIds','userId','userIds','uid','playerUid','email','emailAddress','phone','phoneNumber','mobile','ip','ipAddress','lat','latitude','lng','long','longitude','geo','coordinates','location','address','residence','personName','fullName','firstName','lastName','deviceId','userAgent','messageBody','note','notes','internalNotes','payment','card','iban','contactEmail','contactPhone']);
+/** Compare keys ignoring case and separators so `member_id` and `Member-Id` are caught too. */
+const keyId=(key)=>String(key).toLowerCase().replace(/[_\-\s]/g,'');
+const PROHIBITED_KEY_IDS=new Set(JHCC_PROHIBITED_FIELDS.map(keyId));
 
-const isoDay=(v)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v:null;
+const isoDay=(v)=>{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return null;const parsed=new Date(`${v}T00:00:00.000Z`);return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===v?v:null;};
+const deepFreeze=(value)=>{if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.freeze(value);for(const child of Object.values(value))deepFreeze(child);}return value;};
 const sumOrNull=(values)=>{const present=values.filter((v)=>typeof v==='number');return present.length?present.reduce((a,b)=>a+b,0):null;};
 /** Weakest attribution wins: a rollup is only as trustworthy as its least-attributed input. */
 const rollupAttribution=(levels)=>levels.includes('unavailable')||levels.length===0?'unavailable':levels.includes('unverified')?'unverified':'authoritative';
@@ -36,7 +36,9 @@ const contractCounts=(rows)=>Object.fromEntries(CONTRACT_STATES.filter((s)=>rows
  * Golfer demand aggregates pass through suppression and attribution gating.
  */
 export function acquisitionAnalytics(prospects,{evaluationDate}={}){
-  const rows=prospects.map(normalizeProspect);
+  // Registry free text may carry personal data, so analytics rows are built from the
+  // screened projection — the same one every other outbound artifact uses.
+  const rows=prospects.map((p)=>{const n=normalizeProspect(p),s=shareableProspect(p);return{...n,courseName:s.courseName,country:s.country,region:s.region};});
   const countries=[...new Set(rows.map((r)=>r.country))].sort().map((country)=>{const inCountry=rows.filter((r)=>r.country===country);return{country,prospects:inCountry.length,signed:inCountry.filter((r)=>commissionState(r.contract,evaluationDate).effective).length,byStage:stageCounts(inCountry),byContract:contractCounts(inCountry),demand:demandRollup(inCountry)};});
   const courses=rows.map((r)=>{const commission=commissionState(r.contract,evaluationDate);return{prospectId:r.id,courseName:r.courseName,courseId:r.courseId,country:r.country,region:r.region,stage:r.stage,contractState:r.contract.state,commissionEffective:commission.effective,commissionReason:commission.reason,lastContactedAt:r.lastContactedAt,nextFollowUpAt:r.nextFollowUpAt,contactCount:r.history.length,demand:demandRollup([r])};});
   return{evaluationDate:isoDay(evaluationDate),totals:{prospects:rows.length,countries:countries.length,commissionEffective:courses.filter((c)=>c.commissionEffective).length,opportunityEvidenceOnly:courses.filter((c)=>!c.commissionEffective).length},countries,courses,minimumAggregate:MIN_AGGREGATE_COUNT};
@@ -60,15 +62,23 @@ export function jhccDeliveryState(authorization,at){const day=isoDay(at);const n
   return{authorized:true,status:'authorized',reason:'approved_and_effective',contractRef:String(authorization.contractRef),notice:'An approved, effective-dated JHCC acquisition reporting contract is on record.'};
 }
 
-/** Recursively collect every key and string value so a payload can be screened before transmission. */
-function walk(value,keys,strings){if(Array.isArray(value)){for(const item of value)walk(item,keys,strings);return;}
-  if(value&&typeof value==='object'){for(const[key,child]of Object.entries(value)){keys.push(key);walk(child,keys,strings);}return;}
-  if(typeof value==='string')strings.push(value);}
+/** Collect every key and every scalar (strings AND numbers) so a payload can be screened. */
+function walk(value,keys,scalars){if(Array.isArray(value)){for(const item of value)walk(item,keys,scalars);return;}
+  if(value&&typeof value==='object'){for(const[key,child]of Object.entries(value)){keys.push(key);walk(child,keys,scalars);}return;}
+  if(typeof value==='string'||typeof value==='number')scalars.push(value);}
 
-/** Screen a payload against the recorded JHCC privacy contract. Fail-closed: any hit blocks it. */
-export function validateJhccPayload(payload){const keys=[],strings=[];walk(payload,keys,strings);
-  const prohibitedKeys=[...new Set(keys.filter((k)=>JHCC_PROHIBITED_FIELDS.includes(k)))];
-  const prohibitedValues=strings.filter((s)=>!ISO_LIKE.test(s)&&PII_VALUE_PATTERNS.some((p)=>p.test(s)));
+/**
+ * Screen a payload against the recorded JHCC privacy contract. Fail-closed: any hit blocks it.
+ * The payload is materialized through JSON first, so what is screened is exactly what would be
+ * transmitted — a `toJSON` that injects data after the walk cannot slip past.
+ */
+export function validateJhccPayload(payload){
+  let materialized;
+  try{materialized=JSON.parse(JSON.stringify(payload??null));}
+  catch{return{valid:false,prohibitedKeys:['<unserializable payload>'],prohibitedValueCount:0,contract:JHCC_TRANSMISSION_SCHEMA};}
+  const keys=[],scalars=[];walk(materialized,keys,scalars);
+  const prohibitedKeys=[...new Set(keys.filter((k)=>PROHIBITED_KEY_IDS.has(keyId(k))))];
+  const prohibitedValues=scalars.filter(containsPersonalData);
   return{valid:prohibitedKeys.length===0&&prohibitedValues.length===0,prohibitedKeys,prohibitedValueCount:prohibitedValues.length,contract:JHCC_TRANSMISSION_SCHEMA};}
 
 /**
@@ -81,10 +91,12 @@ export function buildAcquisitionReport({prospects,period,generatedAt,evaluationD
   const payload={schema:ACQUISITION_REPORT_SCHEMA,version:ACQUISITION_REPORT_VERSION,generatedAt,period,analytics};
   const validation=validateJhccPayload(payload);
   const delivery=jhccDeliveryState(authorization,evaluationDate);
-  return Object.freeze({...payload,validation,delivery:Object.freeze({...delivery,transmitter:null,deliverable:validation.valid&&delivery.authorized,lastSuccessfulAt:null}),boundary:'Golfriend Admin manages Golfriend. JHCC receives oversight reporting only and is never the booking engine or a payment processor.',limitations:['Acquisition analytics exclude any unattributed booking, played round or revenue figure.','Aggregates below the minimum are withheld rather than estimated.','No invoice, price or commission amount is included for an unsigned course.']});
+  // Deep-frozen: a screened-then-mutated payload must not be able to keep a deliverable flag
+  // that was computed before the mutation.
+  return deepFreeze({...payload,validation,delivery:{...delivery,transmitter:null,deliverable:validation.valid&&delivery.authorized,lastSuccessfulAt:null},boundary:'Golfriend Admin manages Golfriend. JHCC receives oversight reporting only and is never the booking engine or a payment processor.',limitations:['Acquisition analytics exclude any unattributed booking, played round or revenue figure.','Aggregates below the minimum are withheld rather than estimated.','No invoice, price or commission amount is included for an unsigned course.']});
 }
 
 const esc=(v)=>`"${String(v??'').replaceAll('"','""')}"`;
 export function acquisitionReportToJson(report){return JSON.stringify(report,null,2);}
 export function acquisitionReportToText(report){return[`Schema: ${report.schema} (version ${report.version})`,`Generated: ${report.generatedAt}`,`Period: ${report.period.start} to ${report.period.end}`,`Prospects: ${report.analytics.totals.prospects} across ${report.analytics.totals.countries} country/countries`,`Commission-effective: ${report.analytics.totals.commissionEffective} · opportunity evidence only: ${report.analytics.totals.opportunityEvidenceOnly}`,'',...report.analytics.countries.map((c)=>{const b=c.demand.bookingInterest;const value=b.disclosed?`${b.value}${b.partialCoverage?` (partial — ${b.coverage.contributing} of ${b.coverage.total} courses reporting)`:''}`:`withheld (${b.reason})`;return`${c.country}: ${c.prospects} prospect(s) | attribution ${c.demand.attribution} | booking interest ${value}`;}),'',`JHCC delivery: ${report.delivery.status} (${report.delivery.reason})`,report.delivery.notice,...report.limitations].join('\n');}
-export function acquisitionReportToCsv(report){return[['country','prospects','commission_effective','attribution','booking_interest','booking_interest_state','booking_interest_coverage','confirmed_bookings_state'],...report.analytics.countries.map((c)=>[c.country,c.prospects,c.signed,c.demand.attribution,c.demand.bookingInterest.disclosed?c.demand.bookingInterest.value:'',c.demand.bookingInterest.reason,`${c.demand.bookingInterest.coverage.contributing}/${c.demand.bookingInterest.coverage.total}`,c.demand.confirmedBookings.reason])].map((row)=>row.map(esc).join(',')).join('\n');}
+export function acquisitionReportToCsv(report){return[['country','prospects','commission_effective','attribution','booking_interest','booking_interest_state','booking_interest_coverage','confirmed_bookings','confirmed_bookings_state'],...report.analytics.countries.map((c)=>[c.country,c.prospects,c.signed,c.demand.attribution,c.demand.bookingInterest.disclosed?c.demand.bookingInterest.value:'',c.demand.bookingInterest.reason,`${c.demand.bookingInterest.coverage.contributing}/${c.demand.bookingInterest.coverage.total}`,c.demand.confirmedBookings.disclosed?c.demand.confirmedBookings.value:'',c.demand.confirmedBookings.reason])].map((row)=>row.map(esc).join(',')).join('\n');}

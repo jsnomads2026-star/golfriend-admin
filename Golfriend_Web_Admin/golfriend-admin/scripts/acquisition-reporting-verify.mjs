@@ -43,7 +43,7 @@ assert.equal(analytics.totals.opportunityEvidenceOnly, 2);
 assert.deepEqual(analytics.countries.map((c) => c.country), ['Japan', 'Thailand']);
 assert.equal(analytics.courses.length, 3);
 assert.equal(analytics.courses.find((c) => c.prospectId === 'b').commissionEffective, true);
-assert.equal(analytics.courses.find((c) => c.prospectId === 'a').commissionReason, 'no_signed_agreement');
+assert.equal(analytics.courses.find((c) => c.prospectId === 'a').commissionReason, 'contract_state_not_commission_bearing');
 
 // A rollup is only as trustworthy as its least-attributed input.
 const thailand = analytics.countries.find((c) => c.country === 'Thailand');
@@ -93,6 +93,25 @@ assert.equal(validateJhccPayload({ a: '13.7563, 100.5018' }).valid, false);
 assert.equal(validateJhccPayload({ a: '084512345678' }).valid, false);
 // ISO dates and timestamps are structural, not personal, and must not false-positive.
 assert.equal(validateJhccPayload({ generatedAt: '2026-08-15T00:00:00.000Z', day: '2026-08-15' }).valid, true);
+// Numbers are screened, not only strings.
+for (const numeric of [{ golferContact: 66812345678 }, { handle: 9931882201 }]) assert.equal(validateJhccPayload(numeric).valid, false, `numeric personal value passed: ${JSON.stringify(numeric)}`);
+// Key matching ignores case and separators.
+assert.deepEqual(validateJhccPayload({ member_id: 'm1' }).prohibitedKeys, ['member_id']);
+assert.deepEqual(validateJhccPayload({ 'User-Id': 'u1' }).prohibitedKeys, ['User-Id']);
+assert.equal(validateJhccPayload({ MemberID: 'm1' }).valid, false);
+// Coordinate and network identifiers at lower precision are still caught.
+assert.equal(validateJhccPayload({ geo: '13.756, 100.501' }).valid, false);
+assert.equal(validateJhccPayload({ a: '203.150.19.44' }).valid, false);
+assert.equal(validateJhccPayload({ lat: '13.7563', lng: '100.5018' }).valid, false, 'split coordinate keys must be caught by key name');
+// A `toJSON` cannot inject data after the walk: screening runs on the serialized form.
+assert.equal(validateJhccPayload({ block: { toJSON() { return 'ops@golfriend.example'; } } }).valid, false);
+// Keys nested inside arrays and null-prototype objects are reached.
+assert.equal(validateJhccPayload({ rows: [{ nested: [{ contactEmail: 'a@b.co' }] }] }).valid, false);
+assert.equal(validateJhccPayload(Object.assign(Object.create(null), { email: 'a@b.co' })).valid, false);
+// Registry free text reaches the analytics, so it must be screened before it gets there.
+const hostileReport = buildAcquisitionReport({ prospects: [{ id: 'h1', courseName: 'Riverbend', country: 'Thailand', region: 'owner mobile +66812345678, ops@leak.example' }], period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at, authorization: { approved: true, contractRef: 'JHCC-1', effectiveFrom: '2026-08-01' } });
+assert.doesNotMatch(acquisitionReportToJson(hostileReport), /\+66812345678|ops@leak\.example/);
+assert.equal(hostileReport.validation.valid, true, 'free text is redacted before screening, so a clean payload results');
 
 // --- the report itself carries no personal data and no invoice -----------
 const report = buildAcquisitionReport({ prospects, period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at });
@@ -108,15 +127,26 @@ assert.doesNotMatch(serialized, /ops@example\.invalid|\+66000000|internal only|A
 assert.doesNotMatch(JSON.stringify(report.analytics), /invoice|price|currency|revenue|amount|commissionBps/i);
 assert.doesNotMatch(serialized, /[$€£¥]|\bUSD\b|\bTHB\b|\bEUR\b|\bJPY\b/);
 assert.ok(report.limitations.some((l) => /No invoice, price or commission amount is included for an unsigned course/.test(l)));
+// Deep-frozen: a screened payload cannot be mutated afterwards while keeping its deliverable flag.
 assert.ok(Object.isFrozen(report));
+assert.ok(Object.isFrozen(report.analytics));
+assert.ok(Object.isFrozen(report.validation));
+assert.ok(Object.isFrozen(report.analytics.courses[0]));
+assert.throws(() => { 'use strict'; report.analytics.courses[0].contactEmail = 'ops@leak.example'; });
 
 // An authorized contract flips delivery, and a failed screen still blocks it.
 const withAuth = buildAcquisitionReport({ prospects, period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at, authorization: { approved: true, contractRef: 'JHCC-2026-01', effectiveFrom: '2026-08-01' } });
 assert.equal(withAuth.delivery.authorized, true);
 assert.equal(withAuth.delivery.deliverable, true);
 assert.equal(withAuth.delivery.transmitter, null, 'no transmitter may exist in this build');
-const leaky = buildAcquisitionReport({ prospects: [{ id: 'z', courseName: 'ops@leak.example', country: 'Thailand' }], period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at, authorization: { approved: true, contractRef: 'JHCC-2026-01', effectiveFrom: '2026-08-01' } });
+// Defence in depth. First layer: registry free text is redacted before it reaches the payload,
+// so a hostile course name never even gets to the screen (asserted above).
+assert.doesNotMatch(acquisitionReportToJson(buildAcquisitionReport({ prospects: [{ id: 'z', courseName: 'ops@leak.example', country: 'Thailand' }], period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at })), /ops@leak\.example/);
+// Second layer: a payload that still fails screening is never deliverable, authorization or not.
+// The period is carried verbatim, so it is a real route for unscreened input.
+const leaky = buildAcquisitionReport({ prospects, period: { start: 'ops@leak.example', end: '2026-07-31' }, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at, authorization: { approved: true, contractRef: 'JHCC-2026-01', effectiveFrom: '2026-08-01' } });
 assert.equal(leaky.validation.valid, false);
+assert.equal(leaky.delivery.authorized, true, 'the authorization itself is still valid');
 assert.equal(leaky.delivery.deliverable, false, 'a payload failing privacy screening must never be deliverable');
 
 // --- deterministic exports -----------------------------------------------
@@ -124,6 +154,9 @@ assert.deepEqual(JSON.parse(acquisitionReportToJson(report)), JSON.parse(JSON.st
 assert.match(acquisitionReportToText(report), /Automatic JHCC acquisition delivery awaiting an approved reporting contract/);
 assert.match(acquisitionReportToText(report), /Schema: golfriend\.admin\.course-acquisition-report\.v1/);
 assert.equal(acquisitionReportToCsv(report).split('\n').length, 3);
+// The CSV must not silently drop a value the TXT and JSON disclose.
+assert.match(acquisitionReportToCsv(report), /"confirmed_bookings","confirmed_bookings_state"/);
+assert.match(acquisitionReportToCsv(report).split('\n')[1], /"Japan","1","0","authoritative","6","disclosed","1\/1","7","disclosed"/);
 assert.match(acquisitionReportToCsv(report), /not_authoritatively_attributed/);
 
 // --- source contracts ----------------------------------------------------
@@ -135,8 +168,9 @@ const app = read('../src/App.tsx');
 
 assert.match(app, /activeArea === 'reports' && <V2AcquisitionReport/);
 assert.doesNotMatch(model + types + ui, /\[\s*'en'\s*,\s*'th'\s*,\s*'ko'/);
-assert.doesNotMatch(model + ui, /firebase|firestore|addDoc|setDoc|updateDoc|deleteDoc|writeBatch|httpsCallable|XMLHttpRequest|sendEmail|smtp/i);
-assert.doesNotMatch(model + ui, /fetch\s*\(/);
+const codeOnly = (source) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+assert.doesNotMatch(codeOnly(model + ui), /firebase|firestore|addDoc|setDoc|updateDoc|deleteDoc|writeBatch|httpsCallable|XMLHttpRequest|sendBeacon|WebSocket|EventSource|new Image|sendEmail|nodemailer|smtp|mailto:|<form\s+action/i);
+assert.doesNotMatch(codeOnly(model + ui), /fetch\s*\(/);
 // False-claim vocabulary. "revenue" is permitted only in the limitation that excludes it.
 assert.doesNotMatch(model + ui, /JHCC received|transmission successful|delivered successfully|report sent|revenue total|revenue of/i);
 assert.match(ui, /Transmit to JHCC unavailable/);

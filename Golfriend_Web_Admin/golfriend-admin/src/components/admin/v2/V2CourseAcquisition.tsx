@@ -30,7 +30,13 @@ import "./V2CourseAcquisition.css";
 import { useDialogFocus } from "./useDialogFocus";
 const label = (v: string) =>
   v.replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase());
-const today = () => new Date().toISOString().slice(0, 10);
+// The LOCAL calendar day. toISOString() would give the UTC day, which east of UTC reports
+// yesterday for part of each morning — and an agreement that lapsed yesterday would still
+// read as effective for that window.
+const today = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 export default function V2CourseAcquisition({
   provider = localPreviewAcquisitionProvider,
   evaluationDate = today(),
@@ -52,7 +58,8 @@ export default function V2CourseAcquisition({
     [draft, setDraft] = useState<OutreachDraft | null>(null),
     [draftKind, setDraftKind] = useState("invitation"),
     [draftLocale, setDraftLocale] = useState("en"),
-    [copied, setCopied] = useState(false);
+    [copied, setCopied] = useState(false),
+    [copyFailed, setCopyFailed] = useState(false);
   const detailRef = useDialogFocus(Boolean(selected), () => setSelected(null));
   useEffect(() => {
     void provider.load().then(setSnap, () => setFailed(true));
@@ -90,18 +97,23 @@ export default function V2CourseAcquisition({
     setReport(null);
     setDraft(null);
     setCopied(false);
+    setCopyFailed(false);
     setDraftLocale(coerceLocale(r.contactLocale));
   };
   const copy = async () => {
     if (!selected) return;
-    await navigator.clipboard.writeText(
-      draft
-        ? `${draft.subject}\n\n${draft.body}`
-        : report
-          ? opportunityToJson(report)
-          : JSON.stringify(shareableProspect(selected), null, 2),
-    );
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(
+        draft
+          ? `${draft.subject}\n\n${draft.body}`
+          : report
+            ? opportunityToJson(report)
+            : JSON.stringify(shareableProspect(selected), null, 2),
+      );
+      setCopied(true);
+    } catch {
+      setCopyFailed(true);
+    }
   };
   const exportEvidence = () => {
     if (!report) return;
@@ -111,8 +123,10 @@ export default function V2CourseAcquisition({
     const link = document.createElement("a");
     link.href = url;
     link.download = `golfriend-opportunity-${report.course.id}.txt`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   const eligibility = selected
     ? invoiceEligibility(selected, evaluationDate)
@@ -245,7 +259,10 @@ export default function V2CourseAcquisition({
                       tabIndex={0}
                       onClick={() => open(r)}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") open(r);
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          open(r);
+                        }
                       }}
                     >
                       <td>
@@ -449,7 +466,11 @@ export default function V2CourseAcquisition({
               Preview Portal onboarding handoff
             </button>
             <button onClick={() => void copy()}>
-              {copied ? "Copied" : "Copy privacy-safe summary"}
+              {copyFailed
+                ? "Clipboard unavailable"
+                : copied
+                  ? "Copied"
+                  : "Copy privacy-safe summary"}
             </button>
           </div>
           {handoff && (

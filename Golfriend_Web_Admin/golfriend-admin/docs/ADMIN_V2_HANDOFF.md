@@ -73,6 +73,15 @@ row: the matrix above is unchanged and still has exactly eight rows.
   authorization record, and every payload is screened for prohibited fields and
   personal value patterns. A payload failing screening is never deliverable.
 
+- Registry free text is screened before it reaches any outbound artifact or the analytics,
+  and a value that fails screening is replaced rather than emitted.
+
+**Known privacy limit (not solved by code):** the screen catches structured identifiers —
+email addresses, telephone runs, coordinates, IP addresses. A bare personal name in a free-text
+field is not mechanically detectable and will pass. Free text is minimized, but an operator
+remains responsible for what is typed into a registry field. A data-minimization review should
+decide whether free-text fields belong in an outbound artifact at all.
+
 Verifiers: `verify:course-acquisition`, `verify:course-opportunity`,
 `verify:acquisition-reporting`, all wired into `gate:admin-v2`.
 
