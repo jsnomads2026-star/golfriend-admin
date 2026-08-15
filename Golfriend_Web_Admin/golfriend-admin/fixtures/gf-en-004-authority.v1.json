@@ -1,0 +1,1 @@
+{"schema":"golfriend.enterprise-authority-fixture.v1","fixtureOnly":true,"projectIdPrefix":"demo-","allowedHosts":["127.0.0.1","localhost"],"fixedNow":"2030-01-15T12:00:00.000Z","documents":[],"expectedCases":["multi_organization","exact_course_grant","suspended_ancestor","conflicting_binding","malformed_version","cross_course_denied"]}

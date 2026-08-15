@@ -15,7 +15,7 @@ export type AuthorityScope =
   | {kind: "course"; organizationId: string; propertyId: string; courseId: string};
 
 export type OrganizationStatus = "pending" | "active" | "suspended" | "unavailable";
-export type MembershipStatus = "pending" | "active" | "suspended" | "revoked";
+export type MembershipStatus = "pending" | "active" | "suspended" | "expired" | "revoked";
 export type InvitationStatus = "pending" | "accepted" | "expired" | "revoked" | "unavailable";
 
 export interface EnterpriseCourseProjection {
