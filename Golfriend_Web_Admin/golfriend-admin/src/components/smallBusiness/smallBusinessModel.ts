@@ -1,6 +1,7 @@
+import {LOCALE_CODES,type CanonicalLocale} from '../../i18n/locales';
 export const SMALL_BUSINESS_SCHEMA = 'golfriend.small-business.v1' as const;
-export const SMALL_BUSINESS_LOCALES = ['en','th','ko','ja','zh','es','fr','de'] as const;
-export type SmallBusinessLocale = typeof SMALL_BUSINESS_LOCALES[number];
+export const SMALL_BUSINESS_LOCALES = LOCALE_CODES;
+export type SmallBusinessLocale = CanonicalLocale;
 export type BusinessStatus = 'draft'|'submitted'|'changes_requested'|'approved'|'active'|'suspended'|'expired'|'rejected'|'closed';
 export type BusinessCategory = 'golf_cafe'|'restaurant'|'coach'|'fitter'|'repair_shop'|'retailer'|'other';
 export interface BusinessCard {businessId:string;displayName:string;category:BusinessCategory;city:string;country:string;verificationState:'verified'|'pending'|'unverified';disclosure:'partner'|'sponsored';availability:'known'|'unknown';offer?:{title:string;validUntil:string};}

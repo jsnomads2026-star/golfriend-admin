@@ -31,30 +31,28 @@ test('DOCUMENTS + INTAKE cover all eight locales with Thai translated', () => {
   parity('INTAKE', INTAKE);
 });
 
-test('PartnerDocuments is localized (consent + intake)', () => {
-  assert.match(compCode, /useT\(\s*INTAKE\s*\)/, 'must use useT(INTAKE)');
-  assert.match(compCode, /useT\(\s*DOCUMENTS\s*\)/, 'must use useT(DOCUMENTS) for consent');
+test('PartnerDocuments uses the canonical localized Portal copy', () => {
+  assert.match(compCode, /SMALL_BUSINESS_COPY\[useLocale\(\)\]/);
   for (const literal of ['Document checklist', 'Submit application', 'Attestation', 'File upload not yet available']) {
     assert.ok(!compCode.includes(literal), `hard-coded English "${literal}" still present`);
   }
 });
 
-test('submission goes through the server-authoritative callable (no client writes)', () => {
-  assert.match(compCode, /httpsCallable\([^,]*,\s*['"]submitPartnerApplication['"]\)/, 'must call submitPartnerApplication');
+test('documents are read-only server projection with no client writes', () => {
+  assert.match(compCode, /resolvePartnerPortalMount\(projection\)/);
   for (const banned of ['addDoc', 'setDoc', 'updateDoc', 'deleteDoc', 'uploadBytes']) {
     assert.ok(!compCode.includes(banned), `PartnerDocuments must not perform client write ${banned}`);
   }
 });
 
-test('honest file-upload-unavailable state, no fabricated success', () => {
-  assert.match(compCode, /fileUploadUnavailable/, 'must surface the honest file-upload-unavailable state');
+test('missing evidence stays honestly unavailable with no fabricated success', () => {
+  assert.match(compCode, /role="status"/);
   for (const fake of ['uploaded successfully', 'Verification complete', 'files uploaded']) {
     assert.ok(!compCode.includes(fake), `must not fabricate "${fake}"`);
   }
 });
 
-test('status tracking reads the submission (read-only) and dashboard wires the tab', () => {
-  assert.match(compCode, /partner_submissions/, 'must read own partner_submissions for status');
-  assert.match(compCode, /statusHeading/, 'must show application status');
-  assert.match(dash, /<PartnerDocuments\s+partnerUid=/, 'dashboard must render PartnerDocuments');
+test('canonical dashboard mounts the privacy-safe document projection', () => {
+  assert.match(dash, /<PartnerDocuments\s+projection=\{data\}/, 'dashboard must render server-projected PartnerDocuments');
+  assert.doesNotMatch(compCode, /partnerUid|firebase\/firestore|httpsCallable|localStorage/, 'documents must not accept client identity or bypass the Portal projection');
 });

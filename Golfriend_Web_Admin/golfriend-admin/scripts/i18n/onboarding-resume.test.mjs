@@ -30,8 +30,8 @@ test('Thai is actually translated (differs from English)', () => {
   }
 });
 
-test('PartnerOnboarding is localized with no hard-coded English', () => {
-  assert.match(compCode, /useT\(\s*ONBOARDING\s*\)/, 'must use useT(ONBOARDING)');
+test('PartnerOnboarding uses canonical localized Portal copy with no hard-coded English', () => {
+  assert.match(compCode, /SMALL_BUSINESS_COPY\[locale\]/);
   for (const literal of ['Getting started', 'Onboard your course', 'Publish availability', 'Documents & consent']) {
     assert.ok(!compCode.includes(literal), `hard-coded English "${literal}" still present`);
   }
@@ -43,8 +43,8 @@ test('PartnerOnboarding is read-only (no authoritative writes or callables)', ()
   }
 });
 
-test('onboarding is resumable (reflects saved progress) and dashboard wires it', () => {
-  assert.match(compCode, /localStorage\.getItem/, 'must read saved Documents draft for resume');
-  assert.match(compCode, /getDocs/, 'must derive real progress from the partner scope');
-  assert.match(dash, /<PartnerOnboarding\s+partnerUid=[^>]*onNavigate=/, 'dashboard must render PartnerOnboarding with onNavigate');
+test('onboarding reflects only current server state and dashboard wires it', () => {
+  assert.match(compCode, /resolvePartnerPortalMount\(projection\)/);
+  assert.match(dash, /<PartnerOnboarding\s+projection=\{data\}/, 'dashboard must render server-projected PartnerOnboarding');
+  assert.doesNotMatch(comp, /partnerUid|firebase\/firestore|localStorage|course_operators|tee_time_slots/, 'onboarding must not infer authority from client-selected identity or local state');
 });
