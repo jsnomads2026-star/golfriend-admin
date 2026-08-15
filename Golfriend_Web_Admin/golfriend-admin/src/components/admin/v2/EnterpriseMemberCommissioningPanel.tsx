@@ -1,0 +1,68 @@
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {useAdminLocale} from './AdminLocaleContext';
+import {ENTERPRISE_MEMBER_COMMISSIONING_COPY, type EnterpriseMemberCommissioningCopy} from '../../../i18n/admin/enterpriseMemberCommissioning';
+import {
+  COMMISSIONING_LOCALES,
+  TEMPLATE_KINDS,
+  firebaseEnterpriseMemberCommissioningProvider,
+  newCommissioningCommandId,
+  type CommissioningSnapshot,
+  type EnterpriseMemberCommissioningProvider,
+  type TemplateApprovalProjection,
+  type TemplateKind,
+} from './enterpriseMemberCommissioningProvider';
+import './EnterpriseMemberCommissioningPanel.css';
+
+type ViewState='loading'|'ready'|'empty'|'offline'|'unavailable'|'error';
+const emptyForm={templateId:'enterprise_member_invitation',templateVersion:'v1',kind:'invitation' as TemplateKind,locale:'en' as (typeof COMMISSIONING_LOCALES)[number],jurisdiction:'TH',contentDigest:'',policyVersion:'enterprise-member-delivery-v1',effectiveAt:'',expiresAt:''};
+const iso=(value:string)=>{const date=new Date(value);return Number.isNaN(date.valueOf())?null:date.toISOString()};
+const listIds=(value:string)=>value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,100);
+
+export default function EnterpriseMemberCommissioningPanel({provider=firebaseEnterpriseMemberCommissioningProvider}:{provider?:EnterpriseMemberCommissioningProvider}){
+ const locale=useAdminLocale(),t=ENTERPRISE_MEMBER_COMMISSIONING_COPY[locale];
+ const [snapshot,setSnapshot]=useState<CommissioningSnapshot|null>(null),[state,setState]=useState<ViewState>('loading'),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<TemplateApprovalProjection|null>(null);
+ const load=useCallback(async()=>{setState('loading');setNotice('');try{const next=await provider.read();setSnapshot(next);setState(next.templates.length?'ready':'empty')}catch{setState(typeof navigator!=='undefined'&&!navigator.onLine?'offline':'unavailable')}},[provider]);
+ useEffect(()=>{void load()},[load]);
+ const run=async(task:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{await task();setNotice(t.updated);await load()}catch{setNotice(t.failed)}finally{setBusy(false)}};
+ const templates=snapshot?.templates??[];
+ return <section className="emc" aria-labelledby="emc-title">
+  <header className="emc-header"><div><p className="emc-eyebrow">{t.title}</p><h3 id="emc-title">{t.title}</h3><p>{t.intro}</p></div><button type="button" onClick={()=>void load()} disabled={busy||state==='loading'}>{t.refresh}</button></header>
+  <div className="emc-status" role="status" aria-live="polite">{state==='loading'&&t.loading}{notice}</div>
+  {state==='offline'&&<StateMessage text={t.offline} retry={t.retry} onRetry={()=>void load()}/>} 
+  {state==='unavailable'||state==='error'?<StateMessage text={state==='error'?t.failed:t.unavailable} retry={t.retry} onRetry={()=>void load()}/>:null}
+  {state==='empty'&&<p className="emc-empty">{t.empty}</p>}
+  {state==='ready'&&<>
+   <TemplateTable templates={templates} selected={selected} setSelected={setSelected} t={t}/>
+   {selected&&<TemplateActions template={selected} busy={busy} run={run} provider={provider} t={t}/>} 
+  </>}
+  <ProposalForm busy={busy} run={run} provider={provider} t={t}/>
+  <BoundarySummary snapshot={snapshot} t={t}/>
+ </section>;
+}
+
+function StateMessage({text,retry,onRetry}:{text:string;retry:string;onRetry:()=>void}){return <div className="emc-state" role="alert"><p>{text}</p><button type="button" onClick={onRetry}>{retry}</button></div>}
+
+function TemplateTable({templates,selected,setSelected,t}:{templates:TemplateApprovalProjection[];selected:TemplateApprovalProjection|null;setSelected:(v:TemplateApprovalProjection)=>void;t:EnterpriseMemberCommissioningCopy}){
+ return <div className="emc-table-wrap" tabIndex={0} aria-label={t.coverage}><table><caption>{t.coverage}</caption><thead><tr><th scope="col">{t.templateId}</th><th scope="col">{t.kind}</th><th scope="col">{t.locale}</th><th scope="col">{t.jurisdiction}</th><th scope="col">{t.approvalStatus}</th><th scope="col"><span className="emc-sr">{t.select}</span></th></tr></thead><tbody>{templates.map(template=><tr key={template.templateApprovalId} className={selected?.templateApprovalId===template.templateApprovalId?'is-selected':''}><th scope="row">{template.templateId}<small>{template.templateVersion}</small></th><td>{template.kind}</td><td>{template.locale}</td><td>{template.jurisdiction}</td><td><span className={`emc-pill emc-pill-${template.status}`}>{template.status}</span><small>{template.legalApproved?t.approved:t.awaitingApproval} · {template.customerApproved?t.approved:t.awaitingApproval}</small></td><td><button type="button" onClick={()=>setSelected(template)}>{t.select}</button></td></tr>)}</tbody></table></div>;
+}
+
+function ProposalForm({busy,run,provider,t}:{busy:boolean;run:(task:()=>Promise<unknown>)=>Promise<void>;provider:EnterpriseMemberCommissioningProvider;t:EnterpriseMemberCommissioningCopy}){
+ const [form,setForm]=useState(emptyForm),[confirmed,setConfirmed]=useState(false),command=useRef(newCommissioningCommandId());
+ const update=(key:keyof typeof emptyForm,value:string)=>setForm(current=>({...current,[key]:value}));
+ const submit=(event:React.FormEvent)=>{event.preventDefault();const effective=iso(form.effectiveAt),expires=iso(form.expiresAt);if(!confirmed||!effective||!expires||!form.contentDigest.trim())return;void run(()=>provider.propose({...form,commandId:command.current,effectiveAt:effective,expiresAt:expires,contentDigest:form.contentDigest.trim()}));setConfirmed(false);command.current=newCommissioningCommandId()};
+ return <form className="emc-form" onSubmit={submit}><h4>{t.proposal}</h4><p>{t.metadataOnly}</p><div className="emc-grid"><label>{t.templateId}<input required maxLength={128} value={form.templateId} onChange={e=>update('templateId',e.target.value)}/></label><label>{t.templateVersion}<input required maxLength={64} value={form.templateVersion} onChange={e=>update('templateVersion',e.target.value)}/></label><label>{t.kind}<select value={form.kind} onChange={e=>update('kind',e.target.value)}>{TEMPLATE_KINDS.map(kind=><option key={kind}>{kind}</option>)}</select></label><label>{t.locale}<select value={form.locale} onChange={e=>update('locale',e.target.value)}>{COMMISSIONING_LOCALES.map(item=><option key={item}>{item}</option>)}</select></label><label>{t.jurisdiction}<input required maxLength={32} value={form.jurisdiction} onChange={e=>update('jurisdiction',e.target.value)}/></label><label>{t.digest}<input required maxLength={256} value={form.contentDigest} onChange={e=>update('contentDigest',e.target.value)}/></label><label>{t.policyVersion}<input required maxLength={128} value={form.policyVersion} onChange={e=>update('policyVersion',e.target.value)}/></label><label>{t.effective}<input required type="datetime-local" value={form.effectiveAt} onChange={e=>update('effectiveAt',e.target.value)}/></label><label>{t.expires}<input required type="datetime-local" value={form.expiresAt} onChange={e=>update('expiresAt',e.target.value)}/></label></div><label className="emc-confirm"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/><span>{t.proposalConfirm}</span></label><button type="submit" disabled={busy||!confirmed}>{t.propose}</button></form>;
+}
+
+function TemplateActions({template,busy,run,provider,t}:{template:TemplateApprovalProjection;busy:boolean;run:(task:()=>Promise<unknown>)=>Promise<void>;provider:EnterpriseMemberCommissioningProvider;t:EnterpriseMemberCommissioningCopy}){
+ const [approvalKind,setApprovalKind]=useState<'legal'|'customer'>('legal'),[receipt,setReceipt]=useState(''),[approvalDigest,setApprovalDigest]=useState(''),[approvalConfirm,setApprovalConfirm]=useState(false),[stateConfirm,setStateConfirm]=useState(false),[reason,setReason]=useState(''),[requestId,setRequestId]=useState(''),[composition,setComposition]=useState(''),[channel,setChannel]=useState<'email'|'sms'|'push'>('email'),[dryConfirm,setDryConfirm]=useState(false),[eventText,setEventText]=useState(''),[jhccConfirm,setJhccConfirm]=useState(false);
+ const approvalCommand=useRef(newCommissioningCommandId()),stateCommand=useRef(newCommissioningCommandId()),dryCommand=useRef(newCommissioningCommandId()),jhccCommand=useRef(newCommissioningCommandId());
+ const act=(task:()=>Promise<unknown>,clear:()=>void)=>{void run(task);clear()};
+ return <div className="emc-actions">
+  <section className="emc-card"><h4>{t.approvals}</h4><div className="emc-grid"><label>{t.approvalKind}<select value={approvalKind} onChange={e=>setApprovalKind(e.target.value as 'legal'|'customer')}><option value="legal">{t.legal}</option><option value="customer">{t.customer}</option></select></label><label>{t.externalReceipt}<input maxLength={128} value={receipt} onChange={e=>setReceipt(e.target.value)}/></label><label>{t.approvalDigest}<input maxLength={256} value={approvalDigest} onChange={e=>setApprovalDigest(e.target.value)}/></label></div><label className="emc-confirm"><input type="checkbox" checked={approvalConfirm} onChange={e=>setApprovalConfirm(e.target.checked)}/><span>{t.approvalConfirm}</span></label><button type="button" disabled={busy||!approvalConfirm||!receipt||!approvalDigest} onClick={()=>act(()=>provider.recordApproval({commandId:approvalCommand.current,templateApprovalId:template.templateApprovalId,expectedVersion:template.version,approvalKind,approvalReceiptRef:receipt,approvalDigest}),()=>{setApprovalConfirm(false);approvalCommand.current=newCommissioningCommandId()})}>{t.recordApproval}</button></section>
+  <section className="emc-card"><h4>{t.actions}</h4><label>{t.reason}<input maxLength={256} value={reason} onChange={e=>setReason(e.target.value)}/></label><label className="emc-confirm"><input type="checkbox" checked={stateConfirm} onChange={e=>setStateConfirm(e.target.checked)}/><span>{t.stateConfirm}</span></label><div className="emc-button-row"><button type="button" disabled={busy||!stateConfirm||!template.legalApproved||!template.customerApproved} onClick={()=>act(()=>provider.activate({commandId:stateCommand.current,templateApprovalId:template.templateApprovalId,expectedVersion:template.version}),()=>{setStateConfirm(false);stateCommand.current=newCommissioningCommandId()})}>{t.activate}</button><button type="button" disabled={busy||!stateConfirm||!reason} onClick={()=>act(()=>provider.reject({commandId:stateCommand.current,templateApprovalId:template.templateApprovalId,expectedVersion:template.version,reason,policyVersion:template.policyVersion}),()=>{setStateConfirm(false);stateCommand.current=newCommissioningCommandId()})}>{t.rejectAction}</button><button type="button" disabled={busy||!stateConfirm||!reason||template.status!=='active'} onClick={()=>act(()=>provider.retire({commandId:stateCommand.current,templateApprovalId:template.templateApprovalId,expectedVersion:template.version,reason,policyVersion:template.policyVersion}),()=>{setStateConfirm(false);stateCommand.current=newCommissioningCommandId()})}>{t.retireAction}</button></div><p>{t.incompleteApproval}</p></section>
+  <section className="emc-card"><h4>{t.providerAudit}</h4><p>{t.providerNotCommissioned}</p><div className="emc-grid"><label>{t.requestId}<input maxLength={128} value={requestId} onChange={e=>setRequestId(e.target.value)}/></label><label>{t.compositionId}<input maxLength={128} value={composition} onChange={e=>setComposition(e.target.value)}/></label><label>{t.channel}<select value={channel} onChange={e=>setChannel(e.target.value as typeof channel)}><option value="email">{t.email}</option><option value="sms">{t.sms}</option><option value="push">{t.push}</option></select></label></div><label className="emc-confirm"><input type="checkbox" checked={dryConfirm} onChange={e=>setDryConfirm(e.target.checked)}/><span>{t.dryRunConfirm}</span></label><button type="button" disabled={busy||!dryConfirm||!requestId||!composition} onClick={()=>act(()=>provider.dryRun({commandId:dryCommand.current,templateApprovalId:template.templateApprovalId,expectedVersion:template.version,requestId,providerCompositionId:composition,channel}),()=>{setDryConfirm(false);dryCommand.current=newCommissioningCommandId()})}>{t.runDryRun}</button></section>
+  <section className="emc-card"><h4>{t.jhcc}</h4><label>{t.eventIds}<textarea maxLength={4096} value={eventText} onChange={e=>setEventText(e.target.value)}/></label><label className="emc-confirm"><input type="checkbox" checked={jhccConfirm} onChange={e=>setJhccConfirm(e.target.checked)}/><span>{t.jhccConfirm}</span></label><button type="button" disabled={busy||!jhccConfirm||!listIds(eventText).length} onClick={()=>act(()=>provider.validateJhcc({commandId:jhccCommand.current,eventIds:listIds(eventText),expectedSchemaVersion:'golfriend.admin.operations-report.v1'}),()=>{setJhccConfirm(false);jhccCommand.current=newCommissioningCommandId()})}>{t.validateJhcc}</button><p>{t.jhccNotCommissioned}</p></section>
+ </div>;
+}
+
+function BoundarySummary({snapshot,t}:{snapshot:CommissioningSnapshot|null;t:EnterpriseMemberCommissioningCopy}){return <section className="emc-boundaries"><h4>{t.boundaries}</h4><ul><li>{t.legalTextNotStored}</li><li>{t.providerNotConfigured}</li><li>{t.jhccNotConfigured}</li><li>{t.notificationsNotSent}</li><li>{t.economyUnchanged}</li></ul><h4>{t.history}</h4>{snapshot?.commissioningReceipts.length?<ol>{snapshot.commissioningReceipts.map(item=><li key={item.receiptId}><code>{item.receiptId}</code> · {item.action} · {item.createdAt||t.none} <strong>{item.immutable?'immutable':''}</strong></li>)}</ol>:<p>{t.historyUnavailable}</p>}</section>}

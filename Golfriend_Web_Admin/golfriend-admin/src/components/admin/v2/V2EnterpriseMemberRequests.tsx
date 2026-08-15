@@ -4,6 +4,7 @@ import {ENTERPRISE_MEMBER_ADMIN_COPY} from '../../../i18n/admin/enterpriseMember
 import {firebaseEnterpriseMemberAdminProvider,newAdminCommandId,type AdminMemberDecision,type EnterpriseMemberAdminProvider,type MemberRequestDetail,type MemberRequestProjection} from './enterpriseMemberRequestsProvider';
 import './V2EnterpriseMemberRequests.css';
 import {useDialogFocus} from './useDialogFocus';
+import EnterpriseMemberCommissioningPanel from './EnterpriseMemberCommissioningPanel';
 
 const decisions:AdminMemberDecision[]=['approve_delivery','request_correction','reject','mark_duplicate','link_existing','escalate_identity_consent','cancel_before_delivery'];
 const decisionKey:Record<AdminMemberDecision,'approveDelivery'|'requestCorrection'|'reject'|'duplicate'|'linkExisting'|'escalate'|'cancelDelivery'>={approve_delivery:'approveDelivery',request_correction:'requestCorrection',reject:'reject',mark_duplicate:'duplicate',link_existing:'linkExisting',escalate_identity_consent:'escalate',cancel_before_delivery:'cancelDelivery'};
@@ -22,7 +23,7 @@ export default function V2EnterpriseMemberRequests({provider=firebaseEnterpriseM
   <div role="status" aria-live="polite">{state==='loading'&&t.loading}{notice}</div>{['error','offline','stale'].includes(state)&&<div role="alert"><p>{state==='offline'?t.offline:state==='stale'?t.stale:t.unavailable}</p><button onClick={()=>void load()}>{t.retry}</button></div>}{state==='ready'&&rows.length===0&&<p>{t.empty}</p>}
   {state==='ready'&&rows.length>0&&<div className="emr-table-scroll" tabIndex={0} aria-label={t.title}><table><thead><tr><th scope="col">{t.organization}</th><th scope="col">{t.course}</th><th scope="col">{t.action}</th><th scope="col">{t.status}</th><th scope="col">{t.locale}</th><th scope="col"><span className="emr-sr">{t.details}</span></th></tr></thead><tbody>{rows.map(row=><tr key={row.requestId}><td>{row.organizationLabel}<small>{row.organizationId}</small></td><td>{row.courseLabel}<small>{row.courseId}</small></td><td>{row.action}</td><td><span className="emr-pill">{row.status}</span></td><td>{row.locale}</td><td><button type="button" onClick={()=>void open(row)}>{t.select}</button></td></tr>)}</tbody></table></div>}
   <nav className="emr-pages" aria-label="Pagination"><button disabled={!cursors.length} onClick={()=>{const history=[...cursors],prior=history.pop();setCursors(history);setCursor(prior)}}>{t.previous}</button><button disabled={!next} onClick={()=>{setCursors(items=>[...items,cursor]);setCursor(next)}}>{t.next}</button></nav>
-  {selected&&<RequestDetail detail={selected} busy={busy} close={()=>setSelected(null)} run={run} provider={provider}/>}</section>
+  {selected&&<RequestDetail detail={selected} busy={busy} close={()=>setSelected(null)} run={run} provider={provider}/>}<EnterpriseMemberCommissioningPanel /></section>
 }
 
 function RequestDetail({detail,busy,close,run,provider}:{detail:MemberRequestDetail;busy:boolean;close:()=>void;run:(task:()=>Promise<unknown>)=>Promise<void>;provider:EnterpriseMemberAdminProvider}){

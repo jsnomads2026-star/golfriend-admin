@@ -61,6 +61,7 @@
     "verify:enterprise-course-member-ui": "node scripts/enterprise-course-member-ui-verify.mjs",
     "verify:enterprise-course-member-management-ui": "node scripts/enterprise-course-member-management-ui-verify.mjs",
     "verify:enterprise-member-admin-ui": "node scripts/enterprise-member-admin-ui-verify.mjs",
+    "verify:enterprise-member-commissioning-ui": "node scripts/enterprise-member-commissioning-ui-verify.mjs",
     "verify:enterprise-operations-producer": "node scripts/enterprise-operations-producer-verify.mjs",
     "verify:partner-activation": "node scripts/partner-activation-verify.mjs && node scripts/partner-claim-review-verify.mjs",
     "verify:partner-availability": "node scripts/partner-availability-verify.mjs",
