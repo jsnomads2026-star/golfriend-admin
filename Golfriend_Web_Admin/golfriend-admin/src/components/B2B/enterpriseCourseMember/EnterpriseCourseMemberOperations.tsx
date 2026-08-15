@@ -6,6 +6,7 @@ import {ENTERPRISE_AUTHORITY_COPY,ENTERPRISE_AUTHORITY_LOCALES,type EnterpriseAu
 import {useLocale} from "../../../i18n/hooks";
 import EnterpriseCourseProfileOperations from "../enterpriseCourseProfile/EnterpriseCourseProfileOperations";
 import EnterpriseMemberLinking from "../enterpriseMemberLinking/EnterpriseMemberLinking";
+import EnterpriseCourseMemberManagement from "../enterpriseCourseMembers/EnterpriseCourseMemberManagement";
 
 export default function EnterpriseCourseMemberOperations(){
   const locale=useLocale() as EnterpriseAuthorityLocale;
@@ -33,5 +34,6 @@ export default function EnterpriseCourseMemberOperations(){
     </fieldset>
     <EnterpriseCourseProfileOperations context={context}/>
     <EnterpriseMemberLinking/>
+    <EnterpriseCourseMemberManagement/>
   </div>;
 }

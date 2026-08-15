@@ -4,6 +4,7 @@ import{ENTERPRISE_ONBOARDING_COPY,ENTERPRISE_ONBOARDING_LOCALES,type EnterpriseO
 import{organizationAuthorityService}from"./enterprise/organizationAuthorityService";
 import{courseProfileOperationsService}from"./enterprise/courseProfileOperationsService";
 import{createCommandId,enterpriseCourseOnboardingService,type AgreementPresentation,type Context,type CourseOnboardingDraft,type OnboardingProjection}from"./verifiedCourseOnboardingService";
+import EnterpriseCourseMemberManagement from"./enterpriseCourseMembers/EnterpriseCourseMemberManagement";
 
 const blank=(locale:string):CourseOnboardingDraft=>({context:{membershipId:"",organizationId:"",propertyId:"",courseId:""},organizationRequest:{legalName:"",registrationNumber:"",jurisdiction:"",displayName:""},propertyRequest:{displayName:"",address:""},courseRequest:{canonicalCourseId:"",displayName:"",address:"",website:""},representative:{fullName:"",jobTitle:"",authorityDeclaration:false,businessEmail:"",phone:"",preferredLanguage:locale},profile:{description:"",holes:"",timezone:"",facilities:"",accessibility:"",courseProfileAttemptId:""},disclosures:{dataUse:false,memberManagement:false,tournamentManagement:false,bookingCommission:false},requestedTrialDays:30,trialOfferId:""});
 const locked=new Set(["submitted","under_review","approved_for_trial","trial_active","trial_expiring","trial_expired","conversion_review","active_partner","declined","suspended","withdrawn"]);
@@ -41,6 +42,7 @@ export default function VerifiedCourseOnboarding(){
   <div><button style={{minHeight:48}} disabled={disabled||!view?.agreementAcceptance||!allDisclosed} onClick={()=>void run("submit",()=>enterpriseCourseOnboardingService.submit(draft.context,view?.version??0,command("submit")))}>{t.submit}</button><button style={{minHeight:48}} disabled={busy||["withdrawn","active_partner"].includes(status)} onClick={()=>void run("withdraw",()=>enterpriseCourseOnboardingService.withdraw(draft.context,view?.version??0,command("withdraw")))}>{t.withdraw}</button></div>
   {view?.review&&<section><h3>{t.adminReview}</h3><p>{view.review.referenceId}</p><ul>{view.review.requirements.map(x=><li key={x}>{x}</li>)}</ul><p>{t.adminHandoff}</p></section>}
   {view?.trial&&<section><h3>{t.trial}</h3><p>{view.trial.status} · {view.trial.durationDays} {t.days}</p><p>{view.trial.startsAt??t.activationPending} — {view.trial.endsAt??t.activationPending}</p></section>}
+  {view?.trial&&["active","trial_active","trial_expiring"].includes(view.trial.status)&&<EnterpriseCourseMemberManagement/>}
   {view?.auditReceipts?.length?<section><h3>{t.receipts}</h3><ol>{view.auditReceipts.map(x=><li key={x.receiptId}>{x.kind} · {x.receiptId}</li>)}</ol></section>:null}
   {notice&&<p role={notice===t.saved?"status":"alert"} aria-live="assertive">{notice}</p>}
  </section>;

@@ -59,6 +59,7 @@
     "test:enterprise-course-profile": "node --test src/components/B2B/enterprise/courseProfileOperationsModel.test.ts",
     "test:enterprise-member-linking": "node --test src/components/B2B/enterprise/memberLinkingModel.test.ts",
     "verify:enterprise-course-member-ui": "node scripts/enterprise-course-member-ui-verify.mjs",
+    "verify:enterprise-course-member-management-ui": "node scripts/enterprise-course-member-management-ui-verify.mjs",
     "verify:enterprise-operations-producer": "node scripts/enterprise-operations-producer-verify.mjs",
     "verify:partner-activation": "node scripts/partner-activation-verify.mjs && node scripts/partner-claim-review-verify.mjs",
     "verify:partner-availability": "node scripts/partner-availability-verify.mjs",
