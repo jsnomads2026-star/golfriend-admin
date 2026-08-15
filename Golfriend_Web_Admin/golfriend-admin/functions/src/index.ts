@@ -8,7 +8,7 @@ import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
 import { runSyncCoursesFromProviderPreview } from "./courseSyncPreview.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
-import { isActiveStaff, isActiveDirector } from "./authority.js";
+import { isActiveStaff, isActiveDirector, isCanonicalAdminRole, CANONICAL_ADMIN_ROLES } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDecision, type SubmissionStatus } from "./partnerIntakeLogic.js";
@@ -220,6 +220,15 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
       throw new HttpsError('permission-denied', 'Only the Director can hire staff.');
     }
 
+    // The registry closed the READ path. Without this it stays open on the WRITE path:
+    // hiring with a non-canonical role silently mints an account that passes every write
+    // and fails every read — a permanently locked-out staff member, reported as success
+    // with a temporary password.
+    const hiredRole = typeof role === 'string' ? role.trim() : '';
+    if (!isCanonicalAdminRole(hiredRole)) {
+      throw new HttpsError('invalid-argument', `Role must be one of: ${CANONICAL_ADMIN_ROLES.join(', ')}.`);
+    }
+
     // 3. Generate a secure temporary password (e.g., Golfriend-123456!)
     const tempPassword = `Golfriend-${Math.floor(100000 + Math.random() * 900000)}!`;
 
@@ -236,7 +245,7 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
       name: displayName,
       // Trimmed: isActiveDirector matches the role EXACTLY, so a stray space would make
       // someone hired as a Director silently not one, with no error at hire time.
-      role: typeof role === 'string' ? role.trim() : role,
+      role: hiredRole,
       status: 'Active',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: callerUid

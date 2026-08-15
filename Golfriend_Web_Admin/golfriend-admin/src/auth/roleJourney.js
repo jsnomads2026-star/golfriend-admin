@@ -11,7 +11,7 @@
  * functions/src/authority.ts; scripts/admin-authority-matrix-verify.mjs asserts the two
  * agree on every input, so a divergence is a gate failure rather than a support ticket.
  */
-export const ACTIVE_ADMIN_STATUSES = ['active'];
+export const ACTIVE_ADMIN_STATUSES = Object.freeze(['active']);
 
 /** The one status that means an active commercial partnership, normalized. */
 export const ACTIVE_PARTNER_STATUS = 'active_partner';
@@ -24,8 +24,11 @@ export const ACTIVE_PARTNER_STATUS = 'active_partner';
  * from the partner_memberships vocabulary, which is a different principal class.
  */
 export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
-export const CANONICAL_ADMIN_ROLES = ['Director', 'Manager', 'Support'];
-export const OBSOLETE_ADMIN_ROLES = [];
+// FROZEN, like the server's. An unfrozen twin can be pushed to at runtime, after which the
+// client authorizes a role the server refuses — the "admin shell whose every action fails"
+// outcome the contract exists to prevent.
+export const CANONICAL_ADMIN_ROLES = Object.freeze(['Director', 'Manager', 'Support']);
+export const OBSOLETE_ADMIN_ROLES = Object.freeze([]);
 
 /** EXACT match. Case-folding or trimming here would widen authority, not harden it. */
 export function isCanonicalAdminRole(value) {

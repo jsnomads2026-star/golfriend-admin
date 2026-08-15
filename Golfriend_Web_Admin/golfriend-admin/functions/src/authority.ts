@@ -123,6 +123,11 @@ export function isActiveStaff(adminDoc: AdminUserDoc | null | undefined): boolea
   if (Array.isArray(adminDoc)) return false;                     // malformed type → deny
 
   // STATUS FIRST. A valid role must never be able to rescue an inactive account.
+  // OWN properties only. An inherited `status` or `role` — from prototype pollution, or
+  // from any object that is not a plain Firestore snapshot — otherwise satisfies these
+  // checks. classifyRole in the migration tool already guarded this way; the predicate
+  // was the weaker of the two.
+  if (!Object.prototype.hasOwnProperty.call(adminDoc, 'status')) return false;
   const status = normalizeStaffStatus(adminDoc.status);
   if (status === null) return false;                             // blank/absent/malformed → deny
   if (adminDoc.status === 'Suspended') return false;             // suspended → deny (explicit)
@@ -130,6 +135,7 @@ export function isActiveStaff(adminDoc: AdminUserDoc | null | undefined): boolea
   if (ACTIVE_STAFF_STATUSES.indexOf(status) === -1) return false;   // anything unrecognized → deny
 
   // ROLE SECOND, and only as a separate question: is a CANONICAL role assigned?
+  if (!Object.prototype.hasOwnProperty.call(adminDoc, 'role')) return false;
   if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false; // no role → deny
   // An unrecognized role is not a role. Accepting any non-empty string meant a principal
   // hired as 'intern' passed every privileged gate in the system.

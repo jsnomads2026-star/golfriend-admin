@@ -86,6 +86,11 @@ const LEDGER = [
 
 // ---- 1. EVERY "EXECUTED" CLAIM RESOLVES TO A REAL TARGET ----------------------------
 const unresolved = [];
+const runnerTextCache = new Map();
+const readRunner = (runner) => {
+  if (!runnerTextCache.has(runner)) runnerTextCache.set(runner, readFileSync(resolve(ROOT, runner), 'utf8'));
+  return runnerTextCache.get(runner);
+};
 for (const entry of LEDGER) {
   if (entry.status === 'specification') {
     assert.ok(entry.reason && entry.reason.length > 40, `${entry.group} is specification-only but gives no reason`);
@@ -94,6 +99,7 @@ for (const entry of LEDGER) {
   }
   assert.ok(entry.targets && entry.targets.length > 0, `${entry.group} claims execution with no target`);
   assert.ok(entry.runner && existsSync(resolve(ROOT, entry.runner)), `${entry.group} names a runner that does not exist`);
+  const runnerText = readRunner(entry.runner);
   for (const target of entry.targets) {
     const full = resolve(ROOT, target.module);
     if (!existsSync(full)) { unresolved.push(`${entry.group} → ${target.module} does not exist`); continue; }
@@ -102,7 +108,14 @@ for (const entry of LEDGER) {
     const source = readFileSync(full, 'utf8');
     for (const name of target.exports) {
       const present = new RegExp(`(export (async )?function ${name}\\b|export const ${name}\\b|exports\\.${name}\\s*=)`).test(source);
-      if (!present) unresolved.push(`${entry.group} → ${target.module} does not export ${name}`);
+      if (!present) { unresolved.push(`${entry.group} → ${target.module} does not export ${name}`); continue; }
+      // RESOLVABLE IS NOT EXECUTED. The original check confirmed the export existed and
+      // stopped there, so a group could be relabelled 'executed' by pointing it at any real
+      // module — which is exactly the false claim this gate was written to prevent. The
+      // named export must actually appear in the runner that claims to drive it.
+      if (!runnerText.includes(name)) {
+        unresolved.push(`${entry.group} claims ${target.module}.${name} but ${entry.runner} never invokes it`);
+      }
     }
   }
 }

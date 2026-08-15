@@ -140,7 +140,12 @@ export function analyze(records) {
     const deliberatelyInactive = verdict.startsWith('inactive_');
     if (!authorized && !deliberatelyInactive) {
       counts.would_lose_access += 1;
-      const isPrivileged = roleVerdict === 'canonical_role' || roleVerdict === 'non_canonical_spelling';
+      // A record carrying ANY role is a staff record. Counting only canonical and
+      // near-miss roles excluded unknown_role and obsolete_role — exactly the population
+      // the role registry newly denies — so the tool green-lit an activation that would
+      // strip access from real staff while blocking on a mere typo.
+      const isPrivileged = ['canonical_role', 'non_canonical_spelling', 'unknown_role', 'obsolete_role']
+        .includes(roleVerdict);
       if (isPrivileged) privilegedNonConforming += 1;
       repairs.push({
         ref: shortRef(uid),

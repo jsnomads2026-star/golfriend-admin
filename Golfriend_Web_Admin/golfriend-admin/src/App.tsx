@@ -137,8 +137,13 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         } else {
           // Partner: b2b_partners keyed by uid or email (retry for webhook buffer).
           let partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.uid));
+          // The ADDRESS fallback requires a VERIFIED address. b2b_partners is email-keyed
+          // during the webhook-buffer window, so without this, registering a partner's
+          // address renders their tier, contract and credits. A privileged READ is
+          // authority too — the server refusing the writes does not make the disclosure
+          // acceptable. The uid lookup above is unaffected.
           let retries = 3;
-          while (!partnerDoc.exists() && retries > 0 && currentUser.email) {
+          while (!partnerDoc.exists() && retries > 0 && currentUser.email && currentUser.emailVerified) {
             partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.email));
             if (!partnerDoc.exists()) {
               const cap = currentUser.email.charAt(0).toUpperCase() + currentUser.email.slice(1);

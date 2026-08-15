@@ -75,7 +75,19 @@ for (const identity of world.identities) {
   }
 }
 assert.deepEqual(identityFailures, [], `IDENTITY VERDICT MISMATCHES:\n  ${identityFailures.join('\n  ')}`);
-ok(`${world.identities.length} identities: server predicate and client journey both match the fixture verdicts`);
+// The client's own PREDICATE, not only its journey. These three were claimed by the
+// coverage ledger and never actually invoked — the invocation check in
+// verify:coverage-honesty caught it, which is what that gate is for.
+for (const identity of world.identities) {
+  if (identity.adminDoc === null) continue;
+  const clientPredicate = journey.isActiveAdminDoc(identity.adminDoc);
+  assertions += 1;
+  if (clientPredicate !== identity.expect.staff) {
+    identityFailures.push(`${identity.principalId}: client isActiveAdminDoc says ${clientPredicate}, fixture expects ${identity.expect.staff}`);
+  }
+}
+assert.deepEqual(identityFailures, [], `CLIENT PREDICATE MISMATCHES:\n  ${identityFailures.join('\n  ')}`);
+ok(`${world.identities.length} identities: server predicate, client predicate and client journey all match the fixture verdicts`);
 
 // ---- 2. EMAIL IS NEVER AUTHORITATIVE -------------------------------------------------
 // The collision group shares one address across distinct principals with different
@@ -94,6 +106,12 @@ ok(`${collisionGroup.length} principals share one address with distinct authorit
 const migrationFailures = [];
 for (const record of world.legacyStatusRecords) {
   const classification = migration.classify(record.data);
+  // Role classification too: after the registry closed the vocabulary, a record can have a
+  // perfect status and still lose access because of its ROLE, and the repair differs.
+  const roleVerdict = migration.classifyRole(record.data);
+  if (record.authorizes && roleVerdict !== 'canonical_role') {
+    migrationFailures.push(record.principalId + ": authorizes but role classifies as " + roleVerdict);
+  }
   const authorizes = migration.wouldAuthorize(record.data);
   assertions += 2;
   if (classification !== record.classification) {
@@ -256,6 +274,13 @@ assert.deepEqual(lifecycleFailures, [], `LIFECYCLE MISMATCHES:\n  ${lifecycleFai
   ), true, 'going offline does not trigger content disposal');
   assertions += 4;
 }
+  // Intent retirement: only an AUTHORITATIVE outcome retires an id. A transport failure
+  // must not, or the retry mints a new id and the command applies twice.
+  assert.equal(intent.isAuthoritativeOutcome({ applied: true, code: null }), true);
+  assert.equal(intent.isAuthoritativeOutcome({ applied: false, code: 'separation_of_duties' }), true);
+  assert.equal(intent.isAuthoritativeOutcome({ applied: false, code: 'internal_error' }), false);
+  assert.equal(intent.isAuthoritativeOutcome(null), false);
+  assertions += 4;
 ok(`${world.lifecycleScenarios.length} lifecycle scenarios; offline-while-in-flight disposes private content AND preserves the command identity`);
 
 // ---- 6. ORGANIZATION SCENARIOS AGAINST THE REAL PORTAL RUNTIME ----------------------

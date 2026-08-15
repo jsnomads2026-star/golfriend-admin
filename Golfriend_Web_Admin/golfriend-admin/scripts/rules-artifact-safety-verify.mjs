@@ -96,6 +96,38 @@ export function evaluateRuleset(source, { name = 'candidate' } = {}) {
   if (indirect.length) {
     reasons.push(`delegates a condition to a helper function (${indirect.length} occurrence(s)); this evaluator cannot judge it and refuses rather than guessing`);
   }
+  // Collections whose contents ARE the authority. A client that can write admin_users can
+  // promote itself to Director, which defeats the role registry entirely — the registry
+  // validates the value, not who wrote it. Coverage alone was the only requirement here.
+  const CLIENT_WRITE_FORBIDDEN = [
+    'admin_users', 'b2b_partners', 'partner_organizations', 'partner_memberships',
+    'partner_identity_bindings', 'partner_course_claims', 'partner_authority_audits',
+    'course_operators', 'availability_audits',
+  ];
+  const blockFor = (collection) => {
+    const marker = `/${collection}/`;
+    const at = stripped.indexOf(marker);
+    if (at === -1) return null;
+    const rest = stripped.slice(at);
+    // Stop at the next SIBLING match; a NESTED match stays inside the block so a nested
+    // grant cannot hide behind the parent's denial.
+    let depth = 0;
+    let end = rest.length;
+    for (let i = 0; i < rest.length; i += 1) {
+      if (rest[i] === '{') depth += 1;
+      else if (rest[i] === '}') { depth -= 1; if (depth <= 0) { end = i + 1; break; } }
+    }
+    return rest.slice(0, end);
+  };
+  for (const collection of CLIENT_WRITE_FORBIDDEN) {
+    const block = blockFor(collection);
+    if (block === null) continue; // coverage is reported separately
+    const writeGrants = (block.match(/allow[^;]*\bwrite\b[^;]*;|allow[^;]*\b(create|update|delete)\b[^;]*;/g) || [])
+      .filter((statement) => !/if\s+false\s*;?\s*$/.test(statement));
+    if (writeGrants.length) {
+      reasons.push(`grants client WRITE on ${collection}, whose contents are the authority itself: ${writeGrants[0].trim().slice(0, 70)}`);
+    }
+  }
   // Every Admin-SDK-only collection must be denied outright.
   for (const collection of ADMIN_SDK_ONLY) {
     // Scoped to THIS collection's OWN match block, by splitting rather than by a regex
@@ -119,6 +151,15 @@ export function evaluateRuleset(source, { name = 'candidate' } = {}) {
       && /allow\s+write\s*:\s*if\s+false/.test(block);
     if (!combinedDeny && !separateDeny) {
       reasons.push(`does not deny direct client access to ${collection}`);
+    }
+    // A denial proves nothing if a grant sits beside it: Firestore ORs allow statements
+    // together, so `allow read, write: if false; allow list: if request.auth != null;`
+    // is an open collection with a decorative denial in front of it.
+    const scoped = blockFor(collection) || block;
+    const additive = (scoped.match(/allow[^;]*;/g) || [])
+      .filter((statement) => !/if\s+false\s*;?\s*$/.test(statement));
+    if (additive.length) {
+      reasons.push(`denies ${collection} but also grants: ${additive[0].trim().slice(0, 70)}`);
     }
   }
   void name;
