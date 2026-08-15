@@ -15,7 +15,7 @@
 //   • --rollback removes exactly the fixtures this tool creates (deterministic
 //     uids), with the same dry-run/apply safety.
 //   • Validates every value against the server authority contracts
-//     (isActiveStaff: role non-empty + status != 'Suspended'; partner:
+//     (isActiveStaff: role non-empty + status allowlisted as Active; partner:
 //     status === 'active_partner').
 //
 // NO self-registration and NO partner-status self-assignment: this is an
@@ -81,7 +81,7 @@ function validate() {
   if (APPLY && !EMULATOR && !PROJECT) errors.push('Real --apply requires --project=<id> (or use --emulator).');
   if (APPLY && PROJECT && !UNDERSTAND_REAL) errors.push('Real project --apply requires --i-understand-real (creates real accounts — currently gated by issue #21; do not run yet).');
   // Contract validation: the docs must satisfy server authority.
-  if (!FIXTURES.staff.doc.role || FIXTURES.staff.doc.status === 'Suspended') errors.push('Staff fixture violates isActiveStaff (needs non-empty role + status != Suspended).');
+  if (!FIXTURES.staff.doc.role || !['active'].includes(String(FIXTURES.staff.doc.status ?? '').normalize('NFC').trim().toLowerCase())) errors.push('Staff fixture violates isActiveStaff (needs non-empty role + status Active).');
   if (FIXTURES.partner.doc.status !== 'active_partner') errors.push('Partner fixture must have status "active_partner".');
   return errors;
 }

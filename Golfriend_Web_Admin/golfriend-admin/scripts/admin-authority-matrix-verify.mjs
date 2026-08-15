@@ -20,7 +20,7 @@
 // ==========================================
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
 
@@ -131,19 +131,39 @@ ok('no partner tier, course representative or member document can reach admin au
 // This is what actually failed before: the shared predicate was correct-ish, and three
 // callables ignored it and compared fields themselves.
 const stripComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-const SOURCES = ['index.ts', 'courseIngestion.ts', 'outreachStore.ts', 'outreachAuthority.ts'];
+// The previous version scanned four server files for four literal spellings — a
+// regression grep, not a control. It missed a live offender in client code, where a
+// suspended Director kept elevated data access. Both trees are scanned now, and the
+// pattern matches ANY comparison of an admin role/status rather than four known forms.
+const scanTargets = [];
+const collect = (dir) => {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) { collect(full); continue; }
+    if (/\.(ts|tsx|js|jsx)$/.test(entry.name) && !/\.test\.|\.d\.ts$/.test(entry.name)) scanTargets.push(full);
+  }
+};
+collect(resolve(FUNCTIONS, 'src'));
+collect(resolve(ROOT, 'src'));
 const offenders = [];
-for (const file of SOURCES) {
-  const full = resolve(FUNCTIONS, 'src', file);
-  if (!existsSync(full)) continue;
+for (const full of scanTargets) {
+  // roleJourney.js and authority.ts ARE the shared definition; they are allowed to compare.
+  if (/roleJourney\.js$|authority\.ts$/.test(full)) continue;
   const code = stripComments(readFileSync(full, 'utf8'));
   // An inline comparison of an admin_users role or status is an authority decision made
   // outside the shared predicate.
+  // Any comparison of a .role or .status read off a document, in any spelling — with or
+  // without optional chaining — AGAINST THE ADMIN VOCABULARY. Scoping to that vocabulary
+  // matters: b2b_partners carries its own `status === 'active_partner'` checks, which are
+  // partner authority and are not this predicate's business. Flagging those would force
+  // the next person to weaken the gate to get a green run.
+  const ADMIN_LITERALS = 'Director|Manager|Support|Active|Suspended|Inactive|Deactivated';
   const patterns = [
-    /data\(\)\?\.role\s*[!=]==\s*['"]Director['"]/g,
-    /adminSnap\.data\(\)\?\.status\s*[!=]==\s*['"]Suspended['"]/g,
-    /callerDoc\.data\(\)\?\.status\s*[!=]==\s*['"]/g,
-    /adminUser\.data\(\)\?\.status\s*[!=]==\s*['"]/g,
+    new RegExp(`data\\(\\)\\s*\\??\\.?\\s*\\.?role\\s*[!=]==\\s*['"](${ADMIN_LITERALS})['"]`, 'g'),
+    new RegExp(`\\.data\\(\\)[?.\\s]*\\.status\\s*[!=]==\\s*['"](${ADMIN_LITERALS})['"]`, 'g'),
+    new RegExp(`adminDoc\\s*[?.\\s]*\\.\\s*status\\s*[!=]==\\s*['"](${ADMIN_LITERALS})['"]`, 'g'),
+    new RegExp(`adminData\\s*[?.\\s]*\\.\\s*role\\s*[!=]==\\s*['"](${ADMIN_LITERALS})['"]`, 'g'),
   ];
   for (const pattern of patterns) {
     for (const match of code.matchAll(pattern)) {
@@ -157,8 +177,10 @@ assert.deepEqual(offenders, [], `authority decided outside the shared predicate:
 const indexSource = readFileSync(resolve(FUNCTIONS, 'src/index.ts'), 'utf8');
 const adminReads = [...indexSource.matchAll(/collection\(['"]admin_users['"]\)\.doc\(([^)]*)\)\.get\(\)/g)].length;
 const predicateCalls = [...indexSource.matchAll(/isActive(Staff|Director)\s*\(/g)].length;
+// No slack. An earlier version allowed `>= adminReads - 1`, which left room for exactly
+// one read that decides authority by itself — the shape of the defect being fixed.
 assert.ok(
-  predicateCalls >= adminReads - 1,
+  predicateCalls >= adminReads,
   `${adminReads} admin_users reads but only ${predicateCalls} predicate calls — at least one read decides authority by itself`,
 );
 ok(`no inline authority decisions; ${adminReads} admin_users reads covered by ${predicateCalls} predicate calls`);
@@ -175,18 +197,21 @@ const authoritySource = readFileSync(resolve(FUNCTIONS, 'src/authority.ts'), 'ut
 // safety net ever becomes the only thing holding a case up, or a required guard stops
 // mattering, the classification breaks and this gate fails.
 const MUTATIONS = [
-  ['status normalization', 'required', /const normalized = value\.normalize\('NFC'\)\.trim\(\)\.toLowerCase\(\);/, 'const normalized = value;'],
-  ['active-state allowlist', 'required', /if \(ACTIVE_STAFF_STATUSES\.indexOf\(status\) === -1\) return false;.*/, ''],
-  ['role verification', 'required', /if \(typeof adminDoc\.role !== 'string' \|\| adminDoc\.role\.trim\(\) === ''\) return false;.*/, ''],
-  ['director role check', 'required', /return isActiveStaff\(adminDoc\) && adminDoc!\.role === 'Director';/, 'return isActiveStaff(adminDoc);'],
-  ['missing-document denial', 'required', /if \(!adminDoc \|\| typeof adminDoc !== 'object'\) return false;.*/, ''],
+  // Each entry declares the EXACT consequence of removing the guard. 'bypass' is the only
+  // classification that constitutes a security proof; 'lockout' and 'crash' are honest
+  // labels for guards that protect availability or robustness instead.
+  ['status normalization', 'lockout', /const normalized = value\.normalize\('NFC'\)\.trim\(\)\.toLowerCase\(\);/, 'const normalized = value;'],
+  ['active-state allowlist', 'bypass', /if \(ACTIVE_STAFF_STATUSES\.indexOf\(status\) === -1\) return false;.*/, ''],
+  ['role verification', 'bypass', /if \(typeof adminDoc\.role !== 'string' \|\| adminDoc\.role\.trim\(\) === ''\) return false;.*/, ''],
+  ['director role check', 'bypass', /return isActiveStaff\(adminDoc\) && adminDoc!\.role === 'Director';/, 'return isActiveStaff(adminDoc);'],
+  ['missing-document denial', 'crash', /if \(!adminDoc \|\| typeof adminDoc !== 'object'\) return false;.*/, ''],
   // Safety nets: the allowlist already refuses everything these refuse. They exist so the
   // refusal is explicit at the point a reader looks for it, and so widening the allowlist
   // later cannot silently re-admit a known-bad status.
-  ['known-inactive denial', 'redundant', /if \(KNOWN_INACTIVE_STATUSES\.indexOf\(status\) !== -1\) return false;.*/, ''],
-  ['blank/absent status denial', 'redundant', /if \(status === null\) return false;.*/, ''],
-  ['explicit Suspended denial', 'redundant', /if \(adminDoc\.status === 'Suspended'\) return false;.*/, ''],
-  ['array-type denial', 'redundant', /if \(Array\.isArray\(adminDoc\)\) return false;.*/, ''],
+  ['known-inactive denial', 'holds', /if \(KNOWN_INACTIVE_STATUSES\.indexOf\(status\) !== -1\) return false;.*/, ''],
+  ['blank/absent status denial', 'holds', /if \(status === null\) return false;.*/, ''],
+  ['explicit Suspended denial', 'holds', /if \(adminDoc\.status === 'Suspended'\) return false;.*/, ''],
+  ['array-type denial', 'holds', /if \(Array\.isArray\(adminDoc\)\) return false;.*/, ''],
 ];
 const runMatrixAgainst = (source) => {
   // Transpile the mutated TypeScript in memory and re-run the matrix against it.
@@ -199,6 +224,34 @@ const runMatrixAgainst = (source) => {
     .replace(/: boolean/g, '')
     .replace(/adminDoc!/g, 'adminDoc');
   return import(`data:text/javascript;base64,${Buffer.from(js, 'utf8').toString('base64')}`);
+};
+/**
+ * Returns WHY the matrix fails, not merely that it does. A blanket catch cannot tell
+ * "this guard stops a privilege escalation" from "this guard stops a TypeError" — and
+ * counting a crash-preventer as a security proof is exactly the kind of overclaim this
+ * harness exists to expose.
+ *   'holds'    — behaviour unchanged
+ *   'bypass'   — something that must be REFUSED was AUTHORIZED (a real escalation)
+ *   'lockout'  — something that must be AUTHORIZED was refused (availability, not security)
+ *   'crash'    — the module threw
+ */
+const matrixOutcome = async (mod) => {
+  try {
+    for (const status of AUTHORIZING) {
+      if (mod.isActiveStaff({ role: 'Support', status }) !== true) return 'lockout';
+    }
+    for (const status of REFUSING) {
+      if (mod.isActiveStaff({ role: 'Director', status }) !== false) return 'bypass';
+    }
+    if (mod.isActiveStaff({ role: 'Director' }) !== false) return 'bypass';
+    if (mod.isActiveStaff({ status: 'Active' }) !== false) return 'bypass';
+    if (mod.isActiveStaff(['Active']) !== false) return 'bypass';
+    if (mod.isActiveStaff(null) !== false) return 'bypass';
+    if (mod.isActiveStaff(undefined) !== false) return 'bypass';
+    if (mod.isActiveDirector({ role: 'Support', status: 'Active' }) !== false) return 'bypass';
+    if (mod.isActiveDirector(null) !== false) return 'bypass';
+    return 'holds';
+  } catch { return 'crash'; }
 };
 const matrixHolds = async (mod) => {
   try {
@@ -218,20 +271,20 @@ const matrixHolds = async (mod) => {
 };
 // The unmutated source must PASS, or every mutation below would "fail" for free.
 assert.equal(await matrixHolds(await runMatrixAgainst(authoritySource)), true, 'the matrix does not hold against the real source');
-let required = 0;
-let redundant = 0;
-for (const [label, classification, pattern, replacement] of MUTATIONS) {
+const tally = { bypass: 0, lockout: 0, crash: 0, holds: 0 };
+for (const [label, expected, pattern, replacement] of MUTATIONS) {
   const mutated = authoritySource.replace(pattern, replacement);
   assert.notEqual(mutated, authoritySource, `mutation '${label}' did not apply — the guard it targets has moved or gone`);
-  const stillHolds = await matrixHolds(await runMatrixAgainst(mutated));
-  if (classification === 'required') {
-    assert.equal(stillHolds, false, `'${label}' is declared REQUIRED but removing it changed nothing — it is decorative`);
-    required += 1;
-  } else {
-    assert.equal(stillHolds, true, `'${label}' is declared a REDUNDANT safety net but removing it broke the matrix — it is load-bearing and must be reclassified`);
-    redundant += 1;
-  }
+  const outcome = await matrixOutcome(await runMatrixAgainst(mutated));
+  assert.equal(
+    outcome, expected,
+    `'${label}' is declared '${expected}' but removing it produced '${outcome}'. ` +
+    `A guard whose real consequence differs from its declaration is either decorative or ` +
+    `mis-described; neither may be counted as a proof.`,
+  );
+  tally[outcome] += 1;
 }
-ok(`${required} guards proved load-bearing by mutation; ${redundant} proved to be the declared safety nets`);
+assert.ok(tally.bypass >= 3, 'fewer than three guards actually prevent a privilege escalation');
+ok(`mutation: ${tally.bypass} guards prevent a real BYPASS, ${tally.lockout} prevent a lockout, ${tally.crash} prevent a crash, ${tally.holds} are declared safety nets`);
 
 console.log(`\nAdmin authority matrix PASS: ${checks} checks (allowlist over ${AUTHORIZING.length + REFUSING.length} statuses, server/client agreement, no partner or member path to admin, no inline authority decisions, ${MUTATIONS.length} guards classified by mutation).`);

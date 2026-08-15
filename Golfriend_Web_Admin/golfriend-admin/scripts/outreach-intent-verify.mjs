@@ -43,16 +43,27 @@ const {
 } = intent;
 
 /** A storage double that also lets us simulate a browser restart. */
-const makeStore = () => {
+const makeStore = ({ enumerable = true, failWrites = false } = {}) => {
   const map = new Map();
-  return {
+  const store = {
     getItem: (k) => (map.has(k) ? map.get(k) : null),
-    setItem: (k, v) => map.set(k, v),
+    setItem: (k, v) => {
+      // Real sessionStorage throws on quota exhaustion and under some privacy settings.
+      if (failWrites) throw new Error('QuotaExceededError');
+      map.set(k, v);
+    },
     removeItem: (k) => map.delete(k),
     size: () => map.size,
     snapshot: () => new Map(map),
     restore: (snap) => { map.clear(); for (const [k, v] of snap) map.set(k, v); },
   };
+  // sessionStorage exposes `length` and `key(i)`; the double must too, or the prefix sweep
+  // in disposeAll cannot run and the test would "pass" against a sweep that never happens.
+  if (enumerable) {
+    Object.defineProperty(store, 'length', { get: () => map.size });
+    store.key = (index) => [...map.keys()][index] ?? null;
+  }
+  return store;
 };
 let seq = 0;
 const deterministic = () => `id${(seq += 1)}`;
@@ -63,31 +74,36 @@ const INTENT = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, 
 {
   const store = makeStore();
   const ledger = createIntentLedger(store, 'fp1', deterministic);
-  const first = ledger.begin(INTENT);
-  assert.equal(first.alreadyInFlight, false);
-  // A SECOND CLICK on the same intent is not a second command.
-  const second = ledger.begin(INTENT);
-  assert.equal(second.alreadyInFlight, true, 'a double-click was treated as a new command');
+  const first = ledger.reserve(INTENT);
+  assert.equal(ledger.markInFlight(INTENT), true, 'the first attempt must be allowed to send');
+  // A SECOND CLICK while the first is still awaiting a response is not a second command.
+  const second = ledger.reserve(INTENT);
   assert.equal(second.commandId, first.commandId, 'a double-click minted a different command id');
-  // A THIRD, and a fourth.
-  assert.equal(ledger.begin(INTENT).commandId, first.commandId);
-  assert.equal(ledger.pendingCount(), 1, 'one intent must produce exactly one pending command');
-  ok('double-click: one intent, one command id, single-flight');
+  assert.equal(ledger.markInFlight(INTENT), false, 'a double-click was allowed to send a second request');
+  assert.equal(ledger.markInFlight(INTENT), false);
+  assert.equal(ledger.reservedCount(), 1, 'one intent must hold exactly one command id');
+  ok('double-click: one intent, one command id, second send suppressed');
 }
 
 // ---- 2. A DIFFERENT INTENT IS A DIFFERENT COMMAND ----------------------------------
 {
   const store = makeStore();
   const ledger = createIntentLedger(store, 'fp1', deterministic);
-  const base = ledger.begin(INTENT);
+  const base = ledger.reserve(INTENT);
   const variants = [
     { ...INTENT, requestedState: 'rejected' },   // different decision
     { ...INTENT, expectedVersion: 4 },           // the draft moved underneath
     { ...INTENT, contentRef: 'Subject|EDITED' }, // the content changed
     { ...INTENT, draftId: 'd2' },                // a different draft
+    // Case-sensitive draft ids: Firestore ids are case-sensitive and the server accepts
+    // both cases, so D1 and d1 are different drafts and must not share a command id.
+    { ...INTENT, draftId: 'D1' },
+    // A delimiter inside a component must not let two intents collide. contentRef is built
+    // from free-text subject and body, so this is reachable, not theoretical.
+    { ...INTENT, requestedState: 'approved|3', contentRef: '' },
   ];
   for (const variant of variants) {
-    const other = ledger.begin(variant);
+    const other = ledger.reserve(variant);
     assert.notEqual(other.commandId, base.commandId, `a changed intent reused an id: ${JSON.stringify(variant)}`);
     assert.notEqual(intentKey(variant), intentKey(INTENT));
   }
@@ -101,46 +117,89 @@ const INTENT = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, 
     'legal_hold_unknown', 'not_admin', 'replay_payload_mismatch']) {
     assert.equal(isAuthoritativeOutcome({ applied: false, code }), true, code);
   }
-  // THE CRITICAL CASE: a transport failure is NOT authoritative. The write may have landed.
+  // A transport failure is NOT authoritative. The write may have landed.
   assert.equal(isAuthoritativeOutcome({ applied: false, code: 'internal_error' }), false,
     'a transport failure must not retire the intent — the retry would apply a second time');
   assert.equal(isAuthoritativeOutcome(null), false);
   assert.equal(isAuthoritativeOutcome({}), false);
   assert.equal(isAuthoritativeOutcome({ applied: false, code: null }), false);
 
+  // REGRESSION. An earlier version merged "has a reserved id" with "is in flight", so a
+  // failed attempt left the intent permanently in flight: every later retry was suppressed
+  // CLIENT-SIDE and never reached the server. The button went silently dead — the exact
+  // opposite of the retry-replays behaviour this module claims.
   const store = makeStore();
   const ledger = createIntentLedger(store, 'fp1', deterministic);
-  const attempt = ledger.begin(INTENT);
-  // Timeout: not authoritative, so the intent survives and the retry reuses the id.
+  const attempt = ledger.reserve(INTENT);
+  assert.equal(ledger.markInFlight(INTENT), true);
+  // ... the request fails in transport. The component always clears in-flight.
+  ledger.clearInFlight(INTENT);
   assert.equal(isAuthoritativeOutcome({ applied: false, code: 'internal_error' }), false);
-  assert.equal(ledger.isInFlight(INTENT), true);
+  // THE RETRY MUST BE ALLOWED TO SEND, and must carry the SAME id.
+  const retry = ledger.reserve(INTENT);
+  assert.equal(retry.commandId, attempt.commandId, 'the retry did not reuse the reserved id');
+  assert.equal(ledger.markInFlight(INTENT), true, 'THE RETRY WAS SUPPRESSED — the action is silently dead');
+  ledger.clearInFlight(INTENT);
+  // A third attempt too. The id survives until an authoritative outcome, not until the
+  // first failure.
+  assert.equal(ledger.reserve(INTENT).commandId, attempt.commandId);
+  assert.equal(ledger.markInFlight(INTENT), true);
+
   ledger.settle(INTENT);
   assert.equal(ledger.isInFlight(INTENT), false);
   assert.equal(store.size(), 0, 'a settled intent left storage behind');
-  // A brand-new attempt after settling is a genuinely new command.
-  assert.notEqual(ledger.begin(INTENT).commandId, attempt.commandId);
-  ok('only an authoritative outcome retires an intent; a timeout keeps it for retry');
+  assert.notEqual(ledger.reserve(INTENT).commandId, attempt.commandId, 'a settled intent must mint a fresh id');
+  ok('a failed attempt keeps the id AND allows the retry; only an authoritative outcome retires it');
+}
+
+// ---- 3b. A NON-DURABLE RESERVATION IS REPORTED, NOT SWALLOWED ----------------------
+// If the id cannot be persisted, it lives only in memory: a crash before the response
+// arrives mints a new id and the command can apply twice. That is a real loss of
+// idempotency, so it is surfaced rather than hidden behind a best-effort try/catch.
+{
+  const hostile = makeStore({ failWrites: true });
+  const ledger = createIntentLedger(hostile, 'fp1', deterministic);
+  const reservation = ledger.reserve(INTENT);
+  assert.equal(reservation.durable, false, 'a failed persist was reported as durable');
+  assert.match(reservation.commandId, /^cmd-/, 'the action must still work, just without crash-safety');
+  // The id is still stable WITHIN the session, so retries in this tab remain idempotent.
+  assert.equal(ledger.reserve(INTENT).commandId, reservation.commandId);
+  // And a working store reports durable.
+  assert.equal(createIntentLedger(makeStore(), 'fp1', deterministic).reserve(INTENT).durable, true);
+  // The component surfaces it.
+  const ui = readFileSync(resolve(ROOT, 'src/components/admin/v2/V2OutreachApprovals.tsx'), 'utf8');
+  assert.match(ui, /durable: reservation\.durable/, 'the component discards the durability signal');
+  ok('a storage failure degrades idempotency visibly rather than silently');
 }
 
 // ---- 4. RESTART RECOVERY ------------------------------------------------------------
 {
   const store = makeStore();
   const ledger = createIntentLedger(store, 'fp1', deterministic);
-  const before = ledger.begin(INTENT);
+  const before = ledger.reserve(INTENT);
   const snapshot = store.snapshot();
 
   // Simulate a reload: fresh ledger, same storage, same authority.
   const restarted = makeStore();
   restarted.restore(snapshot);
   const afterRestart = createIntentLedger(restarted, 'fp1', deterministic);
-  const recovered = afterRestart.begin(INTENT);
+  const recovered = afterRestart.reserve(INTENT);
   assert.equal(recovered.commandId, before.commandId, 'the pending command id was lost across a restart');
   assert.equal(recovered.recovered, true);
 
   // A DIFFERENT authority must NOT recover another identity's pending command.
   const otherIdentity = createIntentLedger(restarted, 'fp2-different-user', deterministic);
-  assert.notEqual(otherIdentity.begin(INTENT).commandId, before.commandId,
+  assert.notEqual(otherIdentity.reserve(INTENT).commandId, before.commandId,
     'a different identity recovered another identity pending command id');
+  // disposeAll must sweep STORAGE BY PREFIX, not just what this instance remembers. An
+  // earlier version cleared only its in-memory map, so entries left by a previous page
+  // load survived disposal and could be recovered by whoever came next.
+  const orphaned = makeStore();
+  orphaned.restore(snapshot);
+  assert.ok(orphaned.size() > 0, 'the fixture must actually contain a persisted entry');
+  const sweeper = createIntentLedger(orphaned, 'fp1', deterministic);
+  sweeper.disposeAll();
+  assert.equal(orphaned.size(), 0, 'disposeAll left a persisted intent behind for the next identity');
   ok('a restart recovers the same command id; a different identity cannot');
 }
 
@@ -212,9 +271,12 @@ const INTENT = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, 
   const approve = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, contentRef: 'Golfriend|Preview only.' };
 
   // (a) DOUBLE-CLICK. The ledger suppresses the second send entirely.
-  const click1 = ledger.begin(approve);
-  const click2 = ledger.begin(approve);
-  assert.equal(click2.alreadyInFlight, true);
+  const click1 = ledger.reserve(approve);
+  assert.equal(ledger.markInFlight(approve), true);
+  const click2 = ledger.reserve(approve);
+  assert.equal(click2.commandId, click1.commandId);
+  assert.equal(ledger.markInFlight(approve), false, 'the double-click was allowed to send');
+  ledger.clearInFlight(approve);
   const sendApprove = (commandId) => server.transition({
     caller: ctx('reviewer'), draftId: 'd1', expectedVersion: 3,
     requestedState: 'approved', commandId, now: at,
@@ -293,9 +355,19 @@ const INTENT = { draftId: 'd1', requestedState: 'approved', expectedVersion: 3, 
 // ---- 7. THE COMPONENT ACTUALLY USES ALL OF IT --------------------------------------
 {
   const ui = readFileSync(resolve(ROOT, 'src/components/admin/v2/V2OutreachApprovals.tsx'), 'utf8');
-  assert.match(ui, /ledger\.begin\(/, 'the component does not open an intent');
-  assert.match(ui, /if \(begun\.alreadyInFlight\) return;/, 'the component does not single-flight');
-  assert.match(ui, /commandId: begun\.commandId/, 'the component does not send the intent command id');
+  assert.match(ui, /ledger\.reserve\(intent\)/, 'the component does not reserve a stable id');
+  assert.match(ui, /if \(!ledger\.markInFlight\(intent\)\) return;/, 'the component does not single-flight');
+  assert.match(ui, /ledger\.clearInFlight\(intent\)/, 'the component never releases the in-flight guard — a failed attempt would dead-lock the action');
+  assert.match(ui, /commandId: reservation\.commandId/, 'the component does not send the reserved command id');
+  // The identity must come from the shell. When it came ONLY from a prop that nothing
+  // passed, the entire disposal mechanism was unreachable in production.
+  assert.match(ui, /useContext\(AdminIdentityContext\)/, 'the component does not read the governing authority from the shell');
+  assert.match(ui, /identity \?\? contextIdentity/, 'the component does not fall back to the shell identity');
+  const app = readFileSync(resolve(ROOT, 'src/App.tsx'), 'utf8');
+  assert.match(app, /<AdminIdentityContext\.Provider/, 'App.tsx does not provide an admin identity, so disposal can never fire');
+  assert.match(app, /uid: user\?\.uid \?\? null/, 'the provided identity does not carry the signed-in uid');
+  assert.match(app, /status: adminData\?\.status \?\? null/, 'the provided identity does not carry the admin status');
+  assert.match(app, /online: isOnline/, 'the provided identity does not carry connectivity');
   assert.match(ui, /isAuthoritativeOutcome\(outcome\)\) ledger\.settle\(/, 'the component retires intents on a non-authoritative outcome');
   assert.match(ui, /shouldDisposeCache\(/, 'the component does not dispose cached content');
   assert.match(ui, /ledger\.disposeAll\(\)/, 'the component does not dispose pending intents');

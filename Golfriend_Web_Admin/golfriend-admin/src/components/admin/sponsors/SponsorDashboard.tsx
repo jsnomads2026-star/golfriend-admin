@@ -7,6 +7,7 @@ import { db, storage, auth } from '../../../firebaseConfig';
 import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp, query, where, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AdLeadsInbox from '../../B2B/AdLeadsInbox'; // 🔥 UNIFIED HOST INBOX IMPORT
+import { isActiveDirectorDoc } from '../../../auth/roleJourney.js';
 
 export default function SponsorDashboard() {
   const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
@@ -32,7 +33,9 @@ export default function SponsorDashboard() {
     let unsubTours = () => {};
 
     getDoc(doc(db, 'admin_users', uid)).then((adminSnap) => {
-      const isDirector = adminSnap.exists() && adminSnap.data().role === 'Director'; 
+      // Routed through the shared predicate. The previous inline check compared only the
+      // role string, so a SUSPENDED Director kept the all-campaigns/all-tournaments view.
+      const isDirector = isActiveDirectorDoc(adminSnap.exists() ? adminSnap.data() : null);
       
       // Director sees all campaigns/tournaments. Partner sees only theirs.
       // Schema aligned to match the new B2B Partner Dashboard standards.

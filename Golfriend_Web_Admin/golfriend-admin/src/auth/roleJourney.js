@@ -30,6 +30,27 @@ export function normalizeStaffStatus(value) {
   return normalized === '' ? null : normalized;
 }
 
+/**
+ * Is this admin_users document an ACTIVE staff record? The client twin of
+ * functions/src/authority.ts isActiveStaff. Client surfaces must call this rather than
+ * comparing fields themselves — an inline check is how a suspended Director kept elevated
+ * data access on the sponsor console long after the shared predicate existed.
+ *
+ * This is a rendering decision only. The server re-derives authority on every callable;
+ * nothing here grants anything.
+ */
+export function isActiveAdminDoc(adminDoc) {
+  if (!adminDoc || typeof adminDoc !== 'object' || Array.isArray(adminDoc)) return false;
+  const status = normalizeStaffStatus(adminDoc.status);
+  if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) return false;
+  return typeof adminDoc.role === 'string' && adminDoc.role.trim() !== '';
+}
+
+/** Director tier. Exact role match, for the same reason the server uses one. */
+export function isActiveDirectorDoc(adminDoc) {
+  return isActiveAdminDoc(adminDoc) && adminDoc.role === 'Director';
+}
+
 /** Ordered journey states a portal can be in. */
 export const JOURNEY_STATES = [
   'auth_pending',    // Firebase auth state not yet known

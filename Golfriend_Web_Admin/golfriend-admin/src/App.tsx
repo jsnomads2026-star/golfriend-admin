@@ -50,6 +50,8 @@ import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
 import V2CourseAcquisition from './components/admin/v2/V2CourseAcquisition';
 import V2AcquisitionReport from './components/admin/v2/V2AcquisitionReport';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
+import { AdminIdentityContext, type AdminIdentity } from './components/admin/v2/AdminIdentityContext';
+import { useOnlineStatus } from './components/admin/v2/useOnlineStatus';
 
 export default function App() {
   return (
@@ -81,6 +83,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [user, setUser] = useState<any>(null);
   const [partnerData, setPartnerData] = useState<any>(null); // b2b_partners/{...}
   const [adminData, setAdminData] = useState<any>(null);     // admin_users/{uid}
+  const isOnline = useOnlineStatus();
   const [isAuthLoading, setIsAuthLoading] = useState(true);  // auth_pending
   const [roleLoading, setRoleLoading] = useState(false);     // role_resolving
   const [resolveError, setResolveError] = useState(false);   // error (honest UI)
@@ -236,7 +239,24 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     );
   }
 
-  return <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
+  // The governing authority for every V2 admin surface. Any change here — sign-out,
+  // suspension, a role or status change, going offline — disposes cached content that was
+  // authorized for the previous authority.
+  const adminIdentity: AdminIdentity = {
+    uid: user?.uid ?? null,
+    role: adminData?.role ?? null,
+    status: adminData?.status ?? null,
+    scope: null,
+    requestVersion: null,
+    // App Check is not provisioned in this repository, so this is UNKNOWN (null) rather
+    // than claimed as verified. Reporting true would assert an attestation that does not
+    // exist; reporting false would disable every surface.
+    appCheck: null,
+    online: isOnline,
+  };
+
+  return <AdminIdentityContext.Provider value={adminIdentity}>
+    <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
@@ -248,7 +268,8 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
     {activeArea === 'reports' && <V2AdminReports />}
     {activeArea === 'reports' && <V2AcquisitionReport />}
-  </V2AdminShell>;
+    </V2AdminShell>
+  </AdminIdentityContext.Provider>;
 
   return (
     <div style={styles.masterContainer}>

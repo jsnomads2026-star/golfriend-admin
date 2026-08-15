@@ -81,7 +81,15 @@ const serverCodes = [...serverBlock.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
 assert.ok(serverCodes.length >= 20, `expected the server code list, parsed ${serverCodes.length}`);
 assert.deepEqual([...OUTREACH_ERROR_CODES].sort(), [...serverCodes].sort(), 'the client and server error-code lists have drifted apart');
 
-const errKeys = reference.filter((key) => key.startsWith('err.') && key !== 'err.unknown');
+// Client-only states the SERVER never returns. Declared explicitly so the bidirectional
+// check stays strict: anything else with an `err.` prefix must correspond to a real server
+// code, and any server code must have a translation.
+const CLIENT_ONLY_ERROR_KEYS = ['err.unknown', 'err.offline'];
+for (const key of CLIENT_ONLY_ERROR_KEYS) {
+  assert.ok(reference.includes(key), `${key} is declared client-only but is not in the dictionary`);
+  assert.equal(serverCodes.includes(key.slice(4)), false, `${key} is declared client-only but the server emits it`);
+}
+const errKeys = reference.filter((key) => key.startsWith('err.') && !CLIENT_ONLY_ERROR_KEYS.includes(key));
 assert.deepEqual(errKeys.map((k) => k.slice(4)).sort(), [...serverCodes].sort(), 'an error code has no translation, or a translation has no code');
 for (const locale of declared) {
   for (const code of serverCodes) {

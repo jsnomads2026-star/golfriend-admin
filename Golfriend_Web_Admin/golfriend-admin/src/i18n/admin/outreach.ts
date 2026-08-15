@@ -36,6 +36,7 @@ export type OutreachKey =
   | 'err.jurisdiction_not_approved' | 'err.legal_hold_unknown' | 'err.legal_hold_active'
   | 'err.replay_payload_mismatch' | 'err.retention_policy_unavailable'
   | 'err.transmission_not_permitted' | 'err.internal_error' | 'err.unknown'
+  | 'err.offline' | 'notDurable'
   | 'replayed';
 
 export const outreachDict: LocaleDict<OutreachKey> = {
@@ -105,6 +106,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': 'No approved retention policy is on record.',
     'err.transmission_not_permitted': 'Sending is not enabled.',
     'err.internal_error': 'Something went wrong. Nothing was changed.',
+    'err.offline': "Offline. Sensitive draft content is hidden until authority can be confirmed.",
+    'notDurable': "Retry safety could not be stored in this browser.",
     'err.unknown': 'Something went wrong. Nothing was changed.',
     replayed: 'Already applied',
   },
@@ -174,6 +177,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': 'ยังไม่มีนโยบายการเก็บรักษาที่ได้รับอนุมัติในระบบ',
     'err.transmission_not_permitted': 'ยังไม่เปิดใช้งานการส่ง',
     'err.internal_error': 'เกิดข้อผิดพลาด ไม่มีการเปลี่ยนแปลงใด ๆ',
+    'err.offline': "ออฟไลน์ ซ่อนเนื้อหาร่างที่ละเอียดอ่อนไว้จนกว่าจะยืนยันสิทธิ์ได้",
+    'notDurable': "ไม่สามารถจัดเก็บความปลอดภัยในการลองใหม่ในเบราว์เซอร์นี้",
     'err.unknown': 'เกิดข้อผิดพลาด ไม่มีการเปลี่ยนแปลงใด ๆ',
     replayed: 'ดำเนินการไปแล้ว',
   },
@@ -243,6 +248,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': '승인된 보존 정책이 기록되어 있지 않습니다.',
     'err.transmission_not_permitted': '발송이 활성화되어 있지 않습니다.',
     'err.internal_error': '문제가 발생했습니다. 변경된 내용은 없습니다.',
+    'err.offline': "오프라인입니다. 권한을 확인할 수 있을 때까지 민감한 초안 내용을 숨깁니다.",
+    'notDurable': "이 브라우저에 재시도 안전장치를 저장할 수 없습니다.",
     'err.unknown': '문제가 발생했습니다. 변경된 내용은 없습니다.',
     replayed: '이미 적용됨',
   },
@@ -312,6 +319,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': '承認された保存ポリシーが記録されていません。',
     'err.transmission_not_permitted': '送信は有効になっていません。',
     'err.internal_error': '問題が発生しました。変更は行われていません。',
+    'err.offline': "オフラインです。権限を確認できるまで機微な下書き内容は表示しません。",
+    'notDurable': "このブラウザーでは再試行の安全装置を保存できませんでした。",
     'err.unknown': '問題が発生しました。変更は行われていません。',
     replayed: '適用済み',
   },
@@ -381,6 +390,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': '没有已记录的批准保留政策。',
     'err.transmission_not_permitted': '发送功能未启用。',
     'err.internal_error': '出现问题。未做任何更改。',
+    'err.offline': "离线。在确认权限之前隐藏敏感的草稿内容。",
+    'notDurable': "无法在此浏览器中保存重试保护。",
     'err.unknown': '出现问题。未做任何更改。',
     replayed: '已应用',
   },
@@ -450,6 +461,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': 'No hay ninguna política de conservación aprobada registrada.',
     'err.transmission_not_permitted': 'El envío no está habilitado.',
     'err.internal_error': 'Algo salió mal. No se cambió nada.',
+    'err.offline': "Sin conexión. El contenido sensible del borrador se oculta hasta poder confirmar la autorización.",
+    'notDurable': "No se pudo guardar la protección de reintento en este navegador.",
     'err.unknown': 'Algo salió mal. No se cambió nada.',
     replayed: 'Ya aplicado',
   },
@@ -519,6 +532,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': 'Aucune politique de conservation validée n’est enregistrée.',
     'err.transmission_not_permitted': 'L’envoi n’est pas activé.',
     'err.internal_error': 'Une erreur est survenue. Rien n’a été modifié.',
+    'err.offline': "Hors ligne. Le contenu sensible du brouillon est masqué tant que l'autorisation ne peut être confirmée.",
+    'notDurable': "La protection contre les nouvelles tentatives n'a pas pu être enregistrée dans ce navigateur.",
     'err.unknown': 'Une erreur est survenue. Rien n’a été modifié.',
     replayed: 'Déjà appliqué',
   },
@@ -588,6 +603,8 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'err.retention_policy_unavailable': 'Es ist keine freigegebene Aufbewahrungsrichtlinie erfasst.',
     'err.transmission_not_permitted': 'Der Versand ist nicht aktiviert.',
     'err.internal_error': 'Etwas ist schiefgelaufen. Es wurde nichts geändert.',
+    'err.offline': "Offline. Sensible Entwurfsinhalte bleiben ausgeblendet, bis die Berechtigung bestätigt werden kann.",
+    'notDurable': "Der Wiederholungsschutz konnte in diesem Browser nicht gespeichert werden.",
     'err.unknown': 'Etwas ist schiefgelaufen. Es wurde nichts geändert.',
     replayed: 'Bereits angewendet',
   },

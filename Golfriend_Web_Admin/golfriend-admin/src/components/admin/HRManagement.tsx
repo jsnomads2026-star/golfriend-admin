@@ -152,7 +152,7 @@ export default function HRManagement() {
                   <td style={{ padding: '12px 0', color: '#D4AF37' }}>{emp.role}</td>
                   <td style={{ padding: '12px 0' }}>
                     <span style={{ color: emp.status === 'Suspended' ? '#F44336' : '#4CAF50', fontWeight: 'bold' }}>
-                      {emp.status || 'Active'}
+                      {emp.status || 'No status — access denied'}
                     </span>
                   </td>
                   <td style={{ padding: '12px 0', textAlign: 'right' }}>

@@ -224,7 +224,9 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
     await db.collection('admin_users').doc(userRecord.uid).set({
       email: email,
       name: displayName,
-      role: role, // e.g., 'Manager', 'Support'
+      // Trimmed: isActiveDirector matches the role EXACTLY, so a stray space would make
+      // someone hired as a Director silently not one, with no error at hire time.
+      role: typeof role === 'string' ? role.trim() : role,
       status: 'Active',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: callerUid

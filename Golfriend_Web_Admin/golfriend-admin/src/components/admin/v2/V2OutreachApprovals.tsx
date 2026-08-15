@@ -12,7 +12,8 @@
 // Nothing is sent from this screen. There is no transmitter, and the server reports every
 // draft as not sendable with the reason why.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AdminIdentityContext } from './AdminIdentityContext';
 import { useT } from '../../../i18n/hooks.ts';
 import { outreachDict, outreachErrorKey, type OutreachKey } from '../../../i18n/admin/outreach.ts';
 import {
@@ -57,36 +58,42 @@ export default function V2OutreachApprovals({
   identity?: AuthorityIdentity | null;
   intentStore?: IntentStore;
 }) {
+  // The governing authority comes from the shell. The prop exists only so tests can
+  // drive it directly; production never passes one, which is precisely why an earlier
+  // version — where the prop was the ONLY source — disposed nothing at all.
+  const contextIdentity = useContext(AdminIdentityContext);
+  const effectiveIdentity = identity ?? contextIdentity;
+
   const t = useT(outreachDict as unknown as Record<string, Record<string, string>>);
   const [rows, setRows] = useState<OutreachRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ code: string | null; replayed: boolean; state: string | null } | null>(null);
+  const [notice, setNotice] = useState<{ code: string | null; replayed: boolean; state: string | null; durable?: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   // The intent ledger is scoped to the current authority fingerprint, so pending commands
   // can never be recovered by a different identity after a reload.
-  const fingerprint = authorityFingerprint(identity);
+  const fingerprint = authorityFingerprint(effectiveIdentity);
   const store = useMemo(() => intentStore ?? defaultIntentStore(), [intentStore]);
   const ledger = useMemo(
     () => createIntentLedger(store, fingerprint),
     [store, fingerprint],
   );
-  const seenIdentity = useRef<AuthorityIdentity | null>(identity);
+  const seenIdentity = useRef<AuthorityIdentity | null>(effectiveIdentity);
 
   // DISPOSAL. When the governing authority changes — sign-out, suspension, role or scope
   // change, a new request version, lost App Check, going offline — previously authorized
   // draft content on screen is no longer authorized. It is dropped, not left to go stale.
   useEffect(() => {
     const previous = seenIdentity.current;
-    seenIdentity.current = identity;
-    if (!shouldDisposeCache(previous, identity)) return;
+    seenIdentity.current = effectiveIdentity;
+    if (!shouldDisposeCache(previous, effectiveIdentity)) return;
     setRows([]);
     setNotice(null);
     setBusy(null);
-    setListError(identity && identity.online === false ? 'internal_error' : 'unauthenticated');
+    setListError(effectiveIdentity && effectiveIdentity.online === false ? 'offline' : 'unauthenticated');
     ledger.disposeAll();
-  }, [fingerprint, identity, ledger]);
+  }, [fingerprint, effectiveIdentity, ledger]);
 
   const load = useCallback(() => transport.list(), [transport]);
 
@@ -119,9 +126,14 @@ export default function V2OutreachApprovals({
       // retry can never carry new content under an id the server already accepted.
       contentRef: `${row.subject ?? ''}|${row.body ?? ''}`,
     };
-    // SINGLE FLIGHT: a second click on the same intent is not a second command.
-    const begun = ledger.begin(intent);
-    if (begun.alreadyInFlight) return;
+    // The STABLE id for this intent. Reserving does not mark it in flight — a previous
+    // attempt that failed in transport leaves the id reserved so this retry carries it,
+    // and the server replays instead of applying the command a second time.
+    const reservation = ledger.reserve(intent);
+    // SINGLE FLIGHT is a separate question: is a request awaiting a response RIGHT NOW?
+    // Conflating the two made a failed attempt suppress every later retry, so the button
+    // went silently dead instead of retrying.
+    if (!ledger.markInFlight(intent)) return;
 
     setBusy(row.draftId);
     setNotice(null);
@@ -132,12 +144,21 @@ export default function V2OutreachApprovals({
       requestedState,
       // The SAME id for every attempt at this intent. A fresh id per attempt is what
       // made the server's replay ledger unreachable from this surface.
-      commandId: begun.commandId,
+      commandId: reservation.commandId,
     });
-    // Only an AUTHORITATIVE outcome retires the intent. A transport failure keeps it, so
-    // the retry reuses the id and the server replays instead of applying twice.
+    // The attempt is over either way, so the in-flight guard is always released.
+    ledger.clearInFlight(intent);
+    // Only an AUTHORITATIVE outcome retires the id. A transport failure keeps it, so the
+    // next attempt reuses it and the server replays instead of applying twice.
     if (isAuthoritativeOutcome(outcome)) ledger.settle(intent);
-    setNotice({ code: outcome.code, replayed: outcome.replayed, state: outcome.state });
+    setNotice({
+      code: outcome.code,
+      replayed: outcome.replayed,
+      state: outcome.state,
+      // A command id that could not be persisted cannot survive a crash, so idempotency
+      // is best-effort for this attempt. Said out loud rather than swallowed.
+      durable: reservation.durable,
+    });
     setBusy(null);
     // Re-read from the server rather than patching local state: the server is the only
     // place that knows what actually landed.
