@@ -29,5 +29,9 @@ service cloud.firestore {
     match /enterprise_support_commands/{document=**} { allow read, write: if false; }
     match /enterprise_support_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_support_evidence_registry/{document=**} { allow read, write: if false; }
+    match /enterprise_course_member_scopes/{document=**} { allow read, write: if false; }
+    match /enterprise_member_management_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_member_management_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_import_previews/{document=**} { allow read, write: if false; }
   }
 }
