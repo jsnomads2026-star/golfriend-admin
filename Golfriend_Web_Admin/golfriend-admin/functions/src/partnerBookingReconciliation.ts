@@ -1,14 +1,12 @@
 import{createHash}from"node:crypto";
 export const BOOKING_RECONCILIATION_SCHEMA="golfriend.partner-booking-reconciliation.v1" as const;
-export const BOOKING_RECONCILIATION_OUTCOMES=["completed_verified_receipt","failed_no_effect","released_without_execution","external_review"]as const;
+// Portal reconciliation is audit-only until server/provider evidence can be resolved.
+export const BOOKING_RECONCILIATION_OUTCOMES=["external_review"]as const;
 export type BookingReconciliationOutcome=typeof BOOKING_RECONCILIATION_OUTCOMES[number];
 export type BookingReconciliationRequest=Readonly<{actorUid:string;role:"organization_owner"|"organization_admin";organizationId:string;bookingId:string;operationId:string;commandId:string;reason:string;reconciliationToken:string;outcome:BookingReconciliationOutcome;evidence:Readonly<Record<string,unknown>>}>;
 const ID=/^[A-Za-z0-9_-]{1,200}$/,SHA=/^[a-f0-9]{64}$/;const hash=(value:string)=>createHash("sha256").update(value).digest("hex");
 const exact=(value:Record<string,unknown>,keys:string[])=>Object.keys(value).length===keys.length&&keys.every(key=>Object.prototype.hasOwnProperty.call(value,key));
 function evidence(outcome:BookingReconciliationOutcome,value:Record<string,unknown>){
- if(outcome==="completed_verified_receipt"&&exact(value,["receiptId","evidenceDigest"])&&ID.test(String(value.receiptId))&&SHA.test(String(value.evidenceDigest)))return value;
- if(outcome==="failed_no_effect"&&exact(value,["noEffect","evidenceDigest"])&&value.noEffect===true&&SHA.test(String(value.evidenceDigest)))return value;
- if(outcome==="released_without_execution"&&exact(value,["releaseReceiptId","noExecution"])&&ID.test(String(value.releaseReceiptId))&&value.noExecution===true)return value;
  if(outcome==="external_review"&&exact(value,["externalReviewId","evidenceDigest"])&&ID.test(String(value.externalReviewId))&&SHA.test(String(value.evidenceDigest)))return value;
  throw new Error("RECONCILIATION_EVIDENCE_INVALID");
 }
