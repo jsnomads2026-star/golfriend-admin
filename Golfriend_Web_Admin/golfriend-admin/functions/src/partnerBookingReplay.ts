@@ -311,6 +311,15 @@ export function cancelledBookedCount(current: unknown) {
   return Math.max(0, count - 1);
 }
 
+export function validateSlotCapacity(bookedValue: unknown, capacityValue: unknown) {
+  const bookedCount = Number(bookedValue), capacity = Number(capacityValue);
+  if (!Number.isFinite(bookedCount) || !Number.isInteger(bookedCount) || bookedCount < 0 ||
+      !Number.isFinite(capacity) || !Number.isInteger(capacity) || capacity < 0 ||
+      bookedCount > capacity)
+    throw new Error("SLOT_CAPACITY_INVALID");
+  return Object.freeze({ bookedCount, capacity, available: bookedCount < capacity });
+}
+
 export const bookingRequestDigest = (input: { memberUid: string; slotId: string; commandId: string }) =>
   hash(JSON.stringify(input));
 export const bookingMessageDigest = (input: { actorUid: string; bookingId: string; commandId: string; message: string }) =>

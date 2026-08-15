@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   bookingOperationId, bookingOperationRequestDigest,
-  assertPendingBookingOperationClaim, bookingMessageDigest, bookingMessageOperationId, bookingRequestDigest, bookingRequestOperationId, buildCompletedBookingOperation, buildPendingBookingOperation, buildUnsuccessfulBookingOperation, cancelledBookedCount, expirePendingBookingOperation, operationResponse,
+  assertPendingBookingOperationClaim, bookingMessageDigest, bookingMessageOperationId, bookingRequestDigest, bookingRequestOperationId, buildCompletedBookingOperation, buildPendingBookingOperation, buildUnsuccessfulBookingOperation, cancelledBookedCount, expirePendingBookingOperation, operationResponse, validateSlotCapacity,
   replayCompletedBookingOperation, validateBookingOperationRequest,
 } from "./partnerBookingReplay.js";
 import { bookingReceiptId } from "./partnerBookingDomain.js";
@@ -40,4 +40,8 @@ t("completed replay rejects forged transition", () => assert.throws(() => replay
 t("completed replay rejects forged slot mutation", () => assert.throws(() => replayCompletedBookingOperation({ ...completed, slotMutationApplied: false }, request), /OPERATION_AMBIGUOUS/));
 t("request identity binds actor command and payload", () => { assert.notEqual(bookingRequestOperationId("member_a", "command_x"), bookingRequestOperationId("member_b", "command_x")); assert.notEqual(bookingRequestDigest({ memberUid:"member_a", slotId:"slot_a", commandId:"command_x" }), bookingRequestDigest({ memberUid:"member_a", slotId:"slot_b", commandId:"command_x" })); });
 t("message identity binds actor and payload", () => { assert.notEqual(bookingMessageOperationId("member_a", "command_x"), bookingMessageOperationId("member_b", "command_x")); assert.notEqual(bookingMessageDigest({ actorUid:"member_a", bookingId:"booking_a", commandId:"command_x", message:"one" }), bookingMessageDigest({ actorUid:"member_a", bookingId:"booking_a", commandId:"command_x", message:"two" })); });
+t("slot capacity accepts bounded integer state", () => assert.deepEqual(validateSlotCapacity(2, 4), { bookedCount:2, capacity:4, available:true }));
+t("full slot is valid but unavailable", () => assert.equal(validateSlotCapacity(4, 4).available, false));
+t("slot capacity rejects corrupt numbers", () => [NaN, Infinity, -1, 1.5, "bad"].forEach(value => assert.throws(() => validateSlotCapacity(value, 4), /SLOT_CAPACITY_INVALID/)));
+t("slot capacity rejects overbooking", () => assert.throws(() => validateSlotCapacity(5, 4), /SLOT_CAPACITY_INVALID/));
 console.log(`partner booking replay: ${n} checks passed.`);

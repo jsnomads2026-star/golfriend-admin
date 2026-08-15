@@ -33,6 +33,7 @@ import {
   replayCompletedBookingOperation,
   expirePendingBookingOperation,
   validateBookingOperationRequest,
+  validateSlotCapacity,
 } from "./partnerBookingReplay.js";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(),
@@ -220,14 +221,18 @@ export const requestPlayBookingV2 = onCall(
       if (current.exists) {
         throw new HttpsError("already-exists", "Booking exists.");
       }
-      const booked = Number(slot.data()?.bookedCount || 0),
-        capacity = Number(slot.data()?.capacity || 0);
-      if (booked >= capacity)
+      let slotCapacity: ReturnType<typeof validateSlotCapacity>;
+      try {
+        slotCapacity = validateSlotCapacity(slot.data()?.bookedCount, slot.data()?.capacity);
+      } catch {
+        throw new HttpsError("failed-precondition", "Availability capacity invalid.");
+      }
+      if (!slotCapacity.available)
         throw new HttpsError("resource-exhausted", "Availability full.");
       const receiptId = bookingReceiptId(id, cmd),
         notificationStatus = notifier.value() ? "queued" : "PROVIDER_UNCONFIGURED",
         result = { bookingId: id, status: "pending", version: 1, receiptId, notificationStatus };
-      tx.update(slotRef, { bookedCount: booked + 1, updatedAt: now() });
+      tx.update(slotRef, { bookedCount: slotCapacity.bookedCount + 1, updatedAt: now() });
       tx.create(ref, {
         schema: BOOKING_SCHEMA,
         bookingId: id,
@@ -485,13 +490,22 @@ export const managePlayBookingV2 = onCall(
         const alternativeSlot = await tx.get(
           db.collection("tee_time_slots").doc(String(request.alternative?.slotId)),
         );
+        let alternativeCapacity: ReturnType<typeof validateSlotCapacity> | null = null;
+        try {
+          if (alternativeSlot.exists)
+            alternativeCapacity = validateSlotCapacity(
+              alternativeSlot.data()?.bookedCount,
+              alternativeSlot.data()?.capacity,
+            );
+        } catch {
+          alternativeCapacity = null;
+        }
         if (!alternativeSlot.exists ||
             alternativeSlot.data()?.organizationId !== scope.organizationId ||
             String(alternativeSlot.data()?.courseId) !== String(booking.data()?.courseId) ||
             alternativeSlot.data()?.status !== "open" ||
             alternativeSlot.data()?.publishToApp !== false ||
-            Number(alternativeSlot.data()?.bookedCount || 0) >=
-              Number(alternativeSlot.data()?.capacity || 0)) {
+            !alternativeCapacity?.available) {
           tx.set(receiptRef, {
             ...buildUnsuccessfulBookingOperation(request, "failed", "ALTERNATIVE_SLOT_UNAVAILABLE"),
             actorRole: scope.role,
@@ -574,8 +588,10 @@ export const sendPlayBookingMessageV2 = onCall(
       booking = await db.collection("bookings").doc(id).get();
     if (Object.keys(r.data || {}).some((key) => !["bookingId", "commandId", "message"].includes(key)))
       throw new HttpsError("invalid-argument", "Booking message fields invalid.");
-    if (!booking.exists || !text)
+    if (!text)
       throw new HttpsError("invalid-argument", "Booking message invalid.");
+    if (!booking.exists)
+      throw new HttpsError("permission-denied", "Message denied.");
     let role = "member", staffScope: PartnerBookingScope | null = null;
     if (booking.data()?.memberUid !== caller) {
       const scope = await bookingScope(caller);
@@ -605,6 +621,29 @@ export const sendPlayBookingMessageV2 = onCall(
               !staffScope.courseIds.includes(String(currentBooking.data()?.courseId))
             : currentBooking.data()?.memberUid !== caller))
         throw new HttpsError("permission-denied", "Message denied.");
+      if (staffScope) {
+        const [binding, membership, organization, operator] = await Promise.all([
+          tx.get(db.collection("partner_identity_bindings").doc(caller)),
+          tx.get(db.collection("partner_memberships").doc(`${staffScope.organizationId}_${caller}`)),
+          tx.get(db.collection("partner_organizations").doc(staffScope.organizationId)),
+          tx.get(db.collection("course_operators").doc(String(currentBooking.data()?.courseId))),
+        ]);
+        const currentCourseId = String(currentBooking.data()?.courseId);
+        if (!binding.exists || binding.data()?.verifiedAuthUid !== caller ||
+            binding.data()?.organizationId !== staffScope.organizationId ||
+            !membership.exists || membership.data()?.uid !== caller ||
+            membership.data()?.organizationId !== staffScope.organizationId ||
+            membership.data()?.status !== "active" ||
+            membership.data()?.role !== staffScope.role ||
+            !organization.exists || organization.data()?.status !== "active" ||
+            !organization.data()?.authorizedCourseIds?.includes(currentCourseId) ||
+            !operator.exists || operator.data()?.organizationId !== staffScope.organizationId ||
+            operator.data()?.status !== "active" ||
+            !staffScope.canMutate || !permissions(staffScope.role).message ||
+            (staffScope.role === "course_staff" &&
+              !membership.data()?.courseIds?.includes(currentCourseId)))
+          throw new HttpsError("permission-denied", "Message denied.");
+      }
       if (priorOperation.exists) {
         const prior = priorOperation.data();
         if (prior?.requestDigest !== digest || prior?.actorUid !== caller ||

@@ -67,6 +67,22 @@ t("message actor payload replay", () => {
   assert.match(runtime, /BOOKING_MESSAGE_COMMAND_REUSE_CONFLICT/);
   assert.ok(runtime.indexOf("if (priorOperation.exists)", runtime.indexOf("sendPlayBookingMessageV2")) < runtime.indexOf("lastMessageAt: now()", runtime.indexOf("sendPlayBookingMessageV2")));
 });
+t("message transaction rechecks current authority", () => {
+  const start = runtime.indexOf("sendPlayBookingMessageV2"), body = runtime.slice(start, runtime.indexOf("getPlayBookingsPortalV2", start));
+  assert.match(body, /partner_identity_bindings/);
+  assert.match(body, /partner_memberships/);
+  assert.match(body, /verifiedAuthUid !== caller/);
+  assert.match(body, /authorizedCourseIds/);
+  assert.match(body, /course_operators/);
+  assert.match(body, /membership\.data\(\)\?\.courseIds/);
+  assert.ok((body.match(/"Message denied\."/g) || []).length >= 3);
+});
+t("availability capacity fails closed", () => {
+  assert.match(runtime, /validateSlotCapacity/);
+  assert.match(replay, /SLOT_CAPACITY_INVALID/);
+  assert.match(runtime, /Availability capacity invalid/);
+  assert.match(runtime, /alternativeCapacity\?\.available/);
+});
 t("cancel slot binding", () =>
   assert.match(runtime, /BOOKING_SLOT_BINDING_INVALID/),
 );
