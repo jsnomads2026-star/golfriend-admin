@@ -20,6 +20,8 @@ import {
 } from "./partnerBookingScope.js";
 import { resolveEnterpriseBookingCourseAuthority } from "./enterpriseAuthorityRuntime.js";
 import { resolveBookingCourseAuthority } from "./enterpriseAuthorityDomain.js";
+import {bookingConfirmationPayloadDigest,bookingConfirmationTokenDigest,issueBookingConfirmation,verifyBookingConfirmation,type BookingConfirmationBinding}from"./partnerBookingConfirmation.js";
+import{buildBookingReconciliationReceipt,replayBookingReconciliation,validateBookingReconciliationRequest}from"./partnerBookingReconciliation.js";
 import {
   buildCompletedBookingOperation,
   buildPendingBookingOperation,
@@ -68,6 +70,8 @@ async function bookingScope(id: string): Promise<PartnerBookingScope> {
 }
 function activeAuthorityBinding(value:any){const millis=(candidate:any)=>candidate?.toMillis instanceof Function?candidate.toMillis():Date.parse(candidate),nowMs=Date.now(),version=Number(value?.version);return typeof value?.membershipId==="string"&&Number.isSafeInteger(version)&&version>=1&&!value.revokedAt&&!value.suspendedAt&&(!value.effectiveAt||millis(value.effectiveAt)<=nowMs)&&(!value.expiresAt||millis(value.expiresAt)>nowMs)&&(value.status==null||value.status==="active");}
 async function exactBookingAuthority(caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){const course=await db.collection("enterprise_courses").doc(courseId).get();if(!course.exists)throw new HttpsError("permission-denied","Booking unavailable.");const value=course.data()||{};try{const decision=await resolveEnterpriseBookingCourseAuthority(caller,String(value.organizationId||""),String(value.propertyId||""),String(value.courseId||course.id),mode);if(decision.membershipId!==scope.membershipId||decision.organizationId!==scope.organizationId||decision.role!==scope.role||!scope.courseIds.includes(decision.courseId))throw new Error("SCOPE_CHANGED");return decision}catch{throw new HttpsError("permission-denied","Booking unavailable.")}}
+const confirmationPayload=(action:string,data:any)=>({action,...(action==="alternative"?{alternativeSlotId:String(data?.alternativeSlotId||""),message:String(data?.message||"").trim().slice(0,500)}:{})});
+const confirmationBinding=(caller:string,decision:any,booking:any,action:any,data:any):BookingConfirmationBinding=>Object.freeze({actorUid:caller,membershipId:decision.membershipId,organizationId:decision.organizationId,propertyId:decision.propertyId,courseId:decision.courseId,bookingId:String(booking.bookingId),action,revision:Number(booking.version),payloadDigest:bookingConfirmationPayloadDigest(confirmationPayload(action,data)),authorityVersion:decision.sourceVersion});
 async function transactionBookingAuthority(tx:admin.firestore.Transaction,caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){
  const membershipRef=db.collection("enterprise_authority_memberships").doc(scope.membershipId),organizationRef=db.collection("enterprise_organizations").doc(scope.organizationId),courseRef=db.collection("enterprise_courses").doc(courseId),bindingQuery=db.collection("enterprise_authority_bindings").doc(caller).collection("memberships").where("membershipId","==",scope.membershipId).limit(2);
  const[membership,organization,course,binding]=await Promise.all([tx.get(membershipRef),tx.get(organizationRef),tx.get(courseRef),tx.get(bindingQuery)]);
@@ -242,6 +246,7 @@ export const requestPlayBookingV2 = onCall(
     });
   },
 );
+export const previewPlayBookingActionV2=onCall({enforceAppCheck:true},async r=>{const caller=uid(r),scope=await bookingScope(caller),id=String(r.data?.bookingId||""),action=String(r.data?.action||""),expectedVersion=Number(r.data?.expectedVersion);if(Object.keys(r.data||{}).some(key=>!["bookingId","action","expectedVersion","alternativeSlotId","message"].includes(key))||!["confirm","alternative","cancel"].includes(action)||!Number.isSafeInteger(expectedVersion))throw new HttpsError("invalid-argument","Booking preview invalid.");if(!(permissions(scope.role)as any)[action])throw new HttpsError("permission-denied","Booking unavailable.");const booking=await db.collection("bookings").doc(id).get();if(!booking.exists||booking.data()?.organizationId!==scope.organizationId||Number(booking.data()?.version)!==expectedVersion)throw new HttpsError("permission-denied","Booking unavailable.");const decision=await exactBookingAuthority(caller,scope,String(booking.data()?.courseId),"mutate"),binding=confirmationBinding(caller,decision,booking.data(),action,r.data),issued=issueBookingConfirmation(binding,Date.now()),ref=db.collection("play_booking_confirmation_tokens").doc(issued.record.tokenDigest);await ref.create({...issued.record,createdAt:now()});return{success:true,schema:issued.record.schema,bookingId:id,action,revision:expectedVersion,payloadDigest:binding.payloadDigest,expiresAt:new Date(issued.record.expiresAtMs).toISOString(),confirmationToken:issued.token}});
 export const managePlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
@@ -254,10 +259,12 @@ export const managePlayBookingV2 = onCall(
     }
     let request: ReturnType<typeof validateBookingOperationRequest>;
     try {
-      request = validateBookingOperationRequest(r.data || {}, {
+      const validationData=r.data?.action==="confirm"?Object.fromEntries(Object.entries(r.data||{}).filter(([key])=>key!=="confirmationToken")):r.data||{};
+      request = validateBookingOperationRequest(validationData, {
         actorUid: caller,
         organizationId: scope.organizationId,
       });
+      if(r.data?.action==="confirm"){const token=String(r.data?.confirmationToken||"");if(!/^pbc_[A-Za-z0-9_-]{43,}$/.test(token))throw new Error("CONFIRMATION_REQUIRED");request={...request,confirmationToken:token}as typeof request;}
     } catch (error) {
       const reason = error instanceof Error ? error.message : "COMMAND_INVALID";
       throw new HttpsError("invalid-argument", `Booking command invalid: ${reason}.`);
@@ -265,7 +272,7 @@ export const managePlayBookingV2 = onCall(
     const { action, bookingId: id, commandId: cmd, expectedVersion: expected } = request;
     const initialBooking=await db.collection("bookings").doc(id).get(),initialCourseId=String(initialBooking.data()?.courseId||"");
     if(!initialBooking.exists||initialBooking.data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Booking unavailable.");
-    await exactBookingAuthority(caller,scope,initialCourseId,"mutate");
+    const manageDecision=await exactBookingAuthority(caller,scope,initialCourseId,"mutate"),expectedConfirmation=confirmationBinding(caller,manageDecision,initialBooking.data(),action,r.data),confirmationDigest=bookingConfirmationTokenDigest(String(request.confirmationToken||""));
     const allowed = (permissions(scope.role) as any)[action];
     if (!allowed)
       throw new HttpsError(
@@ -274,14 +281,15 @@ export const managePlayBookingV2 = onCall(
       );
     const ref = db.collection("bookings").doc(id),
       receiptId = bookingReceiptId(id, cmd),
-      receiptRef = db.collection("play_booking_audits").doc(receiptId),
+      receiptRef = db.collection("play_booking_audits").doc(receiptId),confirmationRef=db.collection("play_booking_confirmation_tokens").doc(confirmationDigest),
       attemptToken = randomBytes(32).toString("hex");
     const claimResult = await db.runTransaction(async (tx) => {
       await transactionBookingAuthority(tx,caller,scope,initialCourseId,"mutate");
-      const [booking, receipt] = await Promise.all([tx.get(ref), tx.get(receiptRef)]);
+      const [booking, receipt,confirmation] = await Promise.all([tx.get(ref), tx.get(receiptRef),tx.get(confirmationRef)]);
       if (!booking.exists || booking.data()?.organizationId !== scope.organizationId ||
           String(booking.data()?.courseId)!==initialCourseId)
         throw new HttpsError("permission-denied", "Booking unavailable.");
+      try{verifyBookingConfirmation(request.confirmationToken,confirmation.data(),expectedConfirmation,Date.now(),receipt.exists)}catch{throw new HttpsError("failed-precondition","CONFIRMATION_INVALID")}
       if (receipt.exists) {
         if (receipt.data()?.state === "pending") {
           try {
@@ -331,6 +339,7 @@ export const managePlayBookingV2 = onCall(
         state: "pending",
         receiptId,
       } });
+      tx.update(confirmationRef,{used:true,usedByOperationId:operationId,usedAt:now()});
       return { claimed: true };
     });
     if ("response" in claimResult) return claimResult.response;
@@ -480,6 +489,18 @@ export const managePlayBookingV2 = onCall(
     return outcome;
   },
 );
+export const getPlayBookingOperationV2=onCall({enforceAppCheck:true},async r=>{const caller=uid(r),scope=await bookingScope(caller),bookingId=String(r.data?.bookingId||""),operationId=String(r.data?.operationId||"");if(Object.keys(r.data||{}).some(key=>!["bookingId","operationId"].includes(key))||!bookingId||!operationId)throw new HttpsError("invalid-argument","Operation projection invalid.");const booking=await db.collection("bookings").doc(bookingId).get();if(!booking.exists||booking.data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Operation unavailable.");await exactBookingAuthority(caller,scope,String(booking.data()?.courseId),"read");const operations=await db.collection("play_booking_audits").where("operationId","==",operationId).limit(2).get();if(operations.size!==1||operations.docs[0].data()?.bookingId!==bookingId||operations.docs[0].data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Operation unavailable.");const value=operations.docs[0].data(),mayReconcile=["organization_owner","organization_admin"].includes(scope.role)&&value.state==="ambiguous";let reconciliationToken:null|string=null,expiresAt:null|string=null;if(mayReconcile){reconciliationToken=`pbrt_${randomBytes(32).toString("base64url")}`;const digest=bookingConfirmationTokenDigest(reconciliationToken),expiresAtMs=Date.now()+120_000;await db.collection("play_booking_reconciliation_tokens").doc(digest).create({actorUid:caller,membershipId:scope.membershipId,organizationId:scope.organizationId,bookingId,operationId,tokenDigest:digest,used:false,issuedAtMs:Date.now(),expiresAtMs,createdAt:now()});expiresAt=new Date(expiresAtMs).toISOString()}return{success:true,bookingId,operationId,state:["pending","ambiguous","failed","completed"].includes(value.state)?value.state:"unavailable",action:String(value.action||""),expectedVersion:Number(value.expectedVersion||0),reason:typeof value.reason==="string"?value.reason:null,mayReconcile,reconciliationToken,expiresAt}});
+export const reconcilePlayBookingOperationV2=onCall({enforceAppCheck:true},async r=>{
+ const caller=uid(r),scope=await bookingScope(caller),clientKeys=["bookingId","operationId","commandId","reason","reconciliationToken","outcome","evidence"];
+ if(!["organization_owner","organization_admin"].includes(scope.role))throw new HttpsError("permission-denied","Reconciliation unavailable.");
+ if(Object.keys(r.data||{}).some(key=>!clientKeys.includes(key)))throw new HttpsError("invalid-argument","Reconciliation invalid.");
+ let request;try{request=validateBookingReconciliationRequest({...r.data,actorUid:caller,role:scope.role,organizationId:scope.organizationId})}catch{throw new HttpsError("invalid-argument","Reconciliation invalid.")}
+ const booking=await db.collection("bookings").doc(request.bookingId).get();if(!booking.exists||booking.data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Reconciliation unavailable.");
+ await exactBookingAuthority(caller,scope,String(booking.data()?.courseId),"mutate");
+ const found=await db.collection("play_booking_audits").where("operationId","==",request.operationId).limit(2).get();if(found.size!==1||found.docs[0].data()?.bookingId!==request.bookingId||found.docs[0].data()?.state!=="ambiguous")throw new HttpsError("failed-precondition","Operation is not reconcilable.");
+ const operationRef=found.docs[0].ref,tokenRef=db.collection("play_booking_reconciliation_tokens").doc(bookingConfirmationTokenDigest(request.reconciliationToken)),receipt=buildBookingReconciliationReceipt(request),receiptRef=db.collection("play_booking_reconciliations").doc(receipt.reconciliationId),bookingRef=db.collection("bookings").doc(request.bookingId);
+ return db.runTransaction(async tx=>{await transactionBookingAuthority(tx,caller,scope,String(booking.data()?.courseId),"mutate");const[currentOperation,token,prior,currentBooking]=await Promise.all([tx.get(operationRef),tx.get(tokenRef),tx.get(receiptRef),tx.get(bookingRef)]);if(!currentOperation.exists||currentOperation.data()?.state!=="ambiguous"||!currentBooking.exists)throw new HttpsError("failed-precondition","Operation is not reconcilable.");const tokenValue=token.data()||{},replay=prior.exists;if(!token.exists||tokenValue.used!==replay||tokenValue.actorUid!==caller||tokenValue.membershipId!==scope.membershipId||tokenValue.bookingId!==request.bookingId||tokenValue.operationId!==request.operationId||(!replay&&tokenValue.expiresAtMs<=Date.now()))throw new HttpsError("failed-precondition","Reconciliation token invalid.");if(prior.exists){try{return{success:true,...replayBookingReconciliation(prior.data(),request)}}catch{throw new HttpsError("already-exists","Reconciliation conflict.")}}tx.create(receiptRef,{...receipt,actorRole:scope.role,reason:request.reason,createdAt:now()});tx.update(tokenRef,{used:true,usedAt:now(),reconciliationId:receipt.reconciliationId});if(["failed_no_effect","released_without_execution"].includes(request.outcome))tx.update(bookingRef,{[`operationLocks.${String(currentOperation.data()?.action)}`]:admin.firestore.FieldValue.delete()});return{success:true,...receipt}})
+});
 export const sendPlayBookingMessageV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {

@@ -15,9 +15,10 @@ const t = (x, f) => {
   f();
   console.log(`ok ${++n} - ${x}`);
 };
-t("five App Check callables", () =>
-  assert.equal((runtime.match(/enforceAppCheck: true/g) || []).length, 5),
+t("eight App Check callables", () =>
+  assert.equal((runtime.match(/enforceAppCheck:\s*true/g) || []).length, 8),
 );
+t("server confirmation and reconciliation",()=>{for(const name of["previewPlayBookingActionV2","getPlayBookingOperationV2","reconcilePlayBookingOperationV2"])assert.match(runtime,new RegExp(name));assert.match(runtime,/play_booking_confirmation_tokens/);assert.match(runtime,/play_booking_reconciliation_tokens/);assert.match(runtime,/transactionBookingAuthority/)});
 t("derived delegated scope", () => assert.match(runtime, /bookingScope\(caller\)/));
 t("exact enterprise course authority", () => assert.match(runtime, /resolveEnterpriseBookingCourseAuthority/));
 t("privacy projection", () => assert.match(runtime, /safeBooking/));
