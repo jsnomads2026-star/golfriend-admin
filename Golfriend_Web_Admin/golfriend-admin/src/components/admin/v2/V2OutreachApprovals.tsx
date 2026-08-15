@@ -12,13 +12,17 @@
 // Nothing is sent from this screen. There is no transmitter, and the server reports every
 // draft as not sendable with the reason why.
 // ============================================================================
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/hooks.ts';
 import { outreachDict, outreachErrorKey, type OutreachKey } from '../../../i18n/admin/outreach.ts';
 import {
-  newCommandId, productionOutreachTransport,
+  productionOutreachTransport,
   type OutreachRow, type OutreachTransport,
 } from './outreachService';
+import {
+  authorityFingerprint, createIntentLedger, isAuthoritativeOutcome, shouldDisposeCache,
+  type AuthorityIdentity, type IntentStore,
+} from './outreachIntent';
 import './V2OutreachApprovals.css';
 
 const STATE_KEYS: Record<string, OutreachKey> = {
@@ -35,15 +39,54 @@ const STATE_KEYS: Record<string, OutreachKey> = {
 /** A state with no translation renders as its raw code rather than as a blank cell. */
 const stateKey = (state: string): OutreachKey | null => STATE_KEYS[state] ?? null;
 
+/** sessionStorage when available; a no-op in environments without it. */
+const defaultIntentStore = (): IntentStore => {
+  try {
+    if (typeof sessionStorage !== 'undefined') return sessionStorage;
+  } catch { /* access can throw under strict privacy settings */ }
+  return { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+};
+
 export default function V2OutreachApprovals({
   transport = productionOutreachTransport,
-}: { transport?: OutreachTransport }) {
+  identity = null,
+  intentStore,
+}: {
+  transport?: OutreachTransport;
+  /** Governing authority. A change to ANY field disposes cached draft content. */
+  identity?: AuthorityIdentity | null;
+  intentStore?: IntentStore;
+}) {
   const t = useT(outreachDict as unknown as Record<string, Record<string, string>>);
   const [rows, setRows] = useState<OutreachRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ code: string | null; replayed: boolean; state: string | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // The intent ledger is scoped to the current authority fingerprint, so pending commands
+  // can never be recovered by a different identity after a reload.
+  const fingerprint = authorityFingerprint(identity);
+  const store = useMemo(() => intentStore ?? defaultIntentStore(), [intentStore]);
+  const ledger = useMemo(
+    () => createIntentLedger(store, fingerprint),
+    [store, fingerprint],
+  );
+  const seenIdentity = useRef<AuthorityIdentity | null>(identity);
+
+  // DISPOSAL. When the governing authority changes — sign-out, suspension, role or scope
+  // change, a new request version, lost App Check, going offline — previously authorized
+  // draft content on screen is no longer authorized. It is dropped, not left to go stale.
+  useEffect(() => {
+    const previous = seenIdentity.current;
+    seenIdentity.current = identity;
+    if (!shouldDisposeCache(previous, identity)) return;
+    setRows([]);
+    setNotice(null);
+    setBusy(null);
+    setListError(identity && identity.online === false ? 'internal_error' : 'unauthenticated');
+    ledger.disposeAll();
+  }, [fingerprint, identity, ledger]);
 
   const load = useCallback(() => transport.list(), [transport]);
 
@@ -68,6 +111,18 @@ export default function V2OutreachApprovals({
   const reload = () => { setLoading(true); void load().then(applyList, failedList); };
 
   const send = useCallback(async (row: OutreachRow, requestedState: string) => {
+    const intent = {
+      draftId: row.draftId,
+      requestedState,
+      expectedVersion: row.version,
+      // Content identity: editing what would be approved yields a different intent, so a
+      // retry can never carry new content under an id the server already accepted.
+      contentRef: `${row.subject ?? ''}|${row.body ?? ''}`,
+    };
+    // SINGLE FLIGHT: a second click on the same intent is not a second command.
+    const begun = ledger.begin(intent);
+    if (begun.alreadyInFlight) return;
+
     setBusy(row.draftId);
     setNotice(null);
     const outcome = await transport.command({
@@ -75,14 +130,19 @@ export default function V2OutreachApprovals({
       draftId: row.draftId,
       expectedVersion: row.version,
       requestedState,
-      commandId: newCommandId(),
+      // The SAME id for every attempt at this intent. A fresh id per attempt is what
+      // made the server's replay ledger unreachable from this surface.
+      commandId: begun.commandId,
     });
+    // Only an AUTHORITATIVE outcome retires the intent. A transport failure keeps it, so
+    // the retry reuses the id and the server replays instead of applying twice.
+    if (isAuthoritativeOutcome(outcome)) ledger.settle(intent);
     setNotice({ code: outcome.code, replayed: outcome.replayed, state: outcome.state });
     setBusy(null);
     // Re-read from the server rather than patching local state: the server is the only
     // place that knows what actually landed.
     applyList(await load());
-  }, [transport, load, applyList]);
+  }, [transport, load, applyList, ledger]);
 
   const holdLabel = (hold: boolean | null): OutreachKey =>
     hold === null ? 'hold.unknown' : hold ? 'hold.active' : 'hold.clear';

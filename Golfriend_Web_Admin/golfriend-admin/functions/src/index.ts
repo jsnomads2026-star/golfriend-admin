@@ -204,7 +204,9 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
   try {
     // 2. MASTER GATE: Ensure the caller is actually the Director
     const callerDoc = await db.collection('admin_users').doc(callerUid).get();
-    if (!callerDoc.exists || callerDoc.data()?.role !== 'Director') {
+    // isActiveDirector, not a bare role comparison: the role string alone says nothing
+    // about whether the account is still active.
+    if (!isActiveDirector(callerDoc.exists ? callerDoc.data() : null)) {
       throw new HttpsError('permission-denied', 'Only the Director can hire staff.');
     }
 
@@ -1448,7 +1450,10 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
 
   let authorized = false;
   const adminSnap = await db.collection('admin_users').doc(reporterUid).get();
-  if (adminSnap.exists && adminSnap.data()?.status !== 'Suspended') {
+  // Was an inline denylist ("anything that is not Suspended"), which authorized a
+  // document with a missing, unknown or half-written status. Routed through the shared
+  // allowlist so there is one definition of active staff, not one per call site.
+  if (isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
     authorized = true;
   }
   if (!authorized) {
@@ -1592,7 +1597,9 @@ export const setEmployeeStatus = onCall({ memory: "256MiB" }, async (request) =>
   try {
     // MASTER GATE: only the Director may change staff access.
     const callerDoc = await db.collection('admin_users').doc(callerUid).get();
-    if (!callerDoc.exists || callerDoc.data()?.role !== 'Director') {
+    // isActiveDirector: a suspended Director must not be able to change anyone's access,
+    // least of all to suspend the Directors who are still active.
+    if (!isActiveDirector(callerDoc.exists ? callerDoc.data() : null)) {
       throw new HttpsError('permission-denied', 'Only the Director can change staff access.');
     }
 

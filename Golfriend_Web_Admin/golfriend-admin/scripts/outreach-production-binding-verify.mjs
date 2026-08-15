@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { existsSync, readFileSync as read } from 'node:fs';
+import { existsSync, readdirSync, readFileSync as read } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -261,5 +261,60 @@ assert.match(ui, /await transport\.command\(/, 'a UI action does not call the au
 assert.match(ui, /applyList\(await load\(\)\)/, 'the UI does not re-read and apply server state after a command');
 assert.doesNotMatch(ui, /setRows\(\[\s*\.\.\.rows/, 'the UI appends rows locally instead of re-reading');
 ok('every UI action calls the service; state is re-read from the server');
+
+
+// ---- 6. THE SERVER-OWNED COLLECTIONS ARE UNREACHABLE FROM ANY CLIENT ---------------
+// This repository owns no canonical firestore.rules (firebase.json has no 'firestore'
+// section; .emulator-local/firestore.rules is untracked scratch), so the rules themselves
+// are a handoff. What CAN be proved here is the two claims that handoff makes: the server
+// reaches these collections through the Admin SDK, and no client code touches them at all.
+// Until the rules land, that second property is the only thing protecting them, so it is
+// asserted on every gate run rather than assumed.
+const SERVER_OWNED_COLLECTIONS = [
+  'enterprise_outreach_drafts', 'enterprise_outreach_receipts', 'enterprise_outreach_commands',
+  'enterprise_legal_holds', 'enterprise_jurisdiction_approvals',
+];
+const requirementPath = resolve(ROOT, 'docs/ENTERPRISE_OUTREACH_FIRESTORE_RULES_REQUIREMENT.json');
+assert.ok(existsSync(requirementPath), 'the rules requirement handoff document is missing');
+const requirement = JSON.parse(readFileSync(requirementPath, 'utf8'));
+assert.deepEqual(
+  requirement.collections.map((c) => c.path.split('/')[0]).sort(),
+  [...SERVER_OWNED_COLLECTIONS].sort(),
+  'the rules requirement does not cover exactly the collections this lane creates',
+);
+for (const collection of requirement.collections) {
+  assert.equal(collection.clientRead, 'deny', collection.path);
+  assert.equal(collection.clientWrite, 'deny', collection.path);
+}
+assert.ok(requirement.testContract.length >= 10, 'the rules test contract is too thin to hand over');
+// The store must name every collection it uses, so the requirement cannot silently omit one.
+for (const collection of SERVER_OWNED_COLLECTIONS) {
+  assert.ok(store.includes(collection), `outreachStore.ts does not reference ${collection}`);
+}
+
+// No CLIENT file may name these collections at all. src/ is the browser bundle; a single
+// getDoc/collection() call there would be a direct path around the callables.
+const clientFiles = [];
+const walk = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) { walk(full); continue; }
+    if (/\.(ts|tsx|js|jsx|mjs)$/.test(entry.name)) clientFiles.push(full);
+  }
+};
+walk(resolve(ROOT, 'src'));
+const clientOffenders = [];
+for (const file of clientFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const collection of SERVER_OWNED_COLLECTIONS) {
+    if (text.includes(collection)) clientOffenders.push(`${relative(ROOT, file).replace(/\\/g, '/')} names ${collection}`);
+  }
+}
+assert.deepEqual(clientOffenders, [], `client code references a server-owned collection:\n  ${clientOffenders.join('\n  ')}`);
+
+// And the server reaches them through the Admin SDK Firestore handle, never a client SDK.
+assert.doesNotMatch(store, /from ['"]firebase\/firestore['"]/, 'the store imports the CLIENT Firestore SDK');
+assert.match(store, /from ["']firebase-admin\/firestore["']/, 'the store does not use the Admin SDK Firestore types');
+ok(`${SERVER_OWNED_COLLECTIONS.length} server-owned collections: rules requirement complete, no client code references them, Admin SDK only`);
 
 console.log(`\nOutreach production binding verification PASS: ${checks} checks (compile, ${VECTORS.length} canonical vectors, ${REFUSALS.length} shared refusals, NIST vectors, callable authorization, server clock, stable codes, no transmitter, server-decided writes, no client authority).`);

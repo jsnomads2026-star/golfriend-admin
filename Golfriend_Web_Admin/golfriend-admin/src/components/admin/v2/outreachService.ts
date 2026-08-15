@@ -89,15 +89,3 @@ export const productionOutreachTransport: OutreachTransport = {
   },
 };
 
-/**
- * Command ids are generated CLIENT-side and reused across retries, which is what makes a
- * retry idempotent: the server recognises the id and replays the original outcome instead
- * of applying the change twice. A fresh id per attempt would defeat replay safety entirely.
- */
-export function newCommandId(): string {
-  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID().replace(/-/g, '')
-    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  // Opaque and within the server's id shape: /^[A-Za-z0-9_-]{1,64}$/.
-  return `cmd-${random}`.slice(0, 64);
-}

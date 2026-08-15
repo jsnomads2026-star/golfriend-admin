@@ -1,0 +1,67 @@
+{
+  "$comment": [
+    "MACHINE-READABLE RULES REQUIREMENT — HANDOFF, NOT AN IMPLEMENTATION.",
+    "This repository does not own a canonical firestore.rules file: firebase.json here has no",
+    "'firestore' section, and .emulator-local/firestore.rules is untracked local scratch (it also",
+    "still contains a God-Mode identity backdoor and a status denylist, and must not be treated as",
+    "the contract). The rules owner is the mobile/backend lane. This file states exactly what those",
+    "rules must enforce and how to test it, so the requirement can be applied without re-deriving it.",
+    "Nothing here has been deployed, and no rules file has been modified by this lane."
+  ],
+  "requirementId": "GF-ADMIN-OUTREACH-RULES-001",
+  "raisedBy": "Admin Enterprise acquisition lane",
+  "raisedOn": "2026-08-15",
+  "branch": "feat/admin-enterprise-acquisition",
+  "status": "awaiting_rules_owner",
+  "rationale": [
+    "These five collections are SERVER-OWNED. Every read and write is performed by Cloud Functions",
+    "through the Firebase Admin SDK, which bypasses security rules entirely, so denying all direct",
+    "client access costs the product nothing and removes the entire client attack surface.",
+    "They carry approval authority (who approved what, at which version, under which digest) and",
+    "outreach draft text. A client that could write them could forge an approval; a client that",
+    "could read them could read draft content scoped to someone else."
+  ],
+  "collections": [
+    {
+      "path": "enterprise_outreach_drafts/{draftId}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": ["approval state", "version", "content digest", "draft subject/body", "reviewer and creator comparison keys"],
+      "notes": "Client reads must be denied even for staff: the server projection scopes draft content to the creator and assigned reviewer, and a direct read would bypass that scoping."
+    },
+    { "path": "enterprise_outreach_receipts/{receiptId}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["immutable append-only approval audit trail"], "notes": "Append-only. No client, including staff, may create, update or delete a receipt." },
+    { "path": "enterprise_outreach_commands/{commandId}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["replay ledger: command fingerprint and stored outcome"], "notes": "A client that could write this could forge a replayed success for a command it never made." },
+    { "path": "enterprise_legal_holds/{draftId}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["legal hold state"], "notes": "A client write here would let a caller lift their own legal hold. Absence of a document means NOT held; a failed read means UNKNOWN and blocks." },
+    { "path": "enterprise_jurisdiction_approvals/{jurisdictionCode}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["legallyApproved flag", "policy version"], "notes": "A client write here would manufacture legal approval for a jurisdiction counsel has not approved." }
+  ],
+  "requiredRule": {
+    "form": "explicit deny for every operation, placed so no earlier broader match can grant access",
+    "cloudFirestoreSnippet": "match /databases/{database}/documents {\n  // Server-owned: written and read only by Cloud Functions via the Admin SDK,\n  // which is not subject to these rules. No client path may reach them.\n  match /enterprise_outreach_drafts/{draftId}       { allow read, write: if false; }\n  match /enterprise_outreach_receipts/{receiptId}   { allow read, write: if false; }\n  match /enterprise_outreach_commands/{commandId}   { allow read, write: if false; }\n  match /enterprise_legal_holds/{draftId}           { allow read, write: if false; }\n  match /enterprise_jurisdiction_approvals/{code}   { allow read, write: if false; }\n}",
+    "placement": "Must not be shadowed by a preceding wildcard match such as /{document=**} that allows staff reads. Verify with the rules simulator that an authenticated staff account is denied."
+  },
+  "testContract": [
+    { "id": "R1", "as": "unauthenticated", "operation": "get", "path": "enterprise_outreach_drafts/d1", "expect": "deny" },
+    { "id": "R2", "as": "authenticated_member", "operation": "get", "path": "enterprise_outreach_drafts/d1", "expect": "deny" },
+    { "id": "R3", "as": "authenticated_active_staff", "operation": "get", "path": "enterprise_outreach_drafts/d1", "expect": "deny", "notes": "Staff too. The callable is the only authorized path, because it applies content scoping." },
+    { "id": "R4", "as": "authenticated_director", "operation": "update", "path": "enterprise_outreach_drafts/d1", "expect": "deny", "notes": "A direct write would bypass the digest, version and separation-of-duties checks." },
+    { "id": "R5", "as": "authenticated_active_staff", "operation": "create", "path": "enterprise_outreach_receipts/r1", "expect": "deny" },
+    { "id": "R6", "as": "authenticated_active_staff", "operation": "delete", "path": "enterprise_outreach_receipts/r1", "expect": "deny", "notes": "Receipts are append-only; deletion must be impossible from any client." },
+    { "id": "R7", "as": "authenticated_active_staff", "operation": "create", "path": "enterprise_outreach_commands/c1", "expect": "deny", "notes": "Forging a ledger entry would let a caller be served a success for a command never made." },
+    { "id": "R8", "as": "authenticated_active_staff", "operation": "update", "path": "enterprise_legal_holds/d1", "expect": "deny", "notes": "Otherwise a caller can lift the hold that blocks them." },
+    { "id": "R9", "as": "authenticated_director", "operation": "set", "path": "enterprise_jurisdiction_approvals/TH", "expect": "deny", "notes": "Legal approval is not a thing any client may assert." },
+    { "id": "R10", "as": "authenticated_partner_representative", "operation": "list", "path": "enterprise_outreach_drafts", "expect": "deny" },
+    { "id": "R11", "as": "admin_sdk", "operation": "get/set", "path": "any of the five", "expect": "allow", "notes": "Admin SDK bypasses rules by design; this entry records the intended server path, not a rule to write." }
+  ],
+  "verifiedByThisLane": {
+    "callablesUseAdminSdk": true,
+    "noClientCodeTouchesTheseCollections": true,
+    "verifier": "scripts/outreach-production-binding-verify.mjs",
+    "notes": "Both properties are asserted on every gate run. This lane cannot verify the rules themselves, because it does not own a rules file."
+  },
+  "handoff": {
+    "owner": "mobile/backend rules lane",
+    "action": "Apply requiredRule to the canonical firestore.rules and add testContract R1-R10 to the rules test suite.",
+    "blocking": "Until applied, these collections rely solely on the absence of client code that reads them — which is a convention, not a control."
+  }
+}
