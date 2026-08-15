@@ -19,9 +19,9 @@ export interface PlayBookingDeskService {
 
 const call = async(name:string,data:Record<string,unknown>={}) => (await httpsCallable(getFunctions(),name)(data)).data as CallableResult;
 export const productionPlayBookingDeskService:PlayBookingDeskService=Object.freeze({
-  load:(admin)=>call(admin?'getPlayBookingsAdminV2':'getPlayBookingsPortalV2'),
-  manage:(input)=>call('managePlayBookingV2',input),
-  sendMessage:(input)=>call('sendPlayBookingMessageV2',input),
+  load:(admin:boolean)=>call(admin?'getPlayBookingsAdminV2':'getPlayBookingsPortalV2'),
+  manage:(input:ManageInput)=>call('managePlayBookingV2',input),
+  sendMessage:(input:Readonly<{bookingId:string;message:string;commandId:string}>)=>call('sendPlayBookingMessageV2',input),
 });
 
 type StoredReceipt=Readonly<{id:string;kind:Action|'message';recordedAt:string;acknowledgement:BookingAcknowledgementReceipt}>;
@@ -54,7 +54,7 @@ export default function PlayBookingLifecycleV2({admin=false,service=productionPl
     {notice&&<p className={`booking-desk__notice booking-desk__notice--${notice}`} role={notice==='success'?'status':'alert'} aria-live="polite">{t(notice==='success'?'actionSucceeded':notice==='conflict'?'conflictError':notice==='stale'?'staleError':'operationError')}</p>}
     <div className="booking-desk__layout"><nav className="booking-desk__queue" aria-label={t('queueTitle')}><h3>{t('queueTitle')}</h3>
       {!queue.length?<p>{t('empty')}</p>:<ul>{queue.map(booking=><li key={booking.bookingId}><button type="button" aria-current={selectedId===booking.bookingId?'true':undefined} onClick={()=>{setSelectedId(booking.bookingId);setPending(null)}}><strong>{booking.memberDisplayName}</strong><span>{booking.course.name||booking.course.courseId} · {booking.teeTime.date} {booking.teeTime.time}</span><i data-status={booking.status}>{t(statusKey[booking.status])}</i></button></li>)}</ul>}
-    </nav><article className="booking-desk__detail" aria-live="polite">{!selected?<p>{t('selectBooking')}</p>:<>
+    </nav><article className="booking-desk__detail" aria-live="polite">{!selected?<p>{t('detailsTitle')}</p>:<>
       <div className="booking-desk__detail-heading"><div><span>{t('referenceLabel')}</span><h3>{selected.bookingId}</h3></div><i data-status={selected.status}>{t(statusKey[selected.status])}</i></div>
       <dl><div><dt>{t('memberLabel')}</dt><dd>{selected.memberDisplayName}</dd></div><div><dt>{t('courseLabel')}</dt><dd>{selected.course.name||selected.course.courseId}</dd></div><div><dt>{t('dateLabel')}</dt><dd>{selected.teeTime.date}</dd></div><div><dt>{t('timeLabel')}</dt><dd>{selected.teeTime.time} · {selected.teeTime.timeZone}</dd></div><div><dt>{t('providerLabel')}</dt><dd>{selected.provider?.displayName||t('unavailableValue')}</dd></div><div><dt>{t('termsLabel')}</dt><dd>{selected.terms||t('unavailableValue')}</dd></div><div><dt>{t('contactLabel')}</dt><dd>{t('unavailableValue')}</dd></div><div><dt>{t('referenceLabel')}</dt><dd>{selected.reference||t('unavailableValue')}</dd></div><div><dt>{t('versionLabel')}</dt><dd>{selected.version}</dd></div></dl>
       {!admin&&<div className="booking-desk__actions" aria-label={t('actionsLabel')}>{(['confirm','alternative','cancel'] as Action[]).map(action=>actionAllowed(ready,selected,action,admin)&&<button type="button" key={action} disabled={busy} onClick={()=>begin(action)}>{t(action==='alternative'?'proposeAlternative':action)}</button>)}</div>}
