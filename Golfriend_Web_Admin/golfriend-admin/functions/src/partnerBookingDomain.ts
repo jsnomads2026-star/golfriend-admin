@@ -27,7 +27,7 @@ export const bookingMessageId = (id: string, cmd: string) =>
 export function permissions(role: string) {
   return {
     read: true,
-    message: ["primary_owner", "manager", "course_staff", "support"].includes(
+    message: ["primary_owner", "manager", "course_staff"].includes(
       role,
     ),
     confirm: ["primary_owner", "manager", "course_staff"].includes(role),

@@ -13,6 +13,11 @@ import {
   version,
 } from "./partnerBookingDomain.js";
 import { validateCommand, validateVersion } from "./partnerActivationDomain.js";
+import {
+  BookingScopeError,
+  derivePartnerBookingScope,
+  PartnerBookingScope,
+} from "./partnerBookingScope.js";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(),
   notifier = defineString("PARTNER_NOTIFICATION_PROVIDER", { default: "" }),
@@ -29,13 +34,66 @@ function command(r: any) {
     throw new HttpsError("invalid-argument", "Command invalid.");
   }
 }
-async function member(id: string) {
-  const b = await db.collection("partner_identity_bindings").doc(id).get(),
-    org = String(b.data()?.organizationId || ""),
-    m = await db.collection("partner_memberships").doc(`${org}_${id}`).get();
-  if (!b.exists || !m.exists || m.data()?.status !== "active")
-    throw new HttpsError("permission-denied", "Active membership required.");
-  return m.data() as any;
+async function bookingScope(id: string): Promise<PartnerBookingScope> {
+  const binding = await db.collection("partner_identity_bindings").doc(id).get(),
+    organizationId = String(binding.data()?.organizationId || "");
+  if (!binding.exists || !/^[A-Za-z0-9_-]{1,160}$/.test(organizationId))
+    throw new HttpsError(
+      "permission-denied",
+      "Active membership required; booking scope unavailable.",
+    );
+  const organization = await db
+      .collection("partner_organizations")
+      .doc(organizationId)
+      .get(),
+    authorizedValue = organization.data()?.authorizedCourseIds;
+  if (
+    !Array.isArray(authorizedValue) ||
+    authorizedValue.length > 200 ||
+    authorizedValue.some(
+      (courseId: unknown) =>
+        typeof courseId !== "string" ||
+        !/^[A-Za-z0-9_-]{1,160}$/.test(courseId),
+    )
+  )
+    throw new HttpsError(
+      "permission-denied",
+      "Active membership required; booking scope unavailable.",
+    );
+  const authorized = authorizedValue as string[],
+    membership = await db
+      .collection("partner_memberships")
+      .doc(`${organizationId}_${id}`)
+      .get(),
+    [operators, courses] = await Promise.all([
+      Promise.all(
+        authorized.map((courseId: unknown) =>
+          db.collection("course_operators").doc(String(courseId)).get(),
+        ),
+      ),
+      Promise.all(
+        authorized.map((courseId: unknown) =>
+          db.collection("courses").doc(String(courseId)).get(),
+        ),
+      ),
+    ]);
+  try {
+    return derivePartnerBookingScope({
+      callerUid: id,
+      binding: binding.exists ? binding.data() || null : null,
+      membership: membership.exists ? membership.data() || null : null,
+      organization: organization.exists ? organization.data() || null : null,
+      operators: operators
+        .filter((document) => document.exists)
+        .map((document) => ({ ...document.data(), courseId: document.id })),
+      courses: courses
+        .filter((document) => document.exists)
+        .map((document) => ({ ...document.data(), courseId: document.id })),
+    });
+  } catch (error) {
+    const code = error instanceof BookingScopeError ? error.code : "SCOPE_INVALID";
+    throw new HttpsError("permission-denied", `Booking scope unavailable: ${code}.`);
+  }
 }
 async function staff(id: string) {
   const s = await db.collection("admin_users").doc(id).get();
@@ -43,19 +101,52 @@ async function staff(id: string) {
     throw new HttpsError("permission-denied", "Admin required.");
   return String(s.data()?.role);
 }
-const safeBooking = (x: any) => ({
-  bookingId: x.bookingId,
-  courseId: x.courseId,
-  slotId: x.slotId,
-  date: x.date,
-  time: x.time,
-  timeZone: x.timeZone,
-  status: x.status,
-  version: x.version,
-  memberDisplayName: x.memberDisplayName || "Golfriend member",
-  alternative: x.alternative || null,
-  lastMessageAt: x.lastMessageAt || null,
-});
+const bounded = (value: unknown, max: number) =>
+  typeof value === "string"
+    ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max)
+    : "";
+const timestamp = (value: any) => {
+  const candidate = value?.toDate?.() || value;
+  if (!(candidate instanceof Date) || !Number.isFinite(candidate.getTime()))
+    return null;
+  return candidate.toISOString();
+};
+const safeBooking = (x: any) => {
+  const bookingId = bounded(x?.bookingId, 200),
+    courseId = bounded(x?.courseId, 160),
+    slotId = bounded(x?.slotId, 200),
+    status = bounded(x?.status, 32),
+    versionValue = Number(x?.version);
+  if (
+    !/^[A-Za-z0-9_-]{1,200}$/.test(bookingId) ||
+    !/^[A-Za-z0-9_-]{1,160}$/.test(courseId) ||
+    !/^[A-Za-z0-9_-]{1,200}$/.test(slotId) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(bounded(x?.date, 10)) ||
+    !/^\d{2}:\d{2}(:\d{2})?$/.test(bounded(x?.time, 8)) ||
+    !/^[A-Za-z0-9_+./:-]{1,80}$/.test(bounded(x?.timeZone, 80)) ||
+    !["pending", "alternative_proposed", "confirmed", "cancelled", "completed"].includes(status) ||
+    !Number.isInteger(versionValue) ||
+    versionValue < 1
+  )
+    return null;
+  const alternativeValue = bounded(x?.alternative?.slotId, 160),
+    alternativeSlotId = /^[A-Za-z0-9_-]{1,160}$/.test(alternativeValue)
+      ? alternativeValue
+      : "";
+  return {
+    bookingId,
+    courseId,
+    slotId,
+    date: bounded(x?.date, 10),
+    time: bounded(x?.time, 8),
+    timeZone: bounded(x?.timeZone, 80),
+    status,
+    version: versionValue,
+    memberDisplayName: bounded(x?.memberDisplayName, 120) || "Golfriend member",
+    alternative: alternativeSlotId ? { slotId: alternativeSlotId } : null,
+    lastMessageAt: timestamp(x?.lastMessageAt),
+  };
+};
 export const requestPlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
@@ -147,7 +238,7 @@ export const managePlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
     const caller = uid(r),
-      m = await member(caller),
+      scope = await bookingScope(caller),
       cmd = command(r),
       action = String(r.data?.action || ""),
       id = String(r.data?.bookingId || ""),
@@ -157,7 +248,7 @@ export const managePlayBookingV2 = onCall(
     } catch {
       throw new HttpsError("invalid-argument", "Financial fields prohibited.");
     }
-    const allowed = (permissions(m.role) as any)[action];
+    const allowed = scope.canMutate && (permissions(scope.role) as any)[action];
     if (!allowed)
       throw new HttpsError(
         "permission-denied",
@@ -165,10 +256,40 @@ export const managePlayBookingV2 = onCall(
       );
     const ref = db.collection("bookings").doc(id);
     return db.runTransaction(async (tx) => {
-      const booking = await tx.get(ref);
+      const [booking, binding, membership, organization] = await Promise.all([
+        tx.get(ref),
+        tx.get(db.collection("partner_identity_bindings").doc(caller)),
+        tx.get(
+          db
+            .collection("partner_memberships")
+            .doc(`${scope.organizationId}_${caller}`),
+        ),
+        tx.get(db.collection("partner_organizations").doc(scope.organizationId)),
+      ]);
+      if (
+        !binding.exists ||
+        binding.data()?.organizationId !== scope.organizationId ||
+        binding.data()?.verifiedAuthUid !== caller ||
+        !membership.exists ||
+        membership.data()?.organizationId !== scope.organizationId ||
+        membership.data()?.uid !== caller ||
+        membership.data()?.status !== "active" ||
+        membership.data()?.role !== scope.role ||
+        !organization.exists ||
+        organization.data()?.status !== "active"
+      )
+        throw new HttpsError("permission-denied", "Booking authority changed.");
       if (
         !booking.exists ||
-        booking.data()?.organizationId !== m.organizationId
+        booking.data()?.organizationId !== scope.organizationId ||
+        !scope.courseIds.includes(String(booking.data()?.courseId)) ||
+        !organization
+          .data()
+          ?.authorizedCourseIds?.includes(String(booking.data()?.courseId)) ||
+        (scope.role === "course_staff" &&
+          !membership
+            .data()
+            ?.courseIds?.includes(String(booking.data()?.courseId)))
       )
         throw new HttpsError(
           "permission-denied",
@@ -179,7 +300,7 @@ export const managePlayBookingV2 = onCall(
       );
       if (
         !claim.exists ||
-        claim.data()?.organizationId !== m.organizationId ||
+        claim.data()?.organizationId !== scope.organizationId ||
         claim.data()?.status !== "active"
       )
         throw new HttpsError(
@@ -215,7 +336,7 @@ export const managePlayBookingV2 = onCall(
         receiptId,
         bookingId: id,
         kind: action,
-        actorRole: m.role,
+        actorRole: scope.role,
         createdAt: now(),
       });
       return {
@@ -245,13 +366,15 @@ export const sendPlayBookingMessageV2 = onCall(
       throw new HttpsError("invalid-argument", "Booking message invalid.");
     let role = "member";
     if (booking.data()?.memberUid !== caller) {
-      const m = await member(caller);
+      const scope = await bookingScope(caller);
       if (
-        m.organizationId !== booking.data()?.organizationId ||
-        !permissions(m.role).message
+        scope.organizationId !== booking.data()?.organizationId ||
+        !scope.courseIds.includes(String(booking.data()?.courseId)) ||
+        !scope.canMutate ||
+        !permissions(scope.role).message
       )
         throw new HttpsError("permission-denied", "Message denied.");
-      role = m.role;
+      role = scope.role;
     }
     const messageId = bookingMessageId(id, cmd);
     await db
@@ -274,17 +397,26 @@ export const sendPlayBookingMessageV2 = onCall(
 export const getPlayBookingsPortalV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
-    const m = await member(uid(r)),
+    const scope = await bookingScope(uid(r)),
       snap = await db
         .collection("bookings")
-        .where("organizationId", "==", m.organizationId)
+        .where("organizationId", "==", scope.organizationId)
         .limit(200)
-        .get();
+        .get(),
+      bookings = snap.docs
+        .map((document) => document.data())
+        .filter((booking) => scope.courseIds.includes(String(booking.courseId)))
+        .map((booking) => safeBooking(booking))
+        .filter((booking) => booking !== null);
     return {
       schema: BOOKING_SCHEMA,
-      role: m.role,
-      permissions: permissions(m.role),
-      bookings: snap.docs.map((d) => safeBooking(d.data())),
+      role: scope.role,
+      permissions: permissions(scope.role),
+      courseIds: scope.courseIds,
+      ...(scope.delegatedCourseIds
+        ? { delegatedCourseIds: scope.delegatedCourseIds }
+        : {}),
+      bookings,
       notificationProviderConfigured: Boolean(notifier.value()),
       boundary: "PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP",
     };
@@ -297,7 +429,9 @@ export const getPlayBookingsAdminV2 = onCall(
     const snap = await db.collection("bookings").limit(500).get();
     return {
       schema: BOOKING_SCHEMA,
-      bookings: snap.docs.map((d) => safeBooking(d.data())),
+      bookings: snap.docs
+        .map((document) => safeBooking(document.data()))
+        .filter((booking) => booking !== null),
       notificationProviderConfigured: Boolean(notifier.value()),
       boundary: "PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP",
     };
