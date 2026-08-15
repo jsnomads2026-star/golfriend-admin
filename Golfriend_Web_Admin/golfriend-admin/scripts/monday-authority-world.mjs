@@ -197,7 +197,7 @@ for (const surface of surfaces) {
   assert.ok(forSurface.some((x) => x.expect.authorized), `${surface} has no authorized case`);
   assert.ok(forSurface.filter((x) => !x.expect.authorized).length >= 8, `${surface} has too few refusal cases`);
 }
-ok(`${ORGANIZATIONS.length} organizations (active/suspended/deactivated), ${surfaces.length} privileged surfaces, every surface with both authorized and refused cases`);
+ok(`${ORGANIZATIONS.length} organizations (active/suspended/deactivated); ${surfaces.length} privileged surfaces DECLARED with both authorized and refused cases (declaration only — these are not executed against call sites; see the scenario runner)`);
 
 // ---- 6. LIFECYCLE AND APP CHECK COVERAGE --------------------------------------------
 for (const required of ['offline_before_reserve', 'transport_failure', 'restart', 'retry_same',
@@ -223,4 +223,4 @@ for (const required of ['active', 'inactive_suspended', 'inactive_inactive', 'mi
 }
 ok(`${LEGACY_STATUS_RECORDS.length} legacy records covering ${classifications.size} classifications`);
 
-console.log(`\nMonday authority world verification PASS: ${checks} checks (world ${WORLD_ID} v${WORLD_VERSION}, ${IDENTITIES.length} identities, ${SCENARIO_COUNT} scenarios, digest ${digestOf(first)}).`);
+console.log(`\nMonday authority world verification PASS: ${checks} checks (world ${WORLD_ID} v${WORLD_VERSION}, ${IDENTITIES.length} identities, ${SCENARIO_COUNT} scenarios declared, digest ${digestOf(first)}).`);

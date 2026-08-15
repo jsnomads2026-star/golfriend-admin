@@ -51,9 +51,18 @@ const ADMIN_SDK_ONLY = requirement.collections.map((c) => c.path.split('/')[0]);
  */
 export function evaluateRuleset(source, { name = 'candidate' } = {}) {
   const reasons = [];
-  const stripped = source.replace(/\/\/[^\n]*/g, '');
+  // BOTH comment forms are stripped. Only `//` was, so a `/* … */` block could supply the
+  // coverage for every protected collection while the only operative rule was wide open.
+  const stripped = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
 
-  const missing = PROTECTED_COLLECTIONS.filter((collection) => !stripped.includes(collection));
+  // Coverage is matched on the PATH SEGMENT, not by substring. `stripped.includes('users')`
+  // was satisfied by `admin_users`, so a ruleset could drop /users entirely and pass.
+  const declaredPaths = new Set(
+    [...stripped.matchAll(/match\s*\/([A-Za-z0-9_]+)\s*\//g)].map((m) => m[1]),
+  );
+  const missing = PROTECTED_COLLECTIONS.filter((collection) => !declaredPaths.has(collection));
   if (missing.length) {
     reasons.push(`omits ${missing.length} protected collection(s): ${missing.join(', ')}`);
   }
@@ -61,12 +70,31 @@ export function evaluateRuleset(source, { name = 'candidate' } = {}) {
   if (/@golfriend\.co|isGodMode|god_mode/i.test(stripped)) {
     reasons.push('contains an identity backdoor');
   }
-  // A broad recursive grant makes every specific deny below it decorative.
-  if (/match\s*\/\{document=\*\*\}[\s\S]{0,200}?allow[^;]*if\s+(?!false)/.test(stripped)) {
-    reasons.push('contains a broad recursive grant that would shadow specific denials');
+  // ANY recursive wildcard segment, whatever the variable is called. The literal
+  // `{document=**}` was hard-coded, so `{doc=**}` and `{col}/{id}` walked straight past.
+  if (/match\s*\/\{[A-Za-z0-9_]+\s*=\s*\*\*\}/.test(stripped)) {
+    const wildcardBlock = stripped.slice(stripped.search(/match\s*\/\{[A-Za-z0-9_]+\s*=\s*\*\*\}/));
+    if (/allow[^;]*if\s+(?!false\s*;)/.test(wildcardBlock)) {
+      reasons.push('contains a recursive wildcard grant that would shadow specific denials');
+    }
   }
-  if (/allow\s+read,\s*write:\s*if\s+true/.test(stripped)) {
-    reasons.push('contains an unconditional allow');
+  if (/match\s*\/\{[A-Za-z0-9_]+\}\s*\/\s*\{[A-Za-z0-9_]+\}/.test(stripped)) {
+    reasons.push('contains a variable collection segment, which matches every collection');
+  }
+  // An unconditional allow in ANY form: combined or separate statements, any spacing.
+  for (const statement of stripped.match(/allow[^;]*;/g) || []) {
+    if (/if\s+true\s*;?\s*$/.test(statement)) {
+      reasons.push(`contains an unconditional allow: ${statement.trim().slice(0, 60)}`);
+      break;
+    }
+  }
+  // A condition that delegates to a helper cannot be read as a denial. Any `if <fn>()` is
+  // refused rather than analysed — this evaluator does not interpret Firestore rules, and
+  // pretending it can would be worse than refusing.
+  const indirect = (stripped.match(/allow[^;]*if\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || [])
+    .filter((s) => !/if\s+(request|resource|get|exists|debug)\s*\(/.test(s));
+  if (indirect.length) {
+    reasons.push(`delegates a condition to a helper function (${indirect.length} occurrence(s)); this evaluator cannot judge it and refuses rather than guessing`);
   }
   // Every Admin-SDK-only collection must be denied outright.
   for (const collection of ADMIN_SDK_ONLY) {
@@ -83,7 +111,13 @@ export function evaluateRuleset(source, { name = 'candidate' } = {}) {
     const rest = stripped.slice(at);
     const nextMatch = rest.indexOf('match ', 1);
     const block = nextMatch === -1 ? rest : rest.slice(0, nextMatch);
-    if (!/allow read, write:\s*if false/.test(block)) {
+    // BOTH spellings of a total denial are accepted. Demanding the combined form would
+    // reject a correct ruleset, and a check that forces one spelling gets relaxed rather
+    // than satisfied.
+    const combinedDeny = /allow\s+read\s*,\s*write\s*:\s*if\s+false/.test(block);
+    const separateDeny = /allow\s+read\s*:\s*if\s+false/.test(block)
+      && /allow\s+write\s*:\s*if\s+false/.test(block);
+    if (!combinedDeny && !separateDeny) {
       reasons.push(`does not deny direct client access to ${collection}`);
     }
   }
@@ -117,13 +151,61 @@ const complete = [
 ].join('\n');
 assert.deepEqual(evaluateRuleset(complete), [], 'a complete, deny-correct ruleset was rejected — the evaluator refuses everything');
 
-const HOSTILE = [
+let HOSTILE = [
   ['a broad recursive grant', complete.replace('  }\n}', '    match /{document=**} { allow read: if request.auth != null; }\n  }\n}')],
   ['an identity backdoor', complete.replace('service cloud.firestore {', "service cloud.firestore {\n  function isGodMode() { return request.auth.token.email == 'admin@golfriend.co'; }")],
   ['an unconditional allow', complete.replace('    match /users/{id} { allow read: if request.auth != null; allow write: if false; }', '    match /users/{id} { allow read, write: if true; }')],
   ['an Admin-SDK-only collection opened to clients', complete.replace('match /enterprise_outreach_drafts/{id} { allow read, write: if false; }', 'match /enterprise_outreach_drafts/{id} { allow read: if request.auth != null; allow write: if false; }')],
   ['a dropped protected collection', complete.replace(/^.*match \/admin_users\/.*$/m, '')],
 ];
+// EVASIONS THAT THE PREVIOUS EVALUATOR ACCEPTED. Each was demonstrated by an independent
+// review against the real exported evaluateRuleset. They are required cases now, because
+// the original hostile set only made minimal edits to this file's own canonical template
+// and so tested the regexes' happy path rather than the control.
+const dropUsers = complete.split('\n').filter((line) => !/match \/users\//.test(line)).join('\n');
+HOSTILE.push(
+  // 'users' is a SUBSTRING of 'admin_users', so a substring coverage check was satisfied
+  // even with /users deleted outright.
+  ['a dropped collection whose name is a substring of another', dropUsers],
+  // Only the combined `read, write: if true` form was detected.
+  ['separate unconditional allows', complete.replace(
+    '    match /courses/{id} { allow read: if request.auth != null; allow write: if false; }',
+    '    match /courses/{id} { allow read: if true; allow write: if true; }')],
+  ['an unconditional allow with unusual spacing', complete.replace(
+    '    match /courses/{id} { allow read: if request.auth != null; allow write: if false; }',
+    '    match /courses/{id} { allow read , write: if true; }')],
+  // A helper hides the condition from any evaluator that does not interpret rules.
+  ['a condition delegated to a helper function', complete.replace(
+    'service cloud.firestore {',
+    'service cloud.firestore {\n  function wideOpen() { return true; }').replace(
+    '    match /courses/{id} { allow read: if request.auth != null; allow write: if false; }',
+    '    match /courses/{id} { allow read, write: if wideOpen(); }')],
+  // Block comments were never stripped, so a comment could supply the coverage while the
+  // only operative rule was wide open.
+  ['coverage supplied entirely by a block comment', [
+    "rules_version = '2';",
+    'service cloud.firestore {',
+    '  match /databases/{database}/documents {',
+    '    /*' + PROTECTED_COLLECTIONS.map((c) => ` match /${c}/{id} { allow read, write: if false; }`).join('') + '*/',
+    '    match /{doc=**} { allow read, write: if request.auth != null; }',
+    '  }',
+    '}',
+  ].join('\n')],
+  // The recursive wildcard variable was matched by its literal name.
+  ['a recursive wildcard under a different variable name', complete.replace(
+    '  }\n}', '    match /{anything=**} { allow read: if request.auth != null; }\n  }\n}')],
+  // A variable collection segment matches every collection without using **.
+  ['a variable collection segment', complete.replace(
+    '  }\n}', '    match /{col}/{id} { allow read: if request.auth != null; }\n  }\n}')],
+);
+
+// A legitimate two-statement denial must still be ACCEPTED, or the evaluator would force
+// rules authors into one specific spelling.
+const twoStatementDeny = complete.replace(
+  '    match /enterprise_outreach_drafts/{id} { allow read, write: if false; }',
+  '    match /enterprise_outreach_drafts/{id} { allow read: if false; allow write: if false; }');
+assert.deepEqual(evaluateRuleset(twoStatementDeny), [], 'a two-statement denial was rejected; the evaluator demands one spelling');
+
 for (const [label, candidate] of HOSTILE) {
   const reasons = evaluateRuleset(candidate);
   assert.ok(reasons.length > 0, `a ruleset with ${label} was ACCEPTED`);
@@ -199,9 +281,20 @@ export function renderDeployCommand() {
   return { renderable: true, command: 'firebase deploy --only firestore:rules' };
 }
 const rendered = renderDeployCommand();
-assert.equal(rendered.renderable, false, 'a deploy command rendered while the integrated ruleset is still outstanding');
-assert.ok(rendered.reason, 'the refusal carries no reason');
-assert.equal(Object.prototype.hasOwnProperty.call(rendered, 'command'), false, 'a refusal still carried a runnable command');
-ok(`no deploy command renders: ${rendered.reason}`);
+// The property is CONDITIONAL, not "always refuses". Asserting an unconditional refusal
+// made this an inverted gate: the day the rules owner delivered a complete, safe,
+// hash-pinned artifact, check 5 would report success and this line would fail the build
+// for finishing the work.
+if (rendered.renderable) {
+  // A command may only render when the artifact passed every check above.
+  assert.deepEqual(evaluateRuleset(readFileSync(resolve(ROOT, JSON.parse(readFileSync(resolve(ROOT, 'firebase.json'), 'utf8')).firestore.rules), 'utf8')), [],
+    'a deploy command rendered for a ruleset that does not pass evaluation');
+  assert.ok(rendered.command, 'a renderable result carries no command');
+  ok(`the integrated ruleset passes every check; the deploy command is releasable: ${rendered.command}`);
+} else {
+  assert.ok(rendered.reason, 'the refusal carries no reason');
+  assert.equal(Object.prototype.hasOwnProperty.call(rendered, 'command'), false, 'a refusal still carried a runnable command');
+  ok(`no deploy command renders: ${rendered.reason}`);
+}
 
 console.log(`\nRules artifact safety PASS: ${checks} checks (${PROTECTED_COLLECTIONS.length} protected collections, the known partial ruleset rejected, ${HOSTILE.length} hostile candidates rejected, projections allowlisted, no deploy command renderable).`);

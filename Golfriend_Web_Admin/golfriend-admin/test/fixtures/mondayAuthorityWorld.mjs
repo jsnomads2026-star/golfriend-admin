@@ -433,6 +433,15 @@ export const APP_CHECK_EVIDENCE = Object.freeze([
 const s = (surface, principalId, expectAuthorized, note) =>
   Object.freeze({ surface, principalId, expect: Object.freeze({ authorized: expectAuthorized }), note: note || null });
 
+/**
+ * DECLARED, NOT YET EXECUTED. These name the privileged surfaces and the identity matrix
+ * each must be tested against. There is currently NO mapping from a surface name to a call
+ * site, so scripts/monday-authority-scenarios-verify.mjs does not run them — it runs the
+ * predicate, journey, migration, App Check, ledger and partner-runtime checks instead.
+ *
+ * Recorded here as a specification for the surfaces still to be wired. The scenario runner
+ * reports executed and declared counts separately so this cannot be read as coverage.
+ */
 export const SCENARIOS = Object.freeze([
   // ---- privileged Admin/Portal surfaces, each across the identity matrix -------------
   ...['member administration', 'template approval', 'delivery orchestration',

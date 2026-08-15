@@ -270,7 +270,11 @@ const _legacyClaimCourseOperator = onCall({ memory: "256MiB" }, async (request) 
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // An address may only stand in for an identity once Firebase says it was VERIFIED.
+  // b2b_partners is email-keyed during the webhook-buffer window, so an unverified
+  // address was enough to be treated as that active partner — by registering it.
+  const callerEmailVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerEmailVerified ? (request.auth.token?.email || "").toLowerCase() : "";
   const { courseId } = request.data || {};
 
   if (!courseId || typeof courseId !== 'string') {
@@ -855,7 +859,11 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // An address may only stand in for an identity once Firebase says it was VERIFIED.
+  // b2b_partners is email-keyed during the webhook-buffer window, so an unverified
+  // address was enough to be treated as that active partner — by registering it.
+  const callerEmailVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerEmailVerified ? (request.auth.token?.email || "").toLowerCase() : "";
   const { action, email, staffUid, role } = request.data || {};
 
   if (action !== 'invite' && action !== 'remove') {
@@ -1184,7 +1192,11 @@ export const cancelB2BContract = onCall({ memory: "256MiB" }, async (request) =>
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // An address may only stand in for an identity once Firebase says it was VERIFIED.
+  // b2b_partners is email-keyed during the webhook-buffer window, so an unverified
+  // address was enough to be treated as that active partner — by registering it.
+  const callerEmailVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerEmailVerified ? (request.auth.token?.email || "").toLowerCase() : "";
 
   try {
     // 2. RESOLVE the caller's own contract document. b2b_partners is keyed by
@@ -1842,7 +1854,11 @@ export const submitPartnerApplication = onCall({ memory: "256MiB" }, async (requ
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // An address may only stand in for an identity once Firebase says it was VERIFIED.
+  // b2b_partners is email-keyed during the webhook-buffer window, so an unverified
+  // address was enough to be treated as that active partner — by registering it.
+  const callerEmailVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerEmailVerified ? (request.auth.token?.email || "").toLowerCase() : "";
 
   const validation = validateSubmission(request.data || {});
   if (!validation.ok || !validation.clean) {

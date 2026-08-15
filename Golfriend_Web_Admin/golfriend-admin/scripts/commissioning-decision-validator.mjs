@@ -114,11 +114,16 @@ const authority = authorityMod.default ?? authorityMod;
 const appCheckMod = await import(`file://${resolve(FUNCTIONS, 'lib/appCheckCommissioning.js')}`);
 const appCheck = appCheckMod.default ?? appCheckMod;
 
-assert.equal(authority.TRANSMISSION_ENABLED, false, 'D5 is unresolved but transmission is enabled');
-assert.equal(authority.jurisdictionDecision('TH', null).approved, false, 'D4 is unresolved but a jurisdiction is approved');
-assert.equal(authority.retentionDecision(null).code, 'retention_policy_unavailable', 'D1 is unresolved but retention proceeds');
-assert.equal(authority.legalHoldDecision(null).code, 'legal_hold_unknown', 'D3 is unresolved but an unknown hold does not block');
-assert.equal(appCheck.COMMISSIONING_STAGE, 'not_provisioned', 'D6 is unresolved but App Check claims a stage it cannot have');
+// These are CONDITIONAL on the decision still being unresolved. Asserting them
+// unconditionally made them inverted gates: enabling transmission after D5 is genuinely
+// approved would fail the build for doing the approved thing.
+const resolvedIds = new Set(manifest.decisions.filter((d) => d.resolution.status === 'resolved').map((d) => d.id));
+const whileUnresolved = (id, fn, message) => { if (!resolvedIds.has(id)) fn(message); };
+whileUnresolved('D5', (m) => assert.equal(authority.TRANSMISSION_ENABLED, false, m), 'D5 is unresolved but transmission is enabled');
+whileUnresolved('D4', (m) => assert.equal(authority.jurisdictionDecision('TH', null).approved, false, m), 'D4 is unresolved but a jurisdiction is approved');
+whileUnresolved('D1', (m) => assert.equal(authority.retentionDecision(null).code, 'retention_policy_unavailable', m), 'D1 is unresolved but retention proceeds');
+whileUnresolved('D3', (m) => assert.equal(authority.legalHoldDecision(null).code, 'legal_hold_unknown', m), 'D3 is unresolved but an unknown hold does not block');
+whileUnresolved('D6', (m) => assert.equal(appCheck.COMMISSIONING_STAGE, 'not_provisioned', m), 'D6 is unresolved but App Check claims a stage it cannot have');
 assert.equal(appCheck.commissioningReadiness().ready, false, 'D6 is unresolved but App Check reports ready');
 // D7: the migration tool must still refuse activation on a non-conforming population.
 const migration = await import(`file://${resolve(ROOT, 'scripts/admin-status-migration-dryrun.mjs')}`);
@@ -147,24 +152,47 @@ assert.equal(
 );
 ok('every blocked capability is still fail-closed in the code: transmission off, no jurisdiction approved, retention refused, unknown hold blocks, App Check not provisioned, activation refused, CI gap recorded truthfully');
 
-// ---- 5. THE VALIDATOR CANNOT BE SATISFIED BY EDITING ONLY THE MANIFEST --------------
-// A manifest that marks everything resolved while the code still refuses must FAIL, or the
-// package could be "commissioned" by editing a document.
-const dishonest = JSON.parse(JSON.stringify(manifest));
-for (const decision of dishonest.decisions) {
+// ---- 5. EDITING ONLY THE DOCUMENT CANNOT COMMISSION THE PACKAGE --------------------
+// The previous version of this block mutated a copy of the manifest and then never
+// validated it: both assertions restated an assignment made two lines above, or a fact
+// independent of the copy entirely. Deleting the whole block changed nothing — it was
+// self-agreement dressed as a proof.
+//
+// This re-runs the ACTUAL rule against the forged manifest and requires it to be caught.
+function commissioningVerdict(candidate, ciRunsGates) {
+  const problems = [];
+  const outstanding = candidate.decisions.filter((d) => d.resolution.status === 'unresolved');
+  if (candidate.commissioning.status === 'ready' && outstanding.length > 0) {
+    problems.push('claims ready while decisions are unresolved');
+  }
+  for (const decision of candidate.decisions) {
+    if (decision.resolution.status !== 'resolved') continue;
+    // A resolved decision must be corroborated OUTSIDE the document wherever that is
+    // possible. D8 is the case where it is: CI either runs the gates or it does not.
+    if (decision.id === 'D8' && !ciRunsGates) {
+      problems.push('D8 is marked resolved but no workflow runs the authority gates');
+    }
+  }
+  return problems;
+}
+// The honest manifest passes.
+assert.deepEqual(commissioningVerdict(manifest, workflowRunsGates), [],
+  'the real manifest does not satisfy its own commissioning rule');
+// A forged one — every decision flipped to resolved, status set to ready — is CAUGHT.
+const forged = JSON.parse(JSON.stringify(manifest));
+for (const decision of forged.decisions) {
   decision.resolution.status = 'resolved';
   decision.resolution.assignedOwner = 'someone';
   decision.resolution.decidedOn = '2026-08-15';
   decision.resolution.decisionRecordRef = 'ref';
   for (const key of Object.keys(decision.resolution.suppliedValues || {})) decision.resolution.suppliedValues[key] = 'value';
 }
-dishonest.commissioning.status = 'ready';
-dishonest.commissioning.unresolvedCount = 0;
-// The D8 cross-check is what catches it: the manifest would claim CI runs the gates.
-const d8Dishonest = dishonest.decisions.find((d) => d.id === 'D8');
-assert.equal(d8Dishonest.resolution.status, 'resolved');
-assert.notEqual(workflowRunsGates, true, 'no workflow runs the gates, so a resolved D8 must be detectable as false');
-ok('marking decisions resolved in the document alone cannot commission the package — the D8 and capability cross-checks contradict it');
+forged.commissioning.status = 'ready';
+forged.commissioning.unresolvedCount = 0;
+const caught = commissioningVerdict(forged, workflowRunsGates);
+assert.ok(caught.length > 0, 'a wholly forged manifest satisfied the commissioning rule — the document alone can commission the package');
+assert.ok(caught.some((p) => /D8/.test(p)), `the forgery was caught, but not by the external corroboration: ${caught.join('; ')}`);
+ok(`a forged manifest is caught by external corroboration (${caught[0]}); the honest manifest passes the same rule`);
 
 console.log(`\nCommissioning decision validation PASS: ${checks} checks.`);
 console.log(`\nCOMMISSIONING IS BLOCKED. ${unresolved.length} operator decision(s) unresolved:`);

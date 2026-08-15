@@ -40,6 +40,22 @@ const STATE_KEYS: Record<string, OutreachKey> = {
 /** A state with no translation renders as its raw code rather than as a blank cell. */
 const stateKey = (state: string): OutreachKey | null => STATE_KEYS[state] ?? null;
 
+/**
+ * A short, stable fingerprint of draft content, for intent identity only.
+ *
+ * Not a security primitive and not a digest of record: the server binds approvals with
+ * SHA-256 over a canonical form. This exists so the browser's intent key can distinguish
+ * edited content WITHOUT carrying the private subject and body into sessionStorage.
+ */
+function contentFingerprint(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `c${hash.toString(36)}${value.length.toString(36)}`;
+}
+
 /** sessionStorage when available; a no-op in environments without it. */
 const defaultIntentStore = (): IntentStore => {
   try {
@@ -122,9 +138,13 @@ export default function V2OutreachApprovals({
       draftId: row.draftId,
       requestedState,
       expectedVersion: row.version,
-      // Content identity: editing what would be approved yields a different intent, so a
-      // retry can never carry new content under an id the server already accepted.
-      contentRef: `${row.subject ?? ''}|${row.body ?? ''}`,
+// Content identity as a DIGEST, never the content itself. Editing what would be
+      // approved still yields a different intent — so a retry cannot carry new content
+      // under an id the server already accepted — but the private subject and body no
+      // longer reach the storage key or the stored value. They previously did, and
+      // survived every disposal event because disposal only ever sweeps the CURRENT
+      // fingerprint's namespace while the trigger for disposal is the fingerprint changing.
+      contentRef: contentFingerprint(`${row.subject ?? ''}\u0000${row.body ?? ''}`),
     };
     // The STABLE id for this intent. Reserving does not mark it in flight — a previous
     // attempt that failed in transport leaves the id reserved so this retry carries it,

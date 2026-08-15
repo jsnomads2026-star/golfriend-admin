@@ -34,6 +34,7 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
 
 const worldModule = await import(`file://${resolve(ROOT, 'test/fixtures/mondayAuthorityWorld.mjs')}`);
 const world = worldModule.seed();
+const SCENARIOS_DECLARED = world.scenarios.length;
 
 const authorityMod = await import(`file://${resolve(FUNCTIONS, 'lib/authority.js')}`);
 const authority = authorityMod.default ?? authorityMod;
@@ -381,4 +382,12 @@ ok(`${world.organizationScenarios.filter((x) => ['create_representative', 'mint_
 }
 ok('a suspended organization refuses principal minting by its own active manager, and an active one does not');
 
-console.log(`\nMonday authority scenarios PASS: ${checks} checks, ${assertions} fixture-driven assertions across ${world.identities.length} identities, ${world.legacyStatusRecords.length} legacy records, ${world.appCheckEvidence.length} attestation cases, ${world.lifecycleScenarios.length} lifecycle events and ${world.organizationScenarios.length} organization scenarios.`);
+// EXECUTED vs DECLARED, reported separately. An earlier summary counted all 205 scenarios
+// as executed; 169 of them are surface declarations with no call-site mapping, and reporting
+// them as coverage was simply untrue.
+const executedOrgScenarios = world.organizationScenarios
+  .filter((x) => ['create_representative', 'mint_principal'].includes(x.action)).length;
+console.log(`\nMonday authority scenarios PASS: ${checks} checks, ${assertions} assertions EXECUTED against real modules.`);
+console.log(`  executed: ${world.identities.length} identities (predicate + client journey), ${world.legacyStatusRecords.length} legacy records, ${world.appCheckEvidence.length} attestation cases, ${world.lifecycleScenarios.length} lifecycle events, ${executedOrgScenarios}/${world.organizationScenarios.length} organization scenarios`);
+console.log(`  DECLARED ONLY: ${world.scenarios.length} surface scenarios across 13 privileged surfaces — no surface-name-to-call-site mapping exists yet, so they are a specification, not coverage.`);
+console.log('  The Portal call sites are covered separately by verify:portal-authority-callsites (20 sites, 380 real invocations).');
