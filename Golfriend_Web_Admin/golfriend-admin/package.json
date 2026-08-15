@@ -49,6 +49,8 @@
     "verify:partner-onboarding": "node scripts/partner-onboarding-v2-verify.mjs",
     "verify:verified-course-onboarding-ui": "node scripts/verified-course-onboarding-ui-verify.mjs",
     "verify:enterprise-authority": "node --test src/components/B2B/enterprise/organizationAuthorityModel.test.ts && node scripts/enterprise-authority-ui-verify.mjs",
+    "verify:enterprise-tournament-ui": "node scripts/enterprise-tournament-ui-verify.mjs",
+    "test:enterprise-tournament-model": "node --test src/components/B2B/enterprise/tournamentOperationsModel.test.ts",
     "verify:partner-activation": "node scripts/partner-activation-verify.mjs && node scripts/partner-claim-review-verify.mjs",
     "verify:partner-availability": "node scripts/partner-availability-verify.mjs",
     "verify:partner-booking": "node scripts/partner-booking-verify.mjs",
