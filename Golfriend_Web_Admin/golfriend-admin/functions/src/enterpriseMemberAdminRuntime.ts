@@ -228,14 +228,12 @@ export const getEnterpriseMemberRequestAdminV1 = onCall(
           ? {
               previewId: preview.id,
               rowDigest: px.rowDigest,
-              rows: (px.rows || [])
-                .slice(0, 100)
-                .map((row: any) => ({
-                  row: row.row,
-                  memberReference: row.memberReference,
-                  locale: row.locale,
-                  conflict: row.result,
-                })),
+              rows: (px.rows || []).slice(0, 100).map((row: any) => ({
+                row: row.row,
+                memberReference: row.memberReference,
+                locale: row.locale,
+                conflict: row.result,
+              })),
             }
           : null,
       lifecycle:
@@ -547,7 +545,7 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
             ms = (v: any) => v?.toMillis?.() ?? Date.parse(String(v || ""));
           return (
             snapshot.exists &&
-            ["active", "approved"].includes(String(z.status)) &&
+            z.status === "active" &&
             !z.suspendedAt &&
             !z.revokedAt &&
             (!z.effectiveAt || ms(z.effectiveAt) <= Date.now()) &&
@@ -570,6 +568,22 @@ export const prepareEnterpriseMemberDeliveryAdminV1 = onCall(
         ["inactive", "unavailable"].includes(String(member.data()?.state))
       )
         throw new HttpsError("failed-precondition", "MEMBER_DEACTIVATED");
+      if (
+        d.action === "resend" &&
+        (!member ||
+          !member.exists ||
+          member.data()?.organizationId !== d.organizationId ||
+          member.data()?.propertyId !== d.propertyId ||
+          member.data()?.courseId !== d.courseId ||
+          member.data()?.version !== d.currentMemberVersion ||
+          !["awaiting_delivery_provider", "invited"].includes(
+            String(member.data()?.state),
+          ))
+      )
+        throw new HttpsError(
+          "failed-precondition",
+          "RESEND_MEMBER_UNAVAILABLE",
+        );
       if (
         linkState?.docs?.some(
           (link: any) =>

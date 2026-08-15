@@ -47,6 +47,11 @@ test("replay stale DNC template failures", () =>
     "TEMPLATE_UNAVAILABLE",
     "CSV_PREVIEW_STALE",
   ].forEach((x) => assert.match(src, new RegExp(x))));
+test("delivery requires exact active hierarchy and resend member", () => {
+  assert.match(src, /z\.status === "active"/);
+  assert.match(src, /RESEND_MEMBER_UNAVAILABLE/);
+  assert.doesNotMatch(src, /\["active", "approved"\]/);
+});
 test("rules deny producer collections", () =>
   [
     "enterprise_member_admin_commands",
