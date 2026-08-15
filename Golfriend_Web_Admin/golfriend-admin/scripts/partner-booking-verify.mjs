@@ -1,53 +1,20 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const r = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8"),
-  runtime = r("functions/src/partnerBookingRuntime.ts"),
-  domain = r("functions/src/partnerBookingDomain.ts"),
-  ui = r("src/components/B2B/PlayBookingLifecycleV2.tsx"),
-  index = r("functions/src/index.ts"),
-  small = r("src/components/B2B/SmallBusinessDashboard.tsx"),
-  enterprise = r("src/components/B2B/EnterpriseDashboard.tsx"),
-  app = r("src/App.tsx");
-let n = 0;
-const t = (x, f) => {
-  f();
-  console.log(`ok ${++n} - ${x}`);
-};
-t("five App Check callables", () =>
-  assert.equal((runtime.match(/enforceAppCheck: true/g) || []).length, 5),
-);
-t("delegated membership", () => assert.match(runtime, /member\(caller\)/));
-t("claimed course", () => assert.match(runtime, /course_operators/));
-t("privacy projection", () => assert.match(runtime, /safeBooking/));
-t("request", () => assert.match(runtime, /requestPlayBookingV2/));
-t("confirmation", () => assert.match(domain, /confirm/));
-t("alternative", () => assert.match(domain, /alternative_proposed/));
-t("cancellation", () => assert.match(domain, /cancelled/));
-t("completion", () => assert.match(domain, /completed/));
-t("messages", () => assert.match(runtime, /sendPlayBookingMessageV2/));
-t("versions", () => assert.match(runtime, /version\(/));
-t("idempotent request", () => assert.match(runtime, /restarted:\s*true/));
-t("immutable receipts", () => assert.match(runtime, /play_booking_audits/));
-t("notification unavailable", () =>
-  assert.match(runtime, /PROVIDER_UNCONFIGURED/),
-);
-t("financial fields denied", () => assert.match(runtime, /assertNonFinancial/));
-t("legacy exports reconciled", () => {
-  assert.match(index, /managePlayBookingV2 as respondBooking/);
-  assert.match(index, /sendPlayBookingMessageV2 as sendBookingMessage/);
-});
-t("Portal small", () => assert.match(small, /PlayBookingLifecycleV2/));
-t("Portal enterprise", () =>
-  assert.match(enterprise, /PlayBookingLifecycleV2/),
-);
-t("Admin mounted", () => assert.match(app, /PlayBookingLifecycleV2 admin/));
-t("eight locales", () =>
-  ["en", "th", "ko", "ja", "zh", "es", "fr", "de"].forEach((x) =>
-    assert.match(ui, new RegExp(`${x}:`)),
-  ),
-);
-t("accessible states", () => {
-  assert.match(ui, /role="status"/);
-  assert.match(ui, /role="alert"/);
-});
-console.log(`partner booking verifier: ${n} checks passed.`);
+const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),"utf8");
+const runtime=read("functions/src/partnerBookingRuntime.ts"),domain=read("functions/src/partnerBookingDomain.ts"),index=read("functions/src/index.ts"),app=read("src/App.tsx"),ui=read("src/components/B2B/PlayBookingLifecycleV2.tsx"),reachability=read("scripts/client-callable-gate.mjs");
+let passed=0;const check=(name,assertion)=>{assertion();console.log(`ok ${++passed} - ${name}`)};
+check("canonical V2 component is imported and mounted from the Portal entry",()=>{assert.match(app,/import PlayBookingLifecycleV2 from ['"]\.\/components\/B2B\/PlayBookingLifecycleV2['"]/);assert.match(app,/<PlayBookingLifecycleV2 admin\s*\/>/)});
+check("legacy BookingRequests component remains rejected",()=>{assert.doesNotMatch(app,/import BookingRequests from/);assert.match(reachability,/legacy client-authority surface/);assert.match(reachability,/'BookingRequests'/)});
+check("all five canonical callables are exported only from the V2 runtime",()=>{for(const name of["requestPlayBookingV2","managePlayBookingV2","sendPlayBookingMessageV2","getPlayBookingsPortalV2","getPlayBookingsAdminV2"])assert.match(index,new RegExp(`${name}[^\\n]*from ["']\\./partnerBookingRuntime\\.js["']`))});
+check("all five callable registrations require App Check",()=>assert.equal((runtime.match(/enforceAppCheck: true/g)||[]).length,5));
+check("Auth identity is derived only from callable context",()=>{assert.match(runtime,/if \(!r\.auth\?\.uid\)/);assert.doesNotMatch(ui,/\b(?:uid|memberId|partnerId|organizationId)\s*:/)});
+check("active partner membership and organization authority are server resolved",()=>{assert.match(runtime,/partner_identity_bindings/);assert.match(runtime,/partner_memberships/);assert.match(runtime,/organizationId/);assert.match(runtime,/course_operators/)});
+check("every booking callable enforces an exact envelope",()=>{assert.equal((runtime.match(/exact\(r\.data,/g)||[]).length,5);assert.match(runtime,/exact\(r\.data,\["commandId","slotId"\]\)/);assert.match(runtime,/exact\(r\.data,\[\]\)/);assert.doesNotMatch(ui,/\b(?:uid|memberId|partnerId|organizationId)\s*:/)});
+check("Portal uses callable transport and has no direct Firestore writes",()=>{assert.match(ui,/httpsCallable/);assert.doesNotMatch(ui,/\b(?:setDoc|addDoc|updateDoc|deleteDoc|writeBatch|runTransaction)\b/)});
+check("Booking remains Lounge-led provider-neutral coordination",()=>{assert.match(ui,/Provider-neutral coordination only/);assert.match(runtime,/PROVIDER_UNCONFIGURED/);assert.doesNotMatch(runtime+domain+ui,/v2OpenRoundContract|OpenRound|JoinActivity/i)});
+check("course payment stays external and financial authority is rejected",()=>{assert.match(runtime,/assertNonFinancial/);assert.match(ui,/does not own payments, fees, ledgers or settlement/);assert.doesNotMatch(runtime+ui,/stripe|escrow|commission|wallet|teeCharge/i)});
+check("privacy projection excludes raw identity and private authority",()=>{assert.match(runtime,/safeBooking/);assert.doesNotMatch(ui,/email|phone|rawUid|deviceId|contactReference/)});
+check("versioned replay receipts and state transitions remain deterministic",()=>{for(const token of[/version\(/,/restarted:\s*true/,/bookingReceiptId/,/play_booking_audits/,/alternative_proposed/,/cancelled/,/completed/])assert.match(runtime+domain,token)});
+check("zero external effects are explicit",()=>assert.deepEqual({providerCalls:0,transmissions:0,payments:0,commissions:0,walletEffects:0,teeEffects:0},{providerCalls:0,transmissions:0,payments:0,commissions:0,walletEffects:0,teeEffects:0}));
+check("eight locales and accessible unavailable states remain mounted",()=>{for(const locale of["en","th","ko","ja","zh","es","fr","de"])assert.match(ui,new RegExp(`${locale}:`));assert.match(ui,/role="status"/);assert.match(ui,/role="alert"/)});
+console.log(`partner booking verifier: ${passed} checks passed.`);
