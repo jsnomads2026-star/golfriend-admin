@@ -12,6 +12,7 @@ Schema: `golfriend.enterprise-organization-authority.v1` (`schemaVersion: 1`). T
 - `enterprise_courses/{courseId}`: immutable organization/property/course IDs, canonical course ID, display name, lifecycle status and version.
 - `enterprise_authority_receipts/{receiptId}`: deterministic, create-only, minimum-necessary authority decision receipt.
 - `enterprise_authority_commands/{commandId}`: deterministic command digest/result ledger for authority mutations. Same command and payload may replay; changed payload conflicts.
+- `enterprise_verified_golfers/{uid}`: server-owned exact-ID verification registry used only for consent invitations; clients cannot list, read, or write it.
 
 All records are server-owned. Direct client reads and writes are denied. Display names, client claims and legacy records never establish authority. The resolver starts at the authenticated UID binding, validates every referenced record, intersects exact course grants, and fails the complete decision closed for missing, malformed, duplicate, conflicting, inactive, not-yet-effective, expired, revoked or suspended data.
 

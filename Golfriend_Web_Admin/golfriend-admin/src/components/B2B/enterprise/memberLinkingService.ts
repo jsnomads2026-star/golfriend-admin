@@ -1,4 +1,5 @@
 import {MEMBER_LINKING_SCHEMA, hasExactMemberLinkingScope, unavailableMemberLinkingProjection, type InviteKnownGolferCommand, type MemberLinkingContext, type MemberLinkingProjection, type UnlinkMemberCommand} from "./memberLinkingModel.ts";
+import {getFunctions,httpsCallable} from "firebase/functions";
 
 export interface EnterpriseMemberLinkingProducer {
   readonly schema: typeof MEMBER_LINKING_SCHEMA;
@@ -8,7 +9,6 @@ export interface EnterpriseMemberLinkingProducer {
   inviteKnownGolfer(context: MemberLinkingContext, command: InviteKnownGolferCommand): Promise<MemberLinkingProjection>;
   unlink(context: MemberLinkingContext, command: UnlinkMemberCommand): Promise<MemberLinkingProjection>;
 }
-
 export class EnterpriseMemberLinkingService {
   private readonly producer: EnterpriseMemberLinkingProducer | null;
   constructor(producer: EnterpriseMemberLinkingProducer | null = null) { this.producer = producer; }
@@ -55,3 +55,7 @@ export class EnterpriseMemberLinkingService {
     catch { return unavailableMemberLinkingProjection("MEMBER_LINKING_PRODUCER_UNLINK_FAILED"); }
   }
 }
+const call=async(name:string,payload:Record<string,unknown>)=>(await httpsCallable(getFunctions(),name)(payload)).data as MemberLinkingProjection;
+const payload=(context:MemberLinkingContext)=>({actorMembershipId:context.actorMembershipId,organizationId:context.organizationId,propertyId:context.propertyId,courseId:context.courseId});
+export const firebaseMemberLinkingProducer:EnterpriseMemberLinkingProducer={schema:MEMBER_LINKING_SCHEMA,supportsDirectorySearch:false,infersAdditionalConsent:false,read:context=>call("getEnterpriseMemberLinksV1",payload(context)),inviteKnownGolfer:(context,command)=>call("inviteKnownGolferEnterpriseMemberV1",{...payload(context),...command}),unlink:(context,command)=>call("unlinkEnterpriseMemberV1",{...payload(context),...command})};
+export const enterpriseMemberLinkingService=new EnterpriseMemberLinkingService(firebaseMemberLinkingProducer);

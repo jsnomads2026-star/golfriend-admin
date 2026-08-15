@@ -25,6 +25,7 @@ export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondB
 export {getBookingOperationsPortalV2,getBookingOperationsAdminV2,reconcileBookingOperationsV2,exportBookingOperationsV2,getBookingOperationsReceiptV2} from "./bookingReportingRuntime.js";
 export {prepareBookingProviderPublicationV2,publishBookingProviderPublicationV2,getBookingProviderPublicationsV2} from "./bookingProviderPublicationRuntime.js";
 export {getEnterpriseOrganizationAuthorityV2} from "./enterpriseAuthorityRuntime.js";
+export {getEnterpriseCourseProfileV1,submitEnterpriseCourseProfileV1,getEnterpriseMemberLinksV1,inviteKnownGolferEnterpriseMemberV1,unlinkEnterpriseMemberV1,revokeEnterpriseMemberLinkAsStaffV1,acceptEnterpriseMemberLinkV1,declineEnterpriseMemberLinkV1,revokeEnterpriseMemberLinkV1,unlinkEnterpriseMemberLinkAsGolferV1} from "./enterpriseOperationsRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {

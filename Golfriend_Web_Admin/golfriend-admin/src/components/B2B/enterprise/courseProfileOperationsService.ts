@@ -1,4 +1,5 @@
 import {COURSE_PROFILE_OPERATIONS_SCHEMA,hasCompleteLocalizedProfile,hasExactCourseProfileScope,unavailableCourseProfile,type CourseProfileAuthorityContext,type CourseProfileProjection,type SubmitCourseProfileEdit} from "./courseProfileOperationsModel.ts";
+import {getFunctions,httpsCallable} from "firebase/functions";
 export interface CourseProfileProducer {readonly schema:typeof COURSE_PROFILE_OPERATIONS_SCHEMA; read(context:CourseProfileAuthorityContext):Promise<CourseProfileProjection>; submit(context:CourseProfileAuthorityContext,command:SubmitCourseProfileEdit):Promise<CourseProfileProjection>;}
 export class CourseProfileOperationsService {
   private readonly producer:CourseProfileProducer|null;
@@ -23,3 +24,7 @@ export class CourseProfileOperationsService {
     return wrong?unavailableCourseProfile(context.courseId,"COURSE_PROFILE_PROJECTION_REJECTED"):p;
   }
 }
+const call=async(name:string,payload:Record<string,unknown>)=>(await httpsCallable(getFunctions(),name)(payload)).data as CourseProfileProjection;
+const payload=(context:CourseProfileAuthorityContext)=>({actorMembershipId:context.actorMembershipId,organizationId:context.organizationId,propertyId:context.propertyId,courseId:context.courseId});
+export const firebaseCourseProfileProducer:CourseProfileProducer={schema:COURSE_PROFILE_OPERATIONS_SCHEMA,read:context=>call("getEnterpriseCourseProfileV1",payload(context)),submit:(context,command)=>call("submitEnterpriseCourseProfileV1",{...payload(context),...command})};
+export const courseProfileOperationsService=new CourseProfileOperationsService(firebaseCourseProfileProducer);

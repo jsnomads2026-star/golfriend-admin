@@ -9,9 +9,13 @@ service cloud.firestore {
     match /enterprise_courses/{document=**} { allow read, write: if false; }
     match /enterprise_authority_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_authority_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_operation_commands/{document=**} { allow read, write: if false; }
     match /enterprise_course_profiles/{document=**} { allow read, write: if false; }
     match /enterprise_course_profile_attempts/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profile_counters/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profile_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_member_links/{document=**} { allow read, write: if false; }
     match /enterprise_member_link_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_verified_golfers/{document=**} { allow read, write: if false; }
   }
 }

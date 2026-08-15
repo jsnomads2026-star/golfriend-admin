@@ -1,17 +1,17 @@
-import {useCallback,useEffect,useId,useState} from "react";
+import {useCallback,useEffect,useId,useRef,useState} from "react";
 import {useLocale} from "../../../i18n/hooks";
 import {ENTERPRISE_COURSE_PROFILE_COPY,ENTERPRISE_COURSE_PROFILE_LOCALES,type EnterpriseCourseProfileLocale} from "../../../i18n/partner/enterpriseCourseProfile";
-import {CourseProfileOperationsService} from "../enterprise/courseProfileOperationsService";
+import {CourseProfileOperationsService,courseProfileOperationsService} from "../enterprise/courseProfileOperationsService";
 import type {CourseProfileAuthorityContext,CourseProfileProjection,LocalizedCourseProfile} from "../enterprise/courseProfileOperationsModel";
-const unavailable=new CourseProfileOperationsService();
 const blankProfile=():LocalizedCourseProfile=>Object.fromEntries(ENTERPRISE_COURSE_PROFILE_LOCALES.map(locale=>[locale,{name:"",description:""}])) as unknown as LocalizedCourseProfile;
 type Props={context:CourseProfileAuthorityContext|null;service?:CourseProfileOperationsService};
-export default function EnterpriseCourseProfileOperations({context,service=unavailable}:Props){
+export default function EnterpriseCourseProfileOperations({context,service=courseProfileOperationsService}:Props){
  const locale=useLocale() as EnterpriseCourseProfileLocale,copy=ENTERPRISE_COURSE_PROFILE_COPY[ENTERPRISE_COURSE_PROFILE_LOCALES.includes(locale)?locale:"en"],id=useId();
  const [projection,setProjection]=useState<CourseProfileProjection|null>(null),[loading,setLoading]=useState(true),[draft,setDraft]=useState<LocalizedCourseProfile|null>(null);
+ const commandId=useRef(crypto.randomUUID());
  const read=useCallback(async()=>{setLoading(true);try{setProjection(context?await service.read(context):null)}finally{setLoading(false)}},[context,service]);useEffect(()=>{void read()},[read]);
  useEffect(()=>{if(projection?.approvedProfile)setDraft(projection.approvedProfile.content);else if(projection&&projection.state!=="unavailable"&&projection.state!=="suspended")setDraft(blankProfile())},[projection]);
- const submit=async()=>{if(!context||!projection||!draft)return;setLoading(true);try{setProjection(await service.submit(context,{commandId:crypto.randomUUID(),canonicalCourseId:context.courseId,baseVersion:projection.approvedProfile?.version||0,attemptVersion:(projection.editAttempt?.attemptVersion||0)+1,content:draft}))}finally{setLoading(false)}};
+ const submit=async()=>{if(!context||!projection||!draft)return;setLoading(true);try{const next=await service.submit(context,{commandId:commandId.current,canonicalCourseId:context.courseId,baseVersion:projection.approvedProfile?.version||0,attemptVersion:(projection.editAttempt?.attemptVersion||0)+1,content:draft});setProjection(next);if(next.state!=="unavailable")commandId.current=crypto.randomUUID()}finally{setLoading(false)}};
  const state=projection?.state||"unavailable",message=state==="review"?copy.review:state==="pending"?copy.pending:state==="approved"?copy.approvedState:state==="rejected"?copy.rejected:state==="stale"?copy.stale:state==="suspended"?copy.suspended:state==="empty"?copy.empty:copy.unavailable;
  return <section aria-labelledby={`${id}-title`} style={{display:"grid",gap:16}}><header><h2 id={`${id}-title`}>{copy.title}</h2><p>{copy.intro}</p></header><p role="note">{copy.boundary}</p><p><strong>{copy.canonical}:</strong> <code>{context?.courseId||"—"}</code></p>
  {loading?<p role="status" aria-live="polite">{copy.loading}</p>:<p role={state==="suspended"||state==="unavailable"?"alert":"status"}>{message}</p>}
