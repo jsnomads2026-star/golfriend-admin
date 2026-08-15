@@ -40,9 +40,14 @@ check("raw token response only", () => {
 });
 check("lost completed response replays only from immutable signed authority", () => {
   assert.match(source, /a\.state==="consumed"/);
+  assert.match(source, /a\.recoverableUntilMs<=nowMs/);
   assert.match(source, /exactEnterpriseBookingOperationReplay/);
   assert.match(source, /verifyEnterpriseCorrelationEvent/);
   assert.match(source, /used\.state!=="used"/);
+  assert.match(source, /used\.operationDigest!==intent\.intentDigest/);
+  assert.match(source, /used\.tokenDigest!==a\.currentTokenDigest/);
+  assert.match(source, /used\.tokenVersion!==a\.tokenVersion/);
+  assert.match(source, /used\.signerKeyVersion!==a\.signerKeyVersion/);
   assert.match(source, /restarted:true/);
 });
 console.log(`partner booking token recovery runtime: ${count} checks passed.`);
