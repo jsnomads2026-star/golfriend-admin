@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { randomBytes } from "node:crypto";
 import { defineString } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { isActiveStaff } from "./authority.js";
@@ -9,15 +10,24 @@ import {
   BOOKING_SCHEMA,
   permissions,
   transition,
-  validateAlternative,
   version,
 } from "./partnerBookingDomain.js";
-import { validateCommand, validateVersion } from "./partnerActivationDomain.js";
+import { validateCommand } from "./partnerActivationDomain.js";
 import {
   BookingScopeError,
   derivePartnerBookingScope,
   PartnerBookingScope,
 } from "./partnerBookingScope.js";
+import {
+  buildCompletedBookingOperation,
+  buildPendingBookingOperation,
+  buildUnsuccessfulBookingOperation,
+  assertPendingBookingOperationClaim,
+  cancelledBookedCount,
+  operationResponse,
+  replayCompletedBookingOperation,
+  validateBookingOperationRequest,
+} from "./partnerBookingReplay.js";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(),
   notifier = defineString("PARTNER_NOTIFICATION_PROVIDER", { default: "" }),
@@ -238,26 +248,92 @@ export const managePlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
     const caller = uid(r),
-      scope = await bookingScope(caller),
-      cmd = command(r),
-      action = String(r.data?.action || ""),
-      id = String(r.data?.bookingId || ""),
-      expected = validateVersion(r.data?.expectedVersion);
+      scope = await bookingScope(caller);
     try {
       assertNonFinancial(r.data);
     } catch {
       throw new HttpsError("invalid-argument", "Financial fields prohibited.");
     }
+    let request: ReturnType<typeof validateBookingOperationRequest>;
+    try {
+      request = validateBookingOperationRequest(r.data || {}, {
+        actorUid: caller,
+        organizationId: scope.organizationId,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "COMMAND_INVALID";
+      throw new HttpsError("invalid-argument", `Booking command invalid: ${reason}.`);
+    }
+    const { action, bookingId: id, commandId: cmd, expectedVersion: expected } = request;
     const allowed = scope.canMutate && (permissions(scope.role) as any)[action];
     if (!allowed)
       throw new HttpsError(
         "permission-denied",
         "Role cannot perform this action.",
       );
-    const ref = db.collection("bookings").doc(id);
-    return db.runTransaction(async (tx) => {
-      const [booking, binding, membership, organization] = await Promise.all([
+    const ref = db.collection("bookings").doc(id),
+      receiptId = bookingReceiptId(id, cmd),
+      receiptRef = db.collection("play_booking_audits").doc(receiptId),
+      attemptToken = randomBytes(32).toString("hex");
+    const claimResult = await db.runTransaction(async (tx) => {
+      const [booking, receipt, binding, membership, organization] = await Promise.all([
+        tx.get(ref), tx.get(receiptRef),
+        tx.get(db.collection("partner_identity_bindings").doc(caller)),
+        tx.get(db.collection("partner_memberships").doc(`${scope.organizationId}_${caller}`)),
+        tx.get(db.collection("partner_organizations").doc(scope.organizationId)),
+      ]);
+      if (!binding.exists || binding.data()?.organizationId !== scope.organizationId ||
+          binding.data()?.verifiedAuthUid !== caller || !membership.exists ||
+          membership.data()?.organizationId !== scope.organizationId ||
+          membership.data()?.uid !== caller || membership.data()?.status !== "active" ||
+          membership.data()?.role !== scope.role || !organization.exists ||
+          organization.data()?.status !== "active")
+        throw new HttpsError("permission-denied", "Booking authority changed.");
+      if (!booking.exists || booking.data()?.organizationId !== scope.organizationId ||
+          !scope.courseIds.includes(String(booking.data()?.courseId)) ||
+          !organization.data()?.authorizedCourseIds?.includes(String(booking.data()?.courseId)) ||
+          (scope.role === "course_staff" &&
+            !membership.data()?.courseIds?.includes(String(booking.data()?.courseId))))
+        throw new HttpsError("permission-denied", "Booking outside organization.");
+      const courseClaim = await tx.get(
+        db.collection("course_operators").doc(String(booking.data()?.courseId)),
+      );
+      if (!courseClaim.exists || courseClaim.data()?.organizationId !== scope.organizationId ||
+          courseClaim.data()?.status !== "active")
+        throw new HttpsError("permission-denied", "Active claimed course required.");
+      if (receipt.exists) {
+        try {
+          return { response: operationResponse(
+            replayCompletedBookingOperation(receipt.data(), request),
+          ) };
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "OPERATION_AMBIGUOUS";
+          if (reason === "COMMAND_REUSE_CONFLICT")
+            throw new HttpsError("already-exists", reason);
+          if (reason.startsWith("OPERATION_FAILED:"))
+            return { operationFailed: reason.slice("OPERATION_FAILED:".length) };
+          throw new HttpsError("failed-precondition", reason);
+        }
+      }
+      tx.create(receiptRef, {
+        ...buildPendingBookingOperation(request, attemptToken, Date.now()),
+        actorRole: scope.role,
+        createdAt: now(),
+      });
+      return { claimed: true };
+    });
+    if ("response" in claimResult) return claimResult.response;
+    if ("operationFailed" in claimResult) {
+      const reason = String(claimResult.operationFailed);
+      throw new HttpsError(
+        reason === "VERSION_CONFLICT" ? "aborted" : "failed-precondition",
+        reason,
+      );
+    }
+    const outcome = await db.runTransaction(async (tx) => {
+      const [booking, receipt, binding, membership, organization] = await Promise.all([
         tx.get(ref),
+        tx.get(receiptRef),
         tx.get(db.collection("partner_identity_bindings").doc(caller)),
         tx.get(
           db
@@ -307,49 +383,116 @@ export const managePlayBookingV2 = onCall(
           "permission-denied",
           "Active claimed course required.",
         );
-    let status: string;
-    let alternative: ReturnType<typeof validateAlternative> | null = null;
+      if (receipt.exists) {
+        try {
+          assertPendingBookingOperationClaim(receipt.data(), request, attemptToken);
+        } catch (error) {
+          throw new HttpsError("failed-precondition", "OPERATION_CLAIM_MISMATCH");
+        }
+      } else throw new HttpsError("failed-precondition", "OPERATION_CLAIM_MISSING");
+      let status: string;
       try {
         status = transition(String(booking.data()?.status), action);
-        if (action === "alternative") alternative = validateAlternative(r.data);
       } catch {
-        throw new HttpsError(
-          "failed-precondition",
-          "Booking transition invalid.",
-        );
+        tx.set(receiptRef, {
+          ...buildUnsuccessfulBookingOperation(request, "failed", "TRANSITION_DENIED"),
+          actorRole: scope.role,
+          createdAt: now(),
+        });
+        return { operationFailed: "TRANSITION_DENIED" };
       }
-      const next = version(Number(booking.data()?.version || 0), expected),
-        receiptId = bookingReceiptId(id, cmd),
+      let next: number;
+      try {
+        next = version(Number(booking.data()?.version || 0), expected);
+      } catch {
+        tx.set(receiptRef, {
+          ...buildUnsuccessfulBookingOperation(request, "failed", "VERSION_CONFLICT"),
+          actorRole: scope.role,
+          createdAt: now(),
+        });
+        return { operationFailed: "VERSION_CONFLICT" };
+      }
+      const previousStatus = String(booking.data()?.status),
+        previousVersion = Number(booking.data()?.version || 0),
+        notificationStatus = notifier.value()
+          ? "queued"
+          : "PROVIDER_UNCONFIGURED",
         slotRef = db
           .collection("tee_time_slots")
           .doc(String(booking.data()?.slotId));
+      let slotMutationApplied = false;
+      if (action === "alternative") {
+        const alternativeSlot = await tx.get(
+          db.collection("tee_time_slots").doc(String(request.alternative?.slotId)),
+        );
+        if (!alternativeSlot.exists ||
+            alternativeSlot.data()?.organizationId !== scope.organizationId ||
+            String(alternativeSlot.data()?.courseId) !== String(booking.data()?.courseId) ||
+            alternativeSlot.data()?.status !== "open" ||
+            alternativeSlot.data()?.publishToApp !== false ||
+            Number(alternativeSlot.data()?.bookedCount || 0) >=
+              Number(alternativeSlot.data()?.capacity || 0)) {
+          tx.set(receiptRef, {
+            ...buildUnsuccessfulBookingOperation(request, "failed", "ALTERNATIVE_SLOT_UNAVAILABLE"),
+            actorRole: scope.role,
+            createdAt: now(),
+          });
+          return { operationFailed: "ALTERNATIVE_SLOT_UNAVAILABLE" };
+        }
+      }
       if (action === "cancel") {
         const slot = await tx.get(slotRef);
-        if (slot.exists)
-          tx.update(slotRef, {
-            bookedCount: Math.max(0, Number(slot.data()?.bookedCount || 0) - 1),
-            updatedAt: now(),
+        if (!slot.exists ||
+            slot.data()?.organizationId !== scope.organizationId ||
+            String(slot.data()?.courseId) !== String(booking.data()?.courseId) ||
+            String(slot.id) !== String(booking.data()?.slotId))
+        {
+          tx.set(receiptRef, {
+            ...buildUnsuccessfulBookingOperation(request, "ambiguous", "BOOKING_SLOT_BINDING_INVALID"),
+            actorRole: scope.role,
+            createdAt: now(),
           });
+          return { operationFailed: "BOOKING_SLOT_BINDING_INVALID" };
+        }
+        tx.update(slotRef, {
+          bookedCount: cancelledBookedCount(slot.data()?.bookedCount || 0),
+          updatedAt: now(),
+        });
+        slotMutationApplied = true;
       }
-      tx.update(ref, { status, version: next, alternative, updatedAt: now() });
-      tx.create(db.collection("play_booking_audits").doc(receiptId), {
+      tx.update(ref, {
+        status,
+        version: next,
+        alternative: request.alternative,
+        updatedAt: now(),
+      });
+      const operation = buildCompletedBookingOperation({
+        request,
+        previousStatus,
+        status,
+        previousVersion,
+        version: next,
         receiptId,
-        bookingId: id,
+        notificationStatus,
+        slotId: String(booking.data()?.slotId),
+        slotMutationApplied,
+      });
+      tx.set(receiptRef, {
+        ...operation,
         kind: action,
         actorRole: scope.role,
         createdAt: now(),
       });
-      return {
-        success: true,
-        bookingId: id,
-        status,
-        version: next,
-        receiptId,
-        notificationStatus: notifier.value()
-          ? "queued"
-          : "PROVIDER_UNCONFIGURED",
-      };
+      return operationResponse(operation);
     });
+    if ("operationFailed" in outcome) {
+      const reason = String(outcome.operationFailed);
+      throw new HttpsError(
+        reason === "VERSION_CONFLICT" ? "aborted" : "failed-precondition",
+        reason,
+      );
+    }
+    return outcome;
   },
 );
 export const sendPlayBookingMessageV2 = onCall(

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 const r = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8"),
   runtime = r("functions/src/partnerBookingRuntime.ts"),
   domain = r("functions/src/partnerBookingDomain.ts"),
+  replay = r("functions/src/partnerBookingReplay.ts"),
   ui = r("src/components/B2B/PlayBookingLifecycleV2.tsx"),
   locale = r("src/i18n/partner/playBookingDesk.ts"),
   index = r("functions/src/index.ts"),
@@ -17,7 +18,7 @@ const t = (x, f) => {
 t("five App Check callables", () =>
   assert.equal((runtime.match(/enforceAppCheck: true/g) || []).length, 5),
 );
-t("delegated membership", () => assert.match(runtime, /member\(caller\)/));
+t("derived delegated scope", () => assert.match(runtime, /bookingScope\(caller\)/));
 t("claimed course", () => assert.match(runtime, /course_operators/));
 t("privacy projection", () => assert.match(runtime, /safeBooking/));
 t("request", () => assert.match(runtime, /requestPlayBookingV2/));
@@ -28,7 +29,33 @@ t("completion", () => assert.match(domain, /completed/));
 t("messages", () => assert.match(runtime, /sendPlayBookingMessageV2/));
 t("versions", () => assert.match(runtime, /version\(/));
 t("idempotent request", () => assert.match(runtime, /restarted:\s*true/));
-t("immutable receipts", () => assert.match(runtime, /play_booking_audits/));
+t("immutable operation receipts", () => {
+  assert.match(runtime, /replayCompletedBookingOperation/);
+  assert.match(runtime, /tx\.create\(receiptRef/);
+  assert.match(replay, /immutable:\s*true/);
+});
+t("strict command allowlist", () =>
+  assert.match(replay, /COMMAND_FIELDS_INVALID/),
+);
+t("destructive confirmation", () =>
+  assert.match(replay, /CONFIRMATION_REQUIRED/),
+);
+t("same-command replay binding", () => {
+  assert.match(replay, /COMMAND_REUSE_CONFLICT/);
+  assert.match(replay, /actorUid.*bookingId.*action.*commandId/s);
+});
+t("ambiguous operation fails closed", () => {
+  assert.match(replay, /OPERATION_PENDING/);
+  assert.match(replay, /OPERATION_AMBIGUOUS/);
+});
+t("cancel slot binding", () =>
+  assert.match(runtime, /BOOKING_SLOT_BINDING_INVALID/),
+);
+t("alternative slot authority binding", () => {
+  assert.match(runtime, /ALTERNATIVE_SLOT_UNAVAILABLE/);
+  assert.match(runtime, /alternativeSlot\.data\(\)\?\.organizationId/);
+  assert.match(runtime, /alternativeSlot\.data\(\)\?\.courseId/);
+});
 t("notification unavailable", () =>
   assert.match(runtime, /PROVIDER_UNCONFIGURED/),
 );
