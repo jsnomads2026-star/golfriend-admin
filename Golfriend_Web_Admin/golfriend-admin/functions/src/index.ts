@@ -14,6 +14,7 @@ import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 export {previewCourseRegionImport, commitCourseRegionImport, listCourseSyncReceipts, recoverExpiredCourseIngestionJobs, getCourseIngestionOperations, prepareCourseIngestionRetry} from "./courseIngestion.js";
 export {getCountryUserAnalytics} from "./countryUserAnalytics.js";
 export {getTeeEconomyAnalytics} from "./teeEconomyAnalytics.js";
+export {getCourseAcquisitionDashboard,previewCourseAcquisitionPlan,acquireCourseCandidates,decideCourseCandidate,publishCourseCandidate,submitCourseCorrectionRequest} from "./courseAcquisition.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {

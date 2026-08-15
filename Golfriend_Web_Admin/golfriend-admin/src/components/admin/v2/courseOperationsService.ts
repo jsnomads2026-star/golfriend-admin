@@ -10,6 +10,10 @@ export interface CourseOperationsService {
   commitRegion(jobId:string): Promise<Record<string,unknown>>;
   loadIngestionOperations():Promise<Record<string,unknown>>;
   prepareFailedRetry(jobId:string):Promise<Record<string,unknown>>;
+  loadAcquisitionDashboard():Promise<Record<string,unknown>>;
+  previewAcquisitionPlan(payload:{coverage:unknown[];manual:unknown[]}):Promise<Record<string,unknown>>;
+  decideCandidate(payload:{candidateId:string;action:'confirm_new'|'reject';commandId:string}):Promise<Record<string,unknown>>;
+  publishCandidate(payload:{candidateId:string;decisionId:string;commandId:string;confirmed:true}):Promise<Record<string,unknown>>;
 }
 
 export const courseOperationsService: CourseOperationsService = {
@@ -44,4 +48,8 @@ export const courseOperationsService: CourseOperationsService = {
   },
   async loadIngestionOperations(){const response=await httpsCallable(functions,'getCourseIngestionOperations')();const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.course-operations/v1')throw new Error('COURSE_OPERATIONS_INVALID');return value;},
   async prepareFailedRetry(jobId){if(!jobId.trim())throw new Error('COURSE_RETRY_JOB_REQUIRED');const response=await httpsCallable(functions,'prepareCourseIngestionRetry')({jobId});const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.course-ingestion-retry/v1'||typeof value.jobId!=='string')throw new Error('COURSE_RETRY_INVALID');return value;},
+  async loadAcquisitionDashboard(){const response=await httpsCallable(functions,'getCourseAcquisitionDashboard')();const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-acquisition-dashboard.v1')throw new Error('ACQUISITION_DASHBOARD_INVALID');return value;},
+  async previewAcquisitionPlan(payload){const response=await httpsCallable(functions,'previewCourseAcquisitionPlan')(payload);const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-acquisition-plan.v1'||value.providerCalls!==0||value.writes!==0)throw new Error('ACQUISITION_PLAN_INVALID');return value;},
+  async decideCandidate(payload){const response=await httpsCallable(functions,'decideCourseCandidate')({...payload,fieldChoices:{}});const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-review-result.v1')throw new Error('COURSE_REVIEW_INVALID');return value;},
+  async publishCandidate(payload){const response=await httpsCallable(functions,'publishCourseCandidate')(payload);const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-publication-result.v1'||value.state!=='published')throw new Error('COURSE_PUBLICATION_INVALID');return value;},
 };
