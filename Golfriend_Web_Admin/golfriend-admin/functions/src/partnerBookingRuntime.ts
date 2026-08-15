@@ -246,7 +246,7 @@ export const requestPlayBookingV2 = onCall(
     });
   },
 );
-export const previewPlayBookingActionV2=onCall({enforceAppCheck:true},async r=>{const caller=uid(r),scope=await bookingScope(caller),id=String(r.data?.bookingId||""),action=String(r.data?.action||""),expectedVersion=Number(r.data?.expectedVersion);if(Object.keys(r.data||{}).some(key=>!["bookingId","action","expectedVersion","alternativeSlotId","message"].includes(key))||!["confirm","alternative","cancel"].includes(action)||!Number.isSafeInteger(expectedVersion))throw new HttpsError("invalid-argument","Booking preview invalid.");if(!(permissions(scope.role)as any)[action])throw new HttpsError("permission-denied","Booking unavailable.");const booking=await db.collection("bookings").doc(id).get();if(!booking.exists||booking.data()?.organizationId!==scope.organizationId||Number(booking.data()?.version)!==expectedVersion)throw new HttpsError("permission-denied","Booking unavailable.");const decision=await exactBookingAuthority(caller,scope,String(booking.data()?.courseId),"mutate"),binding=confirmationBinding(caller,decision,booking.data(),action,r.data),issued=issueBookingConfirmation(binding,Date.now()),ref=db.collection("play_booking_confirmation_tokens").doc(issued.record.tokenDigest);await ref.create({...issued.record,createdAt:now()});return{success:true,schema:issued.record.schema,bookingId:id,action,revision:expectedVersion,payloadDigest:binding.payloadDigest,expiresAt:new Date(issued.record.expiresAtMs).toISOString(),confirmationToken:issued.token}});
+export const previewPlayBookingActionV2=onCall({enforceAppCheck:true},async r=>{const caller=uid(r),scope=await bookingScope(caller),id=String(r.data?.bookingId||""),action=String(r.data?.action||""),expectedVersion=Number(r.data?.expectedVersion);if(Object.keys(r.data||{}).some(key=>!["bookingId","action","expectedVersion","alternativeSlotId","message"].includes(key))||!["confirm","alternative","cancel"].includes(action)||!Number.isSafeInteger(expectedVersion))throw new HttpsError("invalid-argument","Booking preview invalid.");if(!(permissions(scope.role)as any)[action])throw new HttpsError("permission-denied","Booking unavailable.");const booking=await db.collection("bookings").doc(id).get();if(!booking.exists||booking.data()?.schema==="golfriend.enterprise-correlated-booking.v2"||booking.data()?.organizationId!==scope.organizationId||Number(booking.data()?.version)!==expectedVersion)throw new HttpsError("permission-denied","Booking unavailable.");const decision=await exactBookingAuthority(caller,scope,String(booking.data()?.courseId),"mutate"),binding=confirmationBinding(caller,decision,booking.data(),action,r.data),issued=issueBookingConfirmation(binding,Date.now()),ref=db.collection("play_booking_confirmation_tokens").doc(issued.record.tokenDigest);await ref.create({...issued.record,createdAt:now()});return{success:true,schema:issued.record.schema,bookingId:id,action,revision:expectedVersion,payloadDigest:binding.payloadDigest,expiresAt:new Date(issued.record.expiresAtMs).toISOString(),confirmationToken:issued.token}});
 export const managePlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
@@ -271,7 +271,7 @@ export const managePlayBookingV2 = onCall(
     }
     const { action, bookingId: id, commandId: cmd, expectedVersion: expected } = request;
     const initialBooking=await db.collection("bookings").doc(id).get(),initialCourseId=String(initialBooking.data()?.courseId||"");
-    if(!initialBooking.exists||initialBooking.data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Booking unavailable.");
+    if(!initialBooking.exists||initialBooking.data()?.schema==="golfriend.enterprise-correlated-booking.v2"||initialBooking.data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Booking unavailable.");
     const manageDecision=await exactBookingAuthority(caller,scope,initialCourseId,"mutate"),expectedConfirmation=confirmationBinding(caller,manageDecision,initialBooking.data(),action,r.data),confirmationDigest=bookingConfirmationTokenDigest(String(request.confirmationToken||""));
     const allowed = (permissions(scope.role) as any)[action];
     if (!allowed)
@@ -286,7 +286,7 @@ export const managePlayBookingV2 = onCall(
     const claimResult = await db.runTransaction(async (tx) => {
       await transactionBookingAuthority(tx,caller,scope,initialCourseId,"mutate");
       const [booking, receipt,confirmation] = await Promise.all([tx.get(ref), tx.get(receiptRef),tx.get(confirmationRef)]);
-      if (!booking.exists || booking.data()?.organizationId !== scope.organizationId ||
+      if (!booking.exists || booking.data()?.schema === "golfriend.enterprise-correlated-booking.v2" || booking.data()?.organizationId !== scope.organizationId ||
           String(booking.data()?.courseId)!==initialCourseId)
         throw new HttpsError("permission-denied", "Booking unavailable.");
       try{verifyBookingConfirmation(request.confirmationToken,confirmation.data(),expectedConfirmation,Date.now(),receipt.exists)}catch{throw new HttpsError("failed-precondition","CONFIRMATION_INVALID")}
@@ -357,6 +357,7 @@ export const managePlayBookingV2 = onCall(
       const [booking, receipt] = await Promise.all([tx.get(ref),tx.get(receiptRef)]);
       if (
         !booking.exists ||
+        booking.data()?.schema === "golfriend.enterprise-correlated-booking.v2" ||
         booking.data()?.organizationId !== scope.organizationId ||
         String(booking.data()?.courseId)!==initialCourseId
       )
@@ -518,7 +519,7 @@ export const sendPlayBookingMessageV2 = onCall(
       throw new HttpsError("invalid-argument", "Booking message fields invalid.");
     if (!text)
       throw new HttpsError("invalid-argument", "Booking message invalid.");
-    if (!booking.exists)
+    if (!booking.exists || booking.data()?.schema === "golfriend.enterprise-correlated-booking.v2")
       throw new HttpsError("permission-denied", "Message denied.");
     let role = "member", staffScope: PartnerBookingScope | null = null;
     if (booking.data()?.memberUid !== caller) {
@@ -543,7 +544,7 @@ export const sendPlayBookingMessageV2 = onCall(
       const [currentBooking, priorOperation, priorMessage] = await Promise.all([
         tx.get(bookingRef), tx.get(operationRef), tx.get(messageRef),
       ]);
-      if (!currentBooking.exists ||
+      if (!currentBooking.exists || currentBooking.data()?.schema === "golfriend.enterprise-correlated-booking.v2" ||
           (staffScope
             ? currentBooking.data()?.organizationId !== staffScope.organizationId ||
               !staffScope.courseIds.includes(String(currentBooking.data()?.courseId))
@@ -598,7 +599,7 @@ export const getPlayBookingsPortalV2 = onCall(
         .get(),
       bookings = snap.docs
         .map((document) => document.data())
-        .filter((booking) => scope.courseIds.includes(String(booking.courseId)))
+        .filter((booking) => booking.schema !== "golfriend.enterprise-correlated-booking.v2" && scope.courseIds.includes(String(booking.courseId)))
         .map((booking) => safeBooking(booking))
         .filter((booking) => booking !== null);
     return {
