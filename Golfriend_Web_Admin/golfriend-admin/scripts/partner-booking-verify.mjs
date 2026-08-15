@@ -19,7 +19,7 @@ t("five App Check callables", () =>
   assert.equal((runtime.match(/enforceAppCheck: true/g) || []).length, 5),
 );
 t("derived delegated scope", () => assert.match(runtime, /bookingScope\(caller\)/));
-t("claimed course", () => assert.match(runtime, /course_operators/));
+t("exact enterprise course authority", () => assert.match(runtime, /resolveEnterpriseBookingCourseAuthority/));
 t("privacy projection", () => assert.match(runtime, /safeBooking/));
 t("request", () => assert.match(runtime, /requestPlayBookingV2/));
 t("confirmation", () => assert.match(domain, /confirm/));
@@ -69,12 +69,8 @@ t("message actor payload replay", () => {
 });
 t("message transaction rechecks current authority", () => {
   const start = runtime.indexOf("sendPlayBookingMessageV2"), body = runtime.slice(start, runtime.indexOf("getPlayBookingsPortalV2", start));
-  assert.match(body, /partner_identity_bindings/);
-  assert.match(body, /partner_memberships/);
-  assert.match(body, /verifiedAuthUid !== caller/);
-  assert.match(body, /authorizedCourseIds/);
-  assert.match(body, /course_operators/);
-  assert.match(body, /membership\.data\(\)\?\.courseIds/);
+  assert.match(body, /exactBookingAuthority/);
+  assert.doesNotMatch(body, /partner_identity_bindings|partner_memberships|partner_organizations|course_operators/);
   assert.ok((body.match(/"Message denied\."/g) || []).length >= 3);
 });
 t("availability capacity fails closed", () => {

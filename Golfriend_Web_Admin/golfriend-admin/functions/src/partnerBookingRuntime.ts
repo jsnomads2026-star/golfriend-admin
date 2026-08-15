@@ -18,6 +18,8 @@ import {
   derivePartnerBookingScope,
   PartnerBookingScope,
 } from "./partnerBookingScope.js";
+import { resolveEnterpriseBookingCourseAuthority } from "./enterpriseAuthorityRuntime.js";
+import { resolveBookingCourseAuthority } from "./enterpriseAuthorityDomain.js";
 import {
   buildCompletedBookingOperation,
   buildPendingBookingOperation,
@@ -52,65 +54,28 @@ function command(r: any) {
   }
 }
 async function bookingScope(id: string): Promise<PartnerBookingScope> {
-  const binding = await db.collection("partner_identity_bindings").doc(id).get(),
-    organizationId = String(binding.data()?.organizationId || "");
-  if (!binding.exists || !/^[A-Za-z0-9_-]{1,160}$/.test(organizationId))
-    throw new HttpsError(
-      "permission-denied",
-      "Active membership required; booking scope unavailable.",
-    );
-  const organization = await db
-      .collection("partner_organizations")
-      .doc(organizationId)
-      .get(),
-    authorizedValue = organization.data()?.authorizedCourseIds;
-  if (
-    !Array.isArray(authorizedValue) ||
-    authorizedValue.length > 200 ||
-    authorizedValue.some(
-      (courseId: unknown) =>
-        typeof courseId !== "string" ||
-        !/^[A-Za-z0-9_-]{1,160}$/.test(courseId),
-    )
-  )
-    throw new HttpsError(
-      "permission-denied",
-      "Active membership required; booking scope unavailable.",
-    );
-  const authorized = authorizedValue as string[],
-    membership = await db
-      .collection("partner_memberships")
-      .doc(`${organizationId}_${id}`)
-      .get(),
-    [operators, courses] = await Promise.all([
-      Promise.all(
-        authorized.map((courseId: unknown) =>
-          db.collection("course_operators").doc(String(courseId)).get(),
-        ),
-      ),
-      Promise.all(
-        authorized.map((courseId: unknown) =>
-          db.collection("courses").doc(String(courseId)).get(),
-        ),
-      ),
-    ]);
+  const bindings=await db.collection("enterprise_authority_bindings").doc(id).collection("memberships").limit(101).get(),courses = await db.collection("enterprise_courses").limit(201).get();
   try {
-    return derivePartnerBookingScope({
-      callerUid: id,
-      binding: binding.exists ? binding.data() || null : null,
-      membership: membership.exists ? membership.data() || null : null,
-      organization: organization.exists ? organization.data() || null : null,
-      operators: operators
-        .filter((document) => document.exists)
-        .map((document) => ({ ...document.data(), courseId: document.id })),
-      courses: courses
-        .filter((document) => document.exists)
-        .map((document) => ({ ...document.data(), courseId: document.id })),
-    });
+    if(bindings.empty||bindings.size>100||bindings.docs.some(x=>!activeAuthorityBinding(x.data())))throw new BookingScopeError("BOOKING_BINDING_UNAVAILABLE");
+    if(courses.size>200)throw new BookingScopeError("BOOKING_COURSE_SCOPE_TRUNCATED");
+    const decisions=[];
+    for(const course of courses.docs){const value=course.data(),organizationId=String(value.organizationId||""),propertyId=String(value.propertyId||""),courseId=String(value.courseId||course.id);try{decisions.push(await resolveEnterpriseBookingCourseAuthority(id,organizationId,propertyId,courseId,"read"))}catch{/* Foreign or inactive courses are deliberately undisclosed. */}}
+    return derivePartnerBookingScope(decisions);
   } catch (error) {
     const code = error instanceof BookingScopeError ? error.code : "SCOPE_INVALID";
     throw new HttpsError("permission-denied", `Booking scope unavailable: ${code}.`);
   }
+}
+function activeAuthorityBinding(value:any){const millis=(candidate:any)=>candidate?.toMillis instanceof Function?candidate.toMillis():Date.parse(candidate),nowMs=Date.now(),version=Number(value?.version);return typeof value?.membershipId==="string"&&Number.isSafeInteger(version)&&version>=1&&!value.revokedAt&&!value.suspendedAt&&(!value.effectiveAt||millis(value.effectiveAt)<=nowMs)&&(!value.expiresAt||millis(value.expiresAt)>nowMs)&&(value.status==null||value.status==="active");}
+async function exactBookingAuthority(caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){const course=await db.collection("enterprise_courses").doc(courseId).get();if(!course.exists)throw new HttpsError("permission-denied","Booking unavailable.");const value=course.data()||{};try{const decision=await resolveEnterpriseBookingCourseAuthority(caller,String(value.organizationId||""),String(value.propertyId||""),String(value.courseId||course.id),mode);if(decision.membershipId!==scope.membershipId||decision.organizationId!==scope.organizationId||decision.role!==scope.role||!scope.courseIds.includes(decision.courseId))throw new Error("SCOPE_CHANGED");return decision}catch{throw new HttpsError("permission-denied","Booking unavailable.")}}
+async function transactionBookingAuthority(tx:admin.firestore.Transaction,caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){
+ const membershipRef=db.collection("enterprise_authority_memberships").doc(scope.membershipId),organizationRef=db.collection("enterprise_organizations").doc(scope.organizationId),courseRef=db.collection("enterprise_courses").doc(courseId),bindingQuery=db.collection("enterprise_authority_bindings").doc(caller).collection("memberships").where("membershipId","==",scope.membershipId).limit(2);
+ const[membership,organization,course,binding]=await Promise.all([tx.get(membershipRef),tx.get(organizationRef),tx.get(courseRef),tx.get(bindingQuery)]);
+ if(!membership.exists||!organization.exists||!course.exists||binding.size!==1||!activeAuthorityBinding(binding.docs[0].data()))throw new HttpsError("permission-denied","Booking unavailable.");
+ const m=membership.data()||{},c=course.data()||{},propertyId=String(c.propertyId||""),property=await tx.get(db.collection("enterprise_properties").doc(propertyId)),grantIds=Array.isArray(m.grantIds)?m.grantIds.map(String):[],grants=await Promise.all(grantIds.map(id=>tx.get(db.collection("enterprise_authority_grants").doc(id))));
+ if(!property.exists||grants.some(x=>!x.exists))throw new HttpsError("permission-denied","Booking unavailable.");
+ const isoValue=(value:any)=>value?.toDate instanceof Function?value.toDate().toISOString():value;
+ try{const decision=resolveBookingCourseAuthority(caller,[{...m,membershipId:membership.id,effectiveAt:isoValue(m.effectiveAt),expiresAt:m.expiresAt==null?null:isoValue(m.expiresAt)}],grants.map(x=>{const value=x.data()||{};return{...value,grantId:x.id,effectiveAt:isoValue(value.effectiveAt),expiresAt:value.expiresAt==null?null:isoValue(value.expiresAt)}}),{organizations:[{organizationId:organization.id,...organization.data()}],properties:[{propertyId:property.id,...property.data()}],courses:[{courseId:course.id,...c}]},{organizationId:scope.organizationId,propertyId,courseId,mode},new Date().toISOString());if(decision.membershipId!==scope.membershipId||decision.role!==scope.role)throw new Error("SCOPE_CHANGED");return decision}catch{throw new HttpsError("permission-denied","Booking unavailable.")}
 }
 async function staff(id: string) {
   const s = await db.collection("admin_users").doc(id).get();
@@ -298,7 +263,10 @@ export const managePlayBookingV2 = onCall(
       throw new HttpsError("invalid-argument", `Booking command invalid: ${reason}.`);
     }
     const { action, bookingId: id, commandId: cmd, expectedVersion: expected } = request;
-    const allowed = scope.canMutate && (permissions(scope.role) as any)[action];
+    const initialBooking=await db.collection("bookings").doc(id).get(),initialCourseId=String(initialBooking.data()?.courseId||"");
+    if(!initialBooking.exists||initialBooking.data()?.organizationId!==scope.organizationId)throw new HttpsError("permission-denied","Booking unavailable.");
+    await exactBookingAuthority(caller,scope,initialCourseId,"mutate");
+    const allowed = (permissions(scope.role) as any)[action];
     if (!allowed)
       throw new HttpsError(
         "permission-denied",
@@ -309,31 +277,11 @@ export const managePlayBookingV2 = onCall(
       receiptRef = db.collection("play_booking_audits").doc(receiptId),
       attemptToken = randomBytes(32).toString("hex");
     const claimResult = await db.runTransaction(async (tx) => {
-      const [booking, receipt, binding, membership, organization] = await Promise.all([
-        tx.get(ref), tx.get(receiptRef),
-        tx.get(db.collection("partner_identity_bindings").doc(caller)),
-        tx.get(db.collection("partner_memberships").doc(`${scope.organizationId}_${caller}`)),
-        tx.get(db.collection("partner_organizations").doc(scope.organizationId)),
-      ]);
-      if (!binding.exists || binding.data()?.organizationId !== scope.organizationId ||
-          binding.data()?.verifiedAuthUid !== caller || !membership.exists ||
-          membership.data()?.organizationId !== scope.organizationId ||
-          membership.data()?.uid !== caller || membership.data()?.status !== "active" ||
-          membership.data()?.role !== scope.role || !organization.exists ||
-          organization.data()?.status !== "active")
-        throw new HttpsError("permission-denied", "Booking authority changed.");
+      await transactionBookingAuthority(tx,caller,scope,initialCourseId,"mutate");
+      const [booking, receipt] = await Promise.all([tx.get(ref), tx.get(receiptRef)]);
       if (!booking.exists || booking.data()?.organizationId !== scope.organizationId ||
-          !scope.courseIds.includes(String(booking.data()?.courseId)) ||
-          !organization.data()?.authorizedCourseIds?.includes(String(booking.data()?.courseId)) ||
-          (scope.role === "course_staff" &&
-            !membership.data()?.courseIds?.includes(String(booking.data()?.courseId))))
-        throw new HttpsError("permission-denied", "Booking outside organization.");
-      const courseClaim = await tx.get(
-        db.collection("course_operators").doc(String(booking.data()?.courseId)),
-      );
-      if (!courseClaim.exists || courseClaim.data()?.organizationId !== scope.organizationId ||
-          courseClaim.data()?.status !== "active")
-        throw new HttpsError("permission-denied", "Active claimed course required.");
+          String(booking.data()?.courseId)!==initialCourseId)
+        throw new HttpsError("permission-denied", "Booking unavailable.");
       if (receipt.exists) {
         if (receipt.data()?.state === "pending") {
           try {
@@ -394,58 +342,14 @@ export const managePlayBookingV2 = onCall(
       );
     }
     const outcome = await db.runTransaction(async (tx) => {
-      const [booking, receipt, binding, membership, organization] = await Promise.all([
-        tx.get(ref),
-        tx.get(receiptRef),
-        tx.get(db.collection("partner_identity_bindings").doc(caller)),
-        tx.get(
-          db
-            .collection("partner_memberships")
-            .doc(`${scope.organizationId}_${caller}`),
-        ),
-        tx.get(db.collection("partner_organizations").doc(scope.organizationId)),
-      ]);
-      if (
-        !binding.exists ||
-        binding.data()?.organizationId !== scope.organizationId ||
-        binding.data()?.verifiedAuthUid !== caller ||
-        !membership.exists ||
-        membership.data()?.organizationId !== scope.organizationId ||
-        membership.data()?.uid !== caller ||
-        membership.data()?.status !== "active" ||
-        membership.data()?.role !== scope.role ||
-        !organization.exists ||
-        organization.data()?.status !== "active"
-      )
-        throw new HttpsError("permission-denied", "Booking authority changed.");
+      await transactionBookingAuthority(tx,caller,scope,initialCourseId,"mutate");
+      const [booking, receipt] = await Promise.all([tx.get(ref),tx.get(receiptRef)]);
       if (
         !booking.exists ||
         booking.data()?.organizationId !== scope.organizationId ||
-        !scope.courseIds.includes(String(booking.data()?.courseId)) ||
-        !organization
-          .data()
-          ?.authorizedCourseIds?.includes(String(booking.data()?.courseId)) ||
-        (scope.role === "course_staff" &&
-          !membership
-            .data()
-            ?.courseIds?.includes(String(booking.data()?.courseId)))
+        String(booking.data()?.courseId)!==initialCourseId
       )
-        throw new HttpsError(
-          "permission-denied",
-          "Booking outside organization.",
-        );
-      const claim = await tx.get(
-        db.collection("course_operators").doc(String(booking.data()?.courseId)),
-      );
-      if (
-        !claim.exists ||
-        claim.data()?.organizationId !== scope.organizationId ||
-        claim.data()?.status !== "active"
-      )
-        throw new HttpsError(
-          "permission-denied",
-          "Active claimed course required.",
-        );
+        throw new HttpsError("permission-denied","Booking unavailable.");
       if (receipt.exists) {
         try {
           assertPendingBookingOperationClaim(receipt.data(), request, attemptToken);
@@ -598,10 +502,10 @@ export const sendPlayBookingMessageV2 = onCall(
       if (
         scope.organizationId !== booking.data()?.organizationId ||
         !scope.courseIds.includes(String(booking.data()?.courseId)) ||
-        !scope.canMutate ||
         !permissions(scope.role).message
       )
         throw new HttpsError("permission-denied", "Message denied.");
+      await exactBookingAuthority(caller,scope,String(booking.data()?.courseId),"mutate");
       role = scope.role;
       staffScope = scope;
     }
@@ -622,27 +526,9 @@ export const sendPlayBookingMessageV2 = onCall(
             : currentBooking.data()?.memberUid !== caller))
         throw new HttpsError("permission-denied", "Message denied.");
       if (staffScope) {
-        const [binding, membership, organization, operator] = await Promise.all([
-          tx.get(db.collection("partner_identity_bindings").doc(caller)),
-          tx.get(db.collection("partner_memberships").doc(`${staffScope.organizationId}_${caller}`)),
-          tx.get(db.collection("partner_organizations").doc(staffScope.organizationId)),
-          tx.get(db.collection("course_operators").doc(String(currentBooking.data()?.courseId))),
-        ]);
         const currentCourseId = String(currentBooking.data()?.courseId);
-        if (!binding.exists || binding.data()?.verifiedAuthUid !== caller ||
-            binding.data()?.organizationId !== staffScope.organizationId ||
-            !membership.exists || membership.data()?.uid !== caller ||
-            membership.data()?.organizationId !== staffScope.organizationId ||
-            membership.data()?.status !== "active" ||
-            membership.data()?.role !== staffScope.role ||
-            !organization.exists || organization.data()?.status !== "active" ||
-            !organization.data()?.authorizedCourseIds?.includes(currentCourseId) ||
-            !operator.exists || operator.data()?.organizationId !== staffScope.organizationId ||
-            operator.data()?.status !== "active" ||
-            !staffScope.canMutate || !permissions(staffScope.role).message ||
-            (staffScope.role === "course_staff" &&
-              !membership.data()?.courseIds?.includes(currentCourseId)))
-          throw new HttpsError("permission-denied", "Message denied.");
+        await transactionBookingAuthority(tx,caller,staffScope,currentCourseId,"mutate");
+        if (!permissions(staffScope.role).message)throw new HttpsError("permission-denied", "Message denied.");
       }
       if (priorOperation.exists) {
         const prior = priorOperation.data();
@@ -696,9 +582,14 @@ export const getPlayBookingsPortalV2 = onCall(
       role: scope.role,
       permissions: permissions(scope.role),
       courseIds: scope.courseIds,
-      ...(scope.delegatedCourseIds
-        ? { delegatedCourseIds: scope.delegatedCourseIds }
-        : {}),
+      delegatedCourseIds: scope.delegatedCourseIds,
+      propertyIds: scope.propertyIds,
+      membershipId: scope.membershipId,
+      projectionVersion: scope.projectionVersion,
+      sourceVersion: scope.sourceVersion,
+      generatedAt: scope.generatedAt,
+      expiresAt: scope.expiresAt,
+      freshness: scope.freshness,
       bookings,
       notificationProviderConfigured: Boolean(notifier.value()),
       boundary: "PROVIDER_NEUTRAL_NO_FINANCIAL_OWNERSHIP",
