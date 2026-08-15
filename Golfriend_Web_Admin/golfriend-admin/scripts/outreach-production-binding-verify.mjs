@@ -277,6 +277,7 @@ const SERVER_OWNED_COLLECTIONS = [
   // membership document IS the role grant, the audit is the evidence it happened, and the
   // counter is what stops a re-grant from overwriting that evidence.
   'enterprise_staff', 'enterprise_staff_grant_audits', 'enterprise_staff_grant_counters',
+  'enterprise_staff_memberships', 'enterprise_staff_removal_audits',
 ];
 const requirementPath = resolve(ROOT, 'docs/ENTERPRISE_OUTREACH_FIRESTORE_RULES_REQUIREMENT.json');
 assert.ok(existsSync(requirementPath), 'the rules requirement handoff document is missing');
@@ -296,8 +297,13 @@ assert.ok(requirement.testContract.length >= 10, 'the rules test contract is too
 // check used to name outreachStore.ts alone; the enterprise grant collections live in
 // index.ts, and pinning it to one file would have meant either a false entry in the
 // handoff or dropping those collections out of the rules owner's scope entirely.
-const serverSources = ['functions/src/outreachStore.ts', 'functions/src/index.ts']
-  .map((rel) => readFileSync(resolve(ROOT, rel), 'utf8')).join('\n');
+const serverSources = [
+  'functions/src/outreachStore.ts',
+  'functions/src/index.ts',
+  // The registry collection name is defined here as a constant, not written out at the
+  // call site — a collection is no less real for being named once.
+  'functions/src/enterpriseMembershipRegistry.ts',
+].map((rel) => readFileSync(resolve(ROOT, rel), 'utf8')).join('\n');
 for (const collection of SERVER_OWNED_COLLECTIONS) {
   assert.ok(serverSources.includes(collection), `no server module references ${collection}`);
 }

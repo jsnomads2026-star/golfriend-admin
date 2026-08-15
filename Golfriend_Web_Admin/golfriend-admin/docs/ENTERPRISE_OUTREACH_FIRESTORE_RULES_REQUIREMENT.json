@@ -228,6 +228,78 @@
         "lastGrantAt"
       ],
       "requiredCallerAuthority": "an active enterprise-tier b2b_partner, resolved by uid or by a VERIFIED address — not Admin staff status. Recorded here because it differs from the outreach collections above."
+    },
+    {
+      "path": "enterprise_staff_memberships/{staffUid}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "staffUid",
+        "enterpriseUid",
+        "organizationId",
+        "role",
+        "status",
+        "registryVersion",
+        "grantSeq",
+        "removalSeq",
+        "invitedBy",
+        "invitedAt",
+        "removedBy",
+        "removedAt"
+      ],
+      "notes": "THE AUTHORITATIVE MEMBERSHIP BINDING. One document per principal at a known path, read directly rather than discovered by a collection-group query. It exists because collectionGroup(\"members\") matches a subcollection NAME wherever it lives, so a members document from any other domain came back looking exactly like enterprise staff. A client able to write here could re-home itself to another enterprise.",
+      "requiredCallerStatus": "n/a (no client path)",
+      "requiredCallerAuthority": "an active enterprise-tier b2b_partner, resolved by uid or by a VERIFIED address — not Admin staff status.",
+      "writeAuthority": "admin_sdk_only",
+      "permittedServerProjection": [],
+      "serverProjection": "none",
+      "projectionScoping": "No client projection exists. Read by the server only.",
+      "neverProjected": [
+        "staffUid",
+        "enterpriseUid",
+        "organizationId",
+        "role",
+        "status",
+        "grantSeq",
+        "removalSeq"
+      ]
+    },
+    {
+      "path": "enterprise_staff_removal_audits/{enterpriseUid__staffUid__commandId}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "removalId",
+        "commandId",
+        "fingerprint",
+        "enterpriseUid",
+        "organizationId",
+        "staffUid",
+        "removedRole",
+        "grantSeq",
+        "removalSeq",
+        "reason",
+        "actorUid",
+        "actorResolvedBy",
+        "removedAt"
+      ],
+      "notes": "Immutable evidence that an authority was REVOKED, written with create() inside the same transaction as the tombstone. Removal used to be a hard delete that left no record of who removed whom, when, or why. The reason is drawn from a closed vocabulary, never free text, so this record cannot become a private note about a named person. A client able to create one could fabricate a revocation; one able to overwrite one could hide a real removal.",
+      "requiredCallerStatus": "n/a (no client path)",
+      "requiredCallerAuthority": "an active enterprise-tier b2b_partner whose membership binding still matches the target at the moment of removal.",
+      "writeAuthority": "admin_sdk_only",
+      "immutability": "created with create() inside a transaction; never updated or deleted by application code. The document id carries the caller-supplied commandId, which is what makes an exact replay idempotent and an altered replay refusable.",
+      "permittedServerProjection": [],
+      "serverProjection": "none",
+      "projectionScoping": "No client projection exists. Read by the server only.",
+      "neverProjected": [
+        "staffUid",
+        "actorUid",
+        "reason",
+        "removedRole",
+        "organizationId"
+      ]
     }
   ],
   "requiredRule": {
@@ -365,7 +437,7 @@
     "blocking": "Until applied, these collections rely solely on the absence of client code that reads them — which is a convention, not a control.",
     "testContractSize": 15
   },
-  "version": "2.1.0",
+  "version": "2.2.0",
   "machineVerifiable": true,
   "aliasAndAlternatePathControls": {
     "rationale": "A deny rule on an exact collection path is bypassed by any other path that reaches the same data: a collection-group query, a differently-cased or pluralized alias, a nested subcollection, or a client constant that spells the name indirectly.",

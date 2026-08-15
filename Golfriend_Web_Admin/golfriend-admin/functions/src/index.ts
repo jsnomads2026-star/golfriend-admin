@@ -9,6 +9,16 @@ import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./co
 import { runSyncCoursesFromProviderPreview } from "./courseSyncPreview.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector, isCanonicalAdminRole, CANONICAL_ADMIN_ROLES } from "./authority.js";
+import {
+  MEMBERSHIP_REGISTRY_VERSION,
+  MEMBERSHIP_REGISTRY_COLLECTION,
+  REMOVAL_REASONS,
+  isRemovalReason,
+  isValidCommandId,
+  evaluateMembershipCandidate,
+  decideMembershipAdmission,
+  removalFingerprint,
+} from "./enterpriseMembershipRegistry.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDecision, type SubmissionStatus } from "./partnerIntakeLogic.js";
@@ -873,10 +883,25 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
   // address was enough to be treated as that active partner — by registering it.
   const callerEmailVerified = request.auth.token?.email_verified === true;
   const callerEmail = callerEmailVerified ? (request.auth.token?.email || "").toLowerCase() : "";
-  const { action, email, staffUid, role } = request.data || {};
+  const payload = (request.data || {}) as Record<string, unknown>;
+  const { action, email, staffUid, role } = payload as {
+    action?: unknown; email?: unknown; staffUid?: unknown; role?: unknown;
+  };
 
   if (action !== 'invite' && action !== 'remove') {
     throw new HttpsError('invalid-argument', 'action must be "invite" or "remove".');
+  }
+
+  // SURPLUS FIELDS ARE REFUSED. An undeclared key means the caller and this handler
+  // disagree about what was asked for, and the unsafe resolution is to act on the half
+  // that was understood.
+  const ALLOWED_FIELDS: Record<string, readonly string[]> = {
+    invite: ['action', 'email', 'role'],
+    remove: ['action', 'staffUid', 'reason', 'commandId'],
+  };
+  const surplusFields = Object.keys(payload).filter((key) => ALLOWED_FIELDS[action].indexOf(key) === -1);
+  if (surplusFields.length > 0) {
+    throw new HttpsError('invalid-argument', `Unexpected field(s) for ${action}: ${surplusFields.sort().join(', ')}.`);
   }
 
   // Caller must be an ACTIVE ENTERPRISE partner (b2b_partners keyed by uid/email).
@@ -911,14 +936,14 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
 
   try {
     if (action === 'invite') {
-      const cleanEmail = (email || "").toLowerCase().trim();
+      const cleanEmail = (typeof email === 'string' ? email : "").toLowerCase().trim();
       if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         throw new HttpsError('invalid-argument', 'A valid staff email is required.');
       }
       const allowedRoles = ['manager', 'venue_staff', 'analyst'];
       // An unrecognized role used to be SILENTLY COERCED to 'venue_staff'. Coercing an
       // authorization input hides a caller error and grants something nobody asked for.
-      if (!allowedRoles.includes(role)) {
+      if (typeof role !== 'string' || !allowedRoles.includes(role)) {
         throw new HttpsError('invalid-argument', `role must be one of: ${allowedRoles.join(', ')}.`);
       }
       const cleanRole = role;
@@ -943,6 +968,9 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
       // CURRENT ORGANIZATION MEMBERSHIP: a principal already rostered to a DIFFERENT
       // enterprise may not be silently re-homed by a second one. Fail closed on a read
       // error rather than assuming they are unattached.
+      // The registry is read at a KNOWN PATH — one document, no query, no index, and no
+      // way for a same-named subcollection in another domain to appear in the answer.
+      const registryRef = db.collection(MEMBERSHIP_REGISTRY_COLLECTION).doc(staffRecord.uid);
       // The page is BOUNDED and a full page fails closed. A bare limit silently answered
       // "no foreign membership" for anyone whose eleventh document was the foreign one.
       const MEMBERSHIP_PAGE = 50;
@@ -955,15 +983,36 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
         // is correct: without the query we cannot rule out a foreign enterprise.
         throw new HttpsError('unavailable', 'Could not confirm existing staff membership. No change was made.');
       }
-      if (existingMembership.size >= MEMBERSHIP_PAGE) {
-        throw new HttpsError('unavailable', 'Too many existing membership records to evaluate safely. No change was made.');
-      }
-      const foreign = existingMembership.docs.find((d) => {
-        const data = d.data() || {};
-        return data.status === 'active' && String(data.enterpriseUid || '') !== callerUid;
+      // PATH-QUALIFIED, REGISTRY-VALIDATED ADMISSION. Every candidate is judged by WHERE it
+      // is and whether it agrees with its own location — not by the fact that a query for a
+      // subcollection named `members` returned it. A `members` document belonging to any
+      // other domain is provably not enterprise staff and is ignored; a record that cannot
+      // be understood, predates the registry, or binds elsewhere refuses the grant.
+      const registrySnap = await registryRef.get();
+      const registryVerdict = registrySnap.exists
+        ? evaluateMembershipCandidate({
+          path: `enterprise_staff/${String(registrySnap.data()?.enterpriseUid || '')}/members/${staffRecord.uid}`,
+          data: registrySnap.data(),
+          expectedStaffUid: staffRecord.uid,
+          callerUid,
+          callerOrganizationId: inviterOrganizationId,
+        })
+        : null;
+      const candidateVerdicts = existingMembership.docs.map((d) => evaluateMembershipCandidate({
+        path: d.ref?.path,
+        data: d.data(),
+        expectedStaffUid: staffRecord.uid,
+        callerUid,
+        callerOrganizationId: inviterOrganizationId,
+      }));
+      const admission = decideMembershipAdmission({
+        registry: registryVerdict,
+        candidates: candidateVerdicts,
+        saturated: existingMembership.size >= MEMBERSHIP_PAGE,
       });
-      if (foreign) {
-        throw new HttpsError('already-exists', 'That account is already active staff of another enterprise.');
+      if (admission.decision !== 'proceed') {
+        logger.warn(`🧑‍💼 membership admission refused for ${staffRecord.uid}: ${JSON.stringify(admission.counts)}`);
+        throw new HttpsError(admission.code as any, admission.reason);
       }
 
       // MEMBERSHIP AND EVIDENCE ARE ONE ATOMIC WRITE. Writing the member document first and
@@ -1013,9 +1062,26 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
           role: cleanRole,
           status: 'active',
           enterpriseUid: callerUid,
+          // The organization binding and registry version are what make this record
+          // evaluable later. Without them it is indistinguishable from a legacy row.
+          organizationId: inviterOrganizationId,
+          registryVersion: MEMBERSHIP_REGISTRY_VERSION,
           grantSeq,
           invitedAt: admin.firestore.FieldValue.serverTimestamp(),
           invitedBy: callerUid,
+        }, { merge: true });
+        // The REGISTRY is the authoritative, path-unambiguous binding for this principal:
+        // one document, one known location, no collection-group query involved.
+        tx.set(registryRef, {
+          staffUid: staffRecord.uid,
+          enterpriseUid: callerUid,
+          organizationId: inviterOrganizationId,
+          role: cleanRole,
+          status: 'active',
+          registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+          grantSeq,
+          invitedBy: callerUid,
+          invitedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
         tx.set(grantCounterRef, {
           enterpriseUid: callerUid,
@@ -1031,12 +1097,112 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
     }
 
     // action === 'remove'
-    if (!staffUid || typeof staffUid !== 'string') {
+    //
+    // REMOVAL IS A TOMBSTONE, NOT A DELETE. The old path called delete() on the membership:
+    // the grant vanished, the audit trail lost its subject, and nothing recorded who
+    // removed whom, when, or why. Deleting authority is itself an authority action and has
+    // to leave the same evidence granting it does.
+    if (!staffUid || typeof staffUid !== 'string' || staffUid.trim() === '') {
       throw new HttpsError('invalid-argument', 'A staffUid is required to remove a member.');
     }
-    await membersCol.doc(staffUid).delete();
-    logger.info(`🧑‍💼 Enterprise ${callerUid} removed staff ${staffUid}.`);
-    return { success: true, staffUid };
+    const { reason, commandId } = payload as { reason?: unknown; commandId?: unknown };
+    // A closed reason vocabulary, not free text: a free-text reason on a staff record is a
+    // private note about a named person, and this lane does not create those.
+    if (!isRemovalReason(reason)) {
+      throw new HttpsError('invalid-argument', `reason must be one of: ${REMOVAL_REASONS.join(', ')}.`);
+    }
+    // COMMAND IDENTITY. The caller names the command, so an interrupted removal can be
+    // retried without removing twice and without a second evidence record.
+    if (!isValidCommandId(commandId)) {
+      throw new HttpsError('invalid-argument', 'A commandId of 8-64 characters (A-Z, a-z, 0-9, - or _) is required.');
+    }
+    const removalReason = reason as string;
+    const removalCommandId = commandId as string;
+
+    const targetRef = membersCol.doc(staffUid);
+    const removalRegistryRef = db.collection(MEMBERSHIP_REGISTRY_COLLECTION).doc(staffUid);
+    const removalAuditRef = db.collection('enterprise_staff_removal_audits')
+      .doc(`${callerUid}__${staffUid}__${removalCommandId}`);
+    const fingerprint = removalFingerprint({
+      enterpriseUid: callerUid, staffUid, reason: removalReason, commandId: removalCommandId,
+    });
+
+    const removal = await db.runTransaction(async (tx) => {
+      const priorAudit = await tx.get(removalAuditRef);
+      if (priorAudit.exists) {
+        const prior = priorAudit.data() || {};
+        // AN ALTERED REPLAY IS NOT A REPLAY. Same command id, different content, means the
+        // caller reused an identifier for a different action; honouring either reading
+        // would be a guess about which one they meant.
+        if (prior.fingerprint !== fingerprint) {
+          throw new HttpsError('already-exists', 'That commandId was already used for a different removal.');
+        }
+        return { replayed: true, removalSeq: Number(prior.removalSeq) || 1 };
+      }
+
+      const current = await tx.get(targetRef);
+      if (!current.exists) {
+        throw new HttpsError('not-found', 'That account is not staff of this enterprise.');
+      }
+      const currentData = current.data() || {};
+      // STALE AUTHORITY. The membership must still belong to this enterprise at the moment
+      // of removal — a record that has since been re-bound is not this caller's to revoke.
+      if (String(currentData.enterpriseUid || '') !== callerUid) {
+        throw new HttpsError('permission-denied', 'That membership belongs to another enterprise.');
+      }
+      if (String(currentData.organizationId || '') !== inviterOrganizationId) {
+        throw new HttpsError('permission-denied', 'That membership is bound to a different organization.');
+      }
+      if (currentData.status === 'removed') {
+        // Already tombstoned under a DIFFERENT command: report it honestly rather than
+        // writing a second removal record for an authority that no longer exists.
+        return { replayed: true, removalSeq: Number(currentData.removalSeq) || 1 };
+      }
+
+      const removalSeq = (Number(currentData.grantSeq) || 0) + 1;
+      // IMMUTABLE EVIDENCE FIRST, INSIDE THE TRANSACTION. If this create() fails the whole
+      // transaction aborts and the membership is untouched — there is no ordering in which
+      // the state changes without its record.
+      tx.create(removalAuditRef, {
+        removalId: removalAuditRef.id,
+        commandId: removalCommandId,
+        fingerprint,
+        enterpriseUid: callerUid,
+        organizationId: inviterOrganizationId,
+        staffUid,
+        removedRole: typeof currentData.role === 'string' ? currentData.role : null,
+        grantSeq: Number(currentData.grantSeq) || null,
+        removalSeq,
+        reason: removalReason,
+        actorUid: callerUid,
+        actorResolvedBy: inviterResolvedBy,
+        removedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.set(targetRef, {
+        status: 'removed',
+        previousRole: typeof currentData.role === 'string' ? currentData.role : null,
+        removedAt: admin.firestore.FieldValue.serverTimestamp(),
+        removedBy: callerUid,
+        removalCommandId,
+        removalReason,
+        removalSeq,
+        registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+      }, { merge: true });
+      tx.set(removalRegistryRef, {
+        staffUid,
+        enterpriseUid: callerUid,
+        organizationId: inviterOrganizationId,
+        status: 'removed',
+        registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+        removalSeq,
+        removedBy: callerUid,
+        removedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return { replayed: false, removalSeq };
+    });
+
+    logger.info(`🧑‍💼 Enterprise ${callerUid} ${removal.replayed ? 're-confirmed removal of' : 'removed'} staff ${staffUid} (${removalReason}, #${removal.removalSeq}).`);
+    return { success: true, staffUid, removalSeq: removal.removalSeq, replayed: removal.replayed };
   } catch (error: any) {
     if (error instanceof HttpsError) throw error;
     logger.error("🧑‍💼 Enterprise staff management failed:", error);

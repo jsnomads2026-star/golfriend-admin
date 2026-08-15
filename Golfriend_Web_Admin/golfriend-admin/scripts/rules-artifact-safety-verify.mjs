@@ -44,6 +44,10 @@ export const PROTECTED_COLLECTIONS = Object.freeze([
   // and the counter is what stops a re-grant from overwriting it; a client that could write
   // either could manufacture its own authorization record.
   'enterprise_staff', 'enterprise_staff_grant_audits', 'enterprise_staff_grant_counters',
+  // The membership registry is the authoritative binding for a principal, and the removal
+  // audit is the only record that an authority was revoked. A client able to write either
+  // could re-home itself or erase the evidence that it was removed.
+  'enterprise_staff_memberships', 'enterprise_staff_removal_audits',
 ]);
 
 /** Collections reachable ONLY through the Admin SDK; a client must never touch them. */

@@ -57,6 +57,7 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
 // ---- 2. manageEnterpriseStaff -------------------------------------------------------
 {
   class StubHttpsError extends Error { constructor(code, message) { super(message); this.code = code; } }
+  const REGISTRY_VERSION = '2026-08-15.v1';
   let DOCS = new Map();
   let AUTH_USERS = new Map();
   const created = [];
@@ -65,8 +66,11 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
     doc: (id) => ({
       id, path: `${name}/${id}`,
       get: async () => snap(`${name}/${id}`),
-      set: async (v) => DOCS.set(`${name}/${id}`, v),
-      update: async () => undefined,
+      // MERGE IS HONOURED. The stub replaced documents wholesale, so a { merge: true }
+      // write in the handler silently dropped every field it did not restate — a tombstone
+      // came out missing its own identity. The handler relies on real merge semantics.
+      set: async (v, options) => DOCS.set(`${name}/${id}`, options?.merge ? { ...(DOCS.get(`${name}/${id}`) || {}), ...v } : v),
+      update: async (v) => DOCS.set(`${name}/${id}`, { ...(DOCS.get(`${name}/${id}`) || {}), ...v }),
       delete: async () => DOCS.delete(`${name}/${id}`),
       create: async (v) => {
         if (DOCS.has(`${name}/${id}`)) { const e = new Error('ALREADY_EXISTS'); e.code = 6; throw e; }
@@ -84,9 +88,16 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
   let membershipPadding = 0;
   const membershipDocs = (limit) => {
     if (membershipFailure) throw membershipFailure;
-    const real = [...DOCS.entries()].filter(([k]) => k.includes('/members/')).map(([, v]) => ({ data: () => v }));
+    // A collection-group query matches a subcollection NAME wherever it lives, so the stub
+    // returns every `/members/` document in the world regardless of its root — which is
+    // precisely the ambiguity the path-qualified check has to survive. Each document
+    // carries its real ref.path, because that path is now the evidence.
+    const real = [...DOCS.entries()].filter(([k]) => k.includes('/members/')).map(([k, v]) => ({ ref: { path: k }, data: () => v }));
     const padded = real.concat(
-      Array.from({ length: membershipPadding }, (_, i) => ({ data: () => ({ staffUid: 'target-uid', status: 'inactive', enterpriseUid: `pad-${i}` }) })),
+      Array.from({ length: membershipPadding }, (_, i) => ({
+        ref: { path: `enterprise_staff/pad-${i}/members/target-uid` },
+        data: () => ({ staffUid: 'target-uid', status: 'removed', enterpriseUid: `pad-${i}`, organizationId: 'org-pad', registryVersion: REGISTRY_VERSION }),
+      })),
     );
     const docs = padded.slice(0, limit ?? padded.length);
     return { docs, size: docs.length };
@@ -106,8 +117,8 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
       const buffered = [];
       const tx = {
         get: async (r) => snap(r.path),
-        set: (r, v) => buffered.push({ kind: 'set', path: r.path, value: v }),
-        update: (r, v) => buffered.push({ kind: 'set', path: r.path, value: v }),
+        set: (r, v, options) => buffered.push({ kind: 'set', path: r.path, value: v, merge: options?.merge === true }),
+        update: (r, v) => buffered.push({ kind: 'set', path: r.path, value: v, merge: true }),
         create: (r, v) => buffered.push({ kind: 'create', path: r.path, value: v }),
       };
       const result = await fn(tx);
@@ -117,7 +128,7 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
         }
       }
       for (const write of buffered) {
-        DOCS.set(write.path, write.value);
+        DOCS.set(write.path, write.merge ? { ...(DOCS.get(write.path) || {}), ...write.value } : write.value);
         if (write.kind === 'create') created.push(write.path);
       }
       return result;
@@ -144,6 +155,10 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
   const index = nodeRequire(resolve(FUNCTIONS, 'lib/index.js'));
   const manage = index.manageEnterpriseStaff;
   assert.ok(typeof manage === 'function', 'manageEnterpriseStaff is not exported');
+  // The registry vocabulary comes from the REAL module, so a version bump cannot leave
+  // these fixtures quietly describing a shape the handler no longer accepts.
+  const registryModule = nodeRequire(resolve(FUNCTIONS, 'lib/enterpriseMembershipRegistry.js'));
+  assert.equal(REGISTRY_VERSION, registryModule.MEMBERSHIP_REGISTRY_VERSION, 'the harness pins a stale registry version');
 
   const INVITER = 'ent-inviter';
   const setup = () => {
@@ -196,7 +211,10 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
   // silently re-homed.
   setup();
   AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
-  DOCS.set('enterprise_staff/other-ent/members/target-uid', { staffUid: 'target-uid', status: 'active', enterpriseUid: 'other-ent' });
+  DOCS.set('enterprise_staff/other-ent/members/target-uid', {
+    staffUid: 'target-uid', status: 'active', enterpriseUid: 'other-ent',
+    organizationId: 'org-other', registryVersion: REGISTRY_VERSION, role: 'manager', grantSeq: 1,
+  });
   const foreign = await invite();
   assert.equal(foreign.ok, false, "another enterprise's active staff was re-homed");
   assert.match(foreign.message, /another enterprise/i);
@@ -245,14 +263,19 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
   AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
   await invite();
   const firstAudits = created.filter((p) => p.startsWith('enterprise_staff_grant_audits/')).length;
-  await manage({ auth: { uid: INVITER, token: { email: 'inviter@example.test', email_verified: true } }, data: { action: 'remove', staffUid: 'target-uid' } });
+  await manage({
+    auth: { uid: INVITER, token: { email: 'inviter@example.test', email_verified: true } },
+    data: { action: 'remove', staffUid: 'target-uid', reason: 'access_review', commandId: 'cmd-regrant1' },
+  });
   const regrant = await invite();
   assert.equal(regrant.ok, true, regrant.message || 're-granting after removal failed');
   const allAudits = created.filter((p) => p.startsWith('enterprise_staff_grant_audits/'));
   assert.equal(firstAudits, 1, 'the first grant produced no evidence');
   assert.equal(allAudits.length, 2, 'RE-GRANTING AFTER REMOVAL PRODUCED NO NEW EVIDENCE');
   assert.equal(DOCS.get(allAudits[1]).grantSeq, 2, 'the re-grant did not receive its own sequence');
-  assert.equal(DOCS.get(allAudits[1]).previousRole, null, 'the re-grant recorded a stale previous role');
+  // Now that removal tombstones instead of deleting, the re-grant can say what it replaced.
+  // This asserted null when the old path destroyed the record and the answer was unknowable.
+  assert.equal(DOCS.get(allAudits[1]).previousRole, 'manager', 'the re-grant did not record the role it replaced');
   assertions += 5;
 
   // (i) A TRUE REPLAY writes no new evidence. (h) must not have been bought by making every
@@ -293,6 +316,175 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
   assertions += 3;
 
   ok(`manageEnterpriseStaff: unverified target refused, verified target succeeds, evidence recorded without the address, cross-enterprise re-homing refused, ${6} role coercions refused, ${3} unauthorized inviters refused, grant+evidence atomic, re-grant evidenced, replay not double-recorded, saturated page and absent index both fail closed`);
+
+  // ---- 2b. THE REMOVAL PATH -----------------------------------------------------------
+  // Removal used to be `membersCol.doc(staffUid).delete()`: the grant vanished, the audit
+  // trail lost its subject, and nothing recorded who removed whom, when, or why.
+  const MEMBER_PATH = `enterprise_staff/${INVITER}/members/target-uid`;
+  const REGISTRY_PATH = 'enterprise_staff_memberships/target-uid';
+  const remove = async (over = {}) => {
+    const request = {
+      auth: { uid: INVITER, token: { email: 'inviter@example.test', email_verified: true } },
+      data: { action: 'remove', staffUid: 'target-uid', reason: 'access_review', commandId: 'cmd-remove01', ...over },
+    };
+    try { return { ok: true, value: await manage(request) }; }
+    catch (error) { return { ok: false, code: error.code, message: error.message }; }
+  };
+  const grantThen = async () => {
+    setup();
+    AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+    const granted = await invite();
+    assert.equal(granted.ok, true, granted.message || 'setup grant failed');
+    created.length = 0;
+  };
+
+  // (l) A REMOVAL TOMBSTONES AND LEAVES IMMUTABLE EVIDENCE. The membership must still
+  // exist, marked removed, carrying actor, organization, command, reason and timestamp.
+  await grantThen();
+  const removed = await remove();
+  assert.equal(removed.ok, true, removed.message || '');
+  assert.ok(DOCS.has(MEMBER_PATH), 'THE MEMBERSHIP WAS HARD-DELETED: no tombstone survives the removal');
+  const tombstone = DOCS.get(MEMBER_PATH);
+  assert.equal(tombstone.status, 'removed');
+  assert.equal(tombstone.previousRole, 'manager', 'the tombstone did not preserve the revoked role');
+  assert.equal(tombstone.removedBy, INVITER);
+  assert.equal(tombstone.removalReason, 'access_review');
+  assert.equal(tombstone.removalCommandId, 'cmd-remove01');
+  assert.ok(tombstone.removedAt, 'the tombstone carries no timestamp');
+  const removalAudits = created.filter((p) => p.startsWith('enterprise_staff_removal_audits/'));
+  assert.equal(removalAudits.length, 1, 'the removal produced no immutable evidence');
+  const removalAudit = DOCS.get(removalAudits[0]);
+  assert.equal(removalAudit.actorUid, INVITER, 'the evidence does not name the actor');
+  assert.equal(removalAudit.organizationId, 'org-1', 'the evidence carries no organization binding');
+  assert.equal(removalAudit.commandId, 'cmd-remove01', 'the evidence carries no command identity');
+  assert.equal(removalAudit.reason, 'access_review');
+  assert.equal(removalAudit.removedRole, 'manager');
+  assert.ok(removalAudit.removedAt, 'the evidence carries no timestamp');
+  assert.equal(DOCS.get(REGISTRY_PATH).status, 'removed', 'the registry still shows the principal as active staff');
+  assertions += 15;
+
+  // (m) EXACT REPLAY is idempotent: same command, same content, no second evidence record.
+  const exactReplay = await remove();
+  assert.equal(exactReplay.ok, true, exactReplay.message || '');
+  assert.equal(exactReplay.value.replayed, true, 'an exact removal replay was not recognized');
+  assert.equal(
+    created.filter((p) => p.startsWith('enterprise_staff_removal_audits/')).length, 1,
+    'an exact removal replay wrote a second evidence record',
+  );
+  assertions += 3;
+
+  // (n) ALTERED REPLAY is refused. Same command id, different content, means the caller
+  // reused an identifier for a different action; acting on either reading is a guess.
+  for (const altered of [{ reason: 'security_concern' }, { staffUid: 'someone-else' }]) {
+    const bad = await remove(altered);
+    assert.equal(bad.ok, false, `an ALTERED replay was accepted: ${JSON.stringify(altered)}`);
+    assertions += 1;
+  }
+
+  // (o) EVIDENCE FAILURE PREVENTS THE STATE CHANGE, and no partial write survives.
+  await grantThen();
+  DOCS.set(`enterprise_staff_removal_audits/${INVITER}__target-uid__cmd-block01`, { fingerprint: 'a-different-command' });
+  const blocked = await remove({ commandId: 'cmd-block01' });
+  assert.equal(blocked.ok, false, 'a removal proceeded despite an unwritable evidence record');
+  assert.equal(DOCS.get(MEMBER_PATH).status, 'active', 'PARTIAL WRITE: the membership changed although the evidence failed');
+  assert.equal(DOCS.get(REGISTRY_PATH).status, 'active', 'PARTIAL WRITE: the registry changed although the evidence failed');
+  assertions += 3;
+
+  // (p) REMOVAL FOLLOWED BY RE-GRANT works, and produces its own fresh evidence rather
+  // than colliding with the original grant record.
+  await grantThen();
+  await remove();
+  const regranted = await invite();
+  assert.equal(regranted.ok, true, regranted.message || 're-granting after a tombstoned removal failed');
+  assert.equal(regranted.value.replayed, false, 'a re-grant after removal was mistaken for a replay');
+  assert.equal(DOCS.get(MEMBER_PATH).status, 'active', 'the tombstone was not reactivated');
+  assert.equal(DOCS.get(REGISTRY_PATH).status, 'active', 'the registry was not restored on re-grant');
+  assert.equal(
+    created.filter((p) => p.startsWith('enterprise_staff_grant_audits/')).length, 1,
+    'the re-grant after removal produced no new grant evidence',
+  );
+  assertions += 5;
+
+  // (q) STALE AUTHORITY. A membership that has since been re-bound elsewhere is not this
+  // caller's to revoke, and neither is one bound to a different organization.
+  for (const [label, over] of [
+    ['re-bound to another enterprise', { enterpriseUid: 'other-ent' }],
+    ['bound to another organization', { organizationId: 'org-9' }],
+  ]) {
+    await grantThen();
+    DOCS.set(MEMBER_PATH, { ...DOCS.get(MEMBER_PATH), ...over });
+    const stale = await remove();
+    assert.equal(stale.ok, false, `a removal succeeded against a membership ${label}`);
+    assert.equal(stale.code, 'permission-denied', label);
+    assertions += 2;
+  }
+
+  // (r) MALFORMED AND SURPLUS INPUT is refused rather than partially understood.
+  await grantThen();
+  for (const bad of [
+    { reason: 'because I said so' }, { reason: '' }, { reason: undefined },
+    { commandId: 'short' }, { commandId: 'has space' }, { commandId: undefined },
+    { staffUid: '' }, { staffUid: 42 },
+    { role: 'Director' }, { enterpriseUid: INVITER }, { status: 'active' },
+  ]) {
+    const refused = await remove(bad);
+    assert.equal(refused.ok, false, `removal accepted malformed/surplus input: ${JSON.stringify(bad)}`);
+    assert.equal(refused.code, 'invalid-argument', JSON.stringify(bad));
+    assertions += 2;
+  }
+
+  // (s) SAME-NAMED FOREIGN SUBCOLLECTIONS never influence a grant. Each of these is a
+  // `members` document in another domain that the old collection-group check would have
+  // read as an active enterprise membership and refused the grant over.
+  const FOREIGN = [
+    'partner_organizations/org-9/members/target-uid',
+    'clubs/club-4/members/target-uid',
+    'tournaments/t-1/teams/a/members/target-uid',
+  ];
+  for (const path of FOREIGN) {
+    setup();
+    AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+    DOCS.set(path, { staffUid: 'target-uid', status: 'active', enterpriseUid: 'someone-else' });
+    const unaffected = await invite();
+    assert.equal(unaffected.ok, true, `a foreign ${path} blocked a legitimate grant`);
+    assertions += 1;
+  }
+
+  // (t) A LEGACY or MALFORMED membership at a REAL enterprise path still fails closed —
+  // (s) must not have been bought by ignoring records that genuinely matter.
+  for (const [label, doc] of [
+    ['pre-registry legacy record', { staffUid: 'target-uid', status: 'active', enterpriseUid: 'other-ent', organizationId: 'org-other' }],
+    ['surplus field', { staffUid: 'target-uid', status: 'active', enterpriseUid: 'other-ent', organizationId: 'org-other', registryVersion: REGISTRY_VERSION, isAdmin: true }],
+    ['path/field disagreement', { staffUid: 'target-uid', status: 'active', enterpriseUid: 'ent-forged', organizationId: 'org-other', registryVersion: REGISTRY_VERSION }],
+  ]) {
+    setup();
+    AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+    DOCS.set('enterprise_staff/other-ent/members/target-uid', doc);
+    const failClosed = await invite();
+    assert.equal(failClosed.ok, false, `a ${label} at a real enterprise path did not fail closed`);
+    assertions += 1;
+  }
+
+  // (u) PAGINATION BEYOND TEN. The blocking record sits past the first ten results; the
+  // old limit(10) would have answered "no foreign membership" and granted.
+  setup();
+  AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+  for (let i = 0; i < 14; i += 1) {
+    DOCS.set(`enterprise_staff/quiet-${i}/members/target-uid`, {
+      staffUid: 'target-uid', status: 'removed', enterpriseUid: `quiet-${i}`,
+      organizationId: 'org-q', registryVersion: REGISTRY_VERSION,
+    });
+  }
+  DOCS.set('enterprise_staff/zz-live/members/target-uid', {
+    staffUid: 'target-uid', status: 'active', enterpriseUid: 'zz-live',
+    organizationId: 'org-live', registryVersion: REGISTRY_VERSION,
+  });
+  const deepPage = await invite();
+  assert.equal(deepPage.ok, false, 'a foreign membership past the first ten results was not seen');
+  assert.match(deepPage.message, /another enterprise/i);
+  assertions += 2;
+
+  ok(`removal path: tombstone with actor/org/command/reason/timestamp, immutable evidence, exact replay idempotent, 2 altered replays refused, evidence failure leaves no partial write, re-grant after removal evidenced, 2 stale-authority refusals, 11 malformed/surplus inputs refused, ${FOREIGN.length} foreign subcollections ignored while 3 real-path anomalies fail closed, 15-deep pagination still catches the conflict`);
 }
 
 // ---- 3. UNCONDITIONAL-ALLOW EVASIONS -------------------------------------------------
@@ -417,4 +609,4 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
   ok(`HRManagement classifies through the registry: ${CASES.length} hostile records, every non-canonical one denied with a named reason`);
 }
 
-console.log(`\nAdmin security regression PASS: ${checks} checks, ${assertions} hostile assertions across all five repaired paths.`);
+console.log(`\nAdmin security regression PASS: ${checks} checks, ${assertions} hostile assertions across all seven repaired paths.`);
