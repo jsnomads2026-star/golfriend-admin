@@ -1,30 +1,18 @@
-import {getFunctions, httpsCallable} from "firebase/functions";
-import {commandId} from "./partnerApplicationService";
-
-export type CourseOnboardingDraft = {
-  representative: {fullName: string; jobTitle: string; authorityBasis: string; authorityEvidenceId: string; businessEmail: string; phone: string};
-  organization: {legalName: string; registrationNumber: string; country: string; registeredAddress: string};
-  course: {courseId: string; legalName: string; publicName: string; address: string; website: string};
-  profile: {description: string; holes: string; timezone: string; contactEmail: string; contactPhone: string};
-  catalogue: {facilities: string; accessibility: string; dressCode: string; cancellationPolicy: string};
-};
-
-const call = async <T>(name: string, payload: Record<string, unknown> = {}) =>
-  (await httpsCallable(getFunctions(), name)(payload)).data as T;
-
-export const verifiedCourseOnboardingService = {
-  load: () => call<any>("getMyVerifiedCourseOnboardingV2"),
-  save: (draft: CourseOnboardingDraft, expectedVersion: number, locale: string) => call<any>("saveVerifiedCourseOnboardingDraftV2", {
-    organization:draft.organization.legalName, organizationType:"golf_course", country:draft.organization.country, region:draft.organization.registeredAddress,
-    contactName:draft.representative.fullName, contactEmail:draft.representative.businessEmail, contactPhone:draft.representative.phone, locale,
-    courseName:draft.course.publicName, courseAddress:draft.course.address, courseWebsite:draft.course.website,
-    organizationIdentity:{legalName:draft.organization.legalName,registrationId:draft.organization.registrationNumber,jurisdiction:draft.organization.country},
-    courseProfile:{name:draft.course.publicName,address:draft.course.address,website:draft.course.website,holes:Number(draft.profile.holes),timeZone:draft.profile.timezone,catalogueLocales:["en","th","ko","ja","zh","es","fr","de"],description:draft.profile.description,contactEmail:draft.profile.contactEmail,contactPhone:draft.profile.contactPhone,facilities:draft.catalogue.facilities,accessibility:draft.catalogue.accessibility,dressCode:draft.catalogue.dressCode,cancellationPolicy:draft.catalogue.cancellationPolicy,canonicalCourseId:draft.course.courseId,legalName:draft.course.legalName},
-    consent:true, terms:true, expectedVersion, commandId:commandId(),
-  }),
-  acceptAgreement: (draft: CourseOnboardingDraft) => call<any>("acceptVerifiedCourseOnboardingAgreementV2", {
-    representative:{name:draft.representative.fullName,title:draft.representative.jobTitle,email:draft.representative.businessEmail,authorityEvidenceId:draft.representative.authorityEvidenceId,authorityConfirmed:true},
-    agreement:{version:"golfriend.course-partner.v1",digest:"e16d5070c66bbf4b89beade4407b415def779076c71dbb48237db7b1157adc11",explicitlyAccepted:true,signerIsAuthorizedRepresentative:true}, commandId:commandId(),
-  }),
-  submit: () => call<any>("submitVerifiedCourseOnboardingV2", {commandId: commandId()}),
+import {getFunctions,httpsCallable}from"firebase/functions";
+export const ENTERPRISE_ONBOARDING_SCHEMA="golfriend.enterprise-course-onboarding.v1";
+export const TRIAL_OPTIONS=[30,90]as const;export type TrialDays=typeof TRIAL_OPTIONS[number];
+export type Context={organizationId:string;propertyId:string;courseId:string};
+export type CourseOnboardingDraft={context:Context;organizationRequest:{legalName:string;registrationNumber:string;jurisdiction:string;displayName:string};propertyRequest:{displayName:string;address:string};courseRequest:{canonicalCourseId:string;displayName:string;address:string;website:string};representative:{fullName:string;jobTitle:string;authorityDeclaration:boolean;businessEmail:string;phone:string;preferredLanguage:string};profile:{description:string;holes:string;timezone:string;facilities:string;accessibility:string};disclosures:{dataUse:boolean;memberManagement:boolean;tournamentManagement:boolean;bookingCommission:boolean};requestedTrialDays:TrialDays};
+export type OnboardingStatus="draft"|"submitted"|"under_review"|"changes_requested"|"approved_for_trial"|"trial_active"|"trial_expiring"|"trial_expired"|"conversion_review"|"active_partner"|"declined"|"suspended"|"withdrawn"|"unavailable";
+export type AgreementPresentation={agreementId:string;version:string;locale:string;canonicalLocale:string;canonicalDigest:string;localizedDigest:string;content:string;commissionPolicyRef:string;commissionBps:number|null;trialTermsRef:string;dataUseTermsRef:string;legalReviewRequired:boolean;coveredOrganizationId:string;coveredPropertyIds:string[];coveredCourseIds:string[]};
+export type OnboardingProjection={schema:string;status:OnboardingStatus;version:number;draft?:CourseOnboardingDraft;agreement?:AgreementPresentation;agreementAcceptance?:{receiptId:string;acceptedAt:string;version:string;locale:string};trial?:{durationDays:TrialDays;startsAt:string|null;endsAt:string|null;status:string;activationReceiptId:string|null};review?:{referenceId:string;requirements:string[]};capabilities?:Record<string,"available"|"unavailable">;auditReceipts?:Array<{receiptId:string;kind:string;createdAt:string}>;stale?:boolean;suspended?:boolean};
+const call=async<T>(name:string,payload:Record<string,unknown>={})=>(await httpsCallable(getFunctions(),name)(payload)).data as T;
+export const createCommandId=(kind:string)=>`${kind}_${crypto.randomUUID()}`;
+export const enterpriseCourseOnboardingService={
+ read:(context:Context)=>call<OnboardingProjection>("getEnterpriseCourseOnboardingV1",{context}),
+ saveDraft:(context:Context,draft:CourseOnboardingDraft,baseVersion:number,commandId:string)=>call<OnboardingProjection>("saveEnterpriseCourseOnboardingDraftV1",{context,command:{commandId,baseVersion,draft}}),
+ submit:(context:Context,baseVersion:number,commandId:string)=>call<OnboardingProjection>("submitEnterpriseCourseOnboardingV1",{context,command:{commandId,baseVersion}}),
+ agreement:(context:Context,locale:string)=>call<AgreementPresentation>("getEnterpriseAgreementPresentationV1",{context,locale}),
+ acceptAgreement:(context:Context,a:AgreementPresentation,commandId:string)=>call<OnboardingProjection>("acceptEnterpriseAgreementV1",{context,command:{commandId,agreementId:a.agreementId,version:a.version,locale:a.locale,canonicalDigest:a.canonicalDigest,localizedDigest:a.localizedDigest,coveredOrganizationId:a.coveredOrganizationId,coveredPropertyIds:a.coveredPropertyIds,coveredCourseIds:a.coveredCourseIds,commissionPolicyRef:a.commissionPolicyRef,commissionBps:a.commissionBps,trialTermsRef:a.trialTermsRef,dataUseTermsRef:a.dataUseTermsRef,explicitlyAccepted:true}}),
+ withdraw:(context:Context,baseVersion:number,commandId:string)=>call<OnboardingProjection>("withdrawEnterpriseCourseApplicationV1",{context,command:{commandId,baseVersion}}),
 };
