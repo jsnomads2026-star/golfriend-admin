@@ -51,6 +51,45 @@ export const KNOWN_INACTIVE_STATUSES: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * THE ROLE REGISTRY.
+ *
+ * Status was already an allowlist; the ROLE was not. "Any non-empty string" was
+ * accepted as an assigned role, so a record carrying a typo, a legacy title, a role
+ * from another product's vocabulary, or a value someone simply made up counted as
+ * platform staff with a role. An authorization predicate must know the whole
+ * vocabulary it accepts, for the same reason it must know every status.
+ *
+ * The vocabulary is DERIVED FROM THE CODE THAT WRITES IT, not invented here:
+ *   - the hire surface (src/components/admin/HRManagement.tsx) offers exactly
+ *     'Manager' and 'Support';
+ *   - 'Director' is the founding tier, deliberately never hireable from the UI;
+ *   - isActiveDirector compares against 'Director' exactly.
+ * Adding a value here widens who may act as staff and is a reviewed change.
+ */
+export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
+
+export const CANONICAL_ADMIN_ROLES: readonly string[] = Object.freeze([
+  'Director', 'Manager', 'Support',
+]);
+
+/**
+ * Roles that once existed and must now fail closed. Empty today; it exists so that
+ * retiring a role is a one-line, testable change rather than a silent deletion from
+ * the list above — a deleted role would fail closed either way, but recording it
+ * says the retirement was deliberate.
+ */
+export const OBSOLETE_ADMIN_ROLES: readonly string[] = Object.freeze([]);
+
+/**
+ * Exact membership of the registry. NOT case-folded: folding a role WIDENS authority
+ * ('director' would begin to grant Director powers where it never has), and widening
+ * is not a hardening change. A non-canonical spelling fails closed.
+ */
+export function isCanonicalAdminRole(value: unknown): boolean {
+  return typeof value === 'string' && CANONICAL_ADMIN_ROLES.indexOf(value) !== -1;
+}
+
+/**
  * Normalize a status for comparison: NFC, trimmed, lower-cased.
  *
  * This folds only CANONICALLY EQUIVALENT spellings — ' Active ' and 'ACTIVE' are the
@@ -84,8 +123,11 @@ export function isActiveStaff(adminDoc: AdminUserDoc | null | undefined): boolea
   if (KNOWN_INACTIVE_STATUSES.indexOf(status) !== -1) return false; // known-inactive → deny
   if (ACTIVE_STAFF_STATUSES.indexOf(status) === -1) return false;   // anything unrecognized → deny
 
-  // ROLE SECOND, and only as a separate question: is a role assigned at all?
+  // ROLE SECOND, and only as a separate question: is a role assigned at all, and is
+  // it a role this system actually recognizes?
   if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false; // no role → deny
+  if (OBSOLETE_ADMIN_ROLES.indexOf(adminDoc.role) !== -1) return false;               // retired → deny
+  if (!isCanonicalAdminRole(adminDoc.role)) return false;                             // out of registry → deny
   return true;
 }
 

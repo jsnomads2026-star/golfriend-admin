@@ -133,10 +133,10 @@ const caller = (uid: string): CallerContext => ({ uid, adminDoc: null, appCheckV
 
 function seeded() {
   const db = new FakeDb();
-  db.data.set("admin_users/author", { role: "Ops", status: "Active" });
-  db.data.set("admin_users/reviewer", { role: "Ops", status: "Active" });
+  db.data.set("admin_users/author", { role: "Manager", status: "Active" });
+  db.data.set("admin_users/reviewer", { role: "Manager", status: "Active" });
   db.data.set("admin_users/boss", { role: "Director", status: "Active" });
-  db.data.set("admin_users/suspended", { role: "Ops", status: "Suspended" });
+  db.data.set("admin_users/suspended", { role: "Manager", status: "Suspended" });
   db.data.set("admin_users/roleless", { status: "Active" });
   // A legal-hold document that says "not held". Its ABSENCE is also "not held"; a FAILED
   // read is what must be unknown.
@@ -389,7 +389,7 @@ await block("digest binding", async () => {
 // person's draft and then approves it alone, completing a two-person control by themselves.
 await block("self-nomination", async () => {
   const { db, store } = await createdDraft();
-  db.data.set("admin_users/mallory", { role: "Ops", status: "Active" });
+  db.data.set("admin_users/mallory", { role: "Manager", status: "Active" });
   const grab = await store.assignReviewer({
     caller: caller("mallory"), draftId: "d1", expectedVersion: 1,
     reviewerUid: "mallory", commandId: "m1", now: NOW,
@@ -455,7 +455,7 @@ await block("expiry validation", async () => {
 // the authority core ever running for them.
 await block("replay is caller-bound", async () => {
   const { db, store } = await createdDraft("d5");
-  db.data.set("admin_users/mallory", { role: "Ops", status: "Active" });
+  db.data.set("admin_users/mallory", { role: "Manager", status: "Active" });
   const legitimate = await store.assignReviewer({
     caller: caller("author"), draftId: "d5", expectedVersion: 1,
     reviewerUid: "reviewer", commandId: "shared-id", now: NOW,

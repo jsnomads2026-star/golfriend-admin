@@ -31,6 +31,12 @@ export const ACTIVE_ADMIN_STATUSES: string[];
 export const KNOWN_INACTIVE_ADMIN_STATUSES: string[];
 export function normalizeStaffStatus(value: unknown): string | null;
 
+/** The closed ADMIN role registry — the client twin of functions/src/authority.ts. */
+export const ADMIN_ROLE_REGISTRY_VERSION: string;
+export const CANONICAL_ADMIN_ROLES: string[];
+export const OBSOLETE_ADMIN_ROLES: string[];
+export function isCanonicalAdminRole(value: unknown): boolean;
+
 /** Client twin of the server isActiveStaff. A rendering decision only. */
 export function isActiveAdminDoc(adminDoc: { role?: string; status?: string } | null | undefined): boolean;
 export function isActiveDirectorDoc(adminDoc: { role?: string; status?: string } | null | undefined): boolean;

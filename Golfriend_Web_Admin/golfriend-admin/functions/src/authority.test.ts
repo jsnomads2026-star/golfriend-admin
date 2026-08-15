@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import {
   ACTIVE_STAFF_STATUSES, KNOWN_INACTIVE_STATUSES,
   isActiveStaff, isActiveDirector, normalizeStaffStatus,
+  CANONICAL_ADMIN_ROLES, OBSOLETE_ADMIN_ROLES, isCanonicalAdminRole, ADMIN_ROLE_REGISTRY_VERSION,
 } from './authority.js';
 
 let passed = 0;
@@ -112,6 +113,46 @@ check('role-less / unauthorized record → denied', () => {
 });
 check('non-Director active staff is NOT a Director', () => {
   assert.equal(isActiveDirector({ role: 'Support', status: 'Active' }), false);
+});
+// ---- THE ROLE REGISTRY ---------------------------------------------------------
+// Status was already an allowlist; the ROLE was "any non-empty string", so a typo, a
+// legacy title, or a value from another product's vocabulary counted as an assigned
+// role and granted staff authority.
+check(`the registry is versioned and closed (${CANONICAL_ADMIN_ROLES.length} roles)`, () => {
+  assert.ok(ADMIN_ROLE_REGISTRY_VERSION.length > 0);
+  assert.deepEqual([...CANONICAL_ADMIN_ROLES], ['Director', 'Manager', 'Support']);
+  assert.deepEqual([...OBSOLETE_ADMIN_ROLES], []);
+  assert.equal(Object.isFrozen(CANONICAL_ADMIN_ROLES), true);
+});
+check('every canonical role is accepted, so the registry is not a blanket denial', () => {
+  for (const role of CANONICAL_ADMIN_ROLES) {
+    assert.equal(isCanonicalAdminRole(role), true, role);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), true, role);
+  }
+});
+check('an OUT-OF-REGISTRY role fails closed, however plausible it looks', () => {
+  for (const role of ['Admin', 'Owner', 'SuperUser', 'Partner', 'Analyst', 'Directorr', 'Manger', 'staff', 'x']) {
+    assert.equal(isCanonicalAdminRole(role), false, role);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+  }
+});
+check('a role is NEVER case-folded — folding widens authority', () => {
+  for (const role of ['director', 'DIRECTOR', 'Director ', ' Director', 'manager', 'SUPPORT']) {
+    assert.equal(isCanonicalAdminRole(role), false, role);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+    assert.equal(isActiveDirector({ role, status: 'Active' }), false, role);
+  }
+});
+check('non-string and confusable roles fail closed', () => {
+  for (const role of [null, undefined, 42, {}, [], 'Dırector', 'Direсtor']) {
+    assert.equal(isCanonicalAdminRole(role), false, JSON.stringify(role));
+    assert.equal(isActiveStaff({ role } as never), false, JSON.stringify(role));
+  }
+});
+check('status still outranks a canonical role', () => {
+  for (const status of ['Suspended', 'Inactive', 'Revoked', '', '   ', 'Actve']) {
+    assert.equal(isActiveStaff({ role: 'Director', status }), false, status);
+  }
 });
 check('authority derives ONLY from the doc — no email/identity input exists', () => {
   // The function signature takes only the admin_users doc; there is no email,

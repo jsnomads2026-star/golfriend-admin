@@ -58,6 +58,12 @@ const REFUSING = [
   'Аctive', 'Activе', 'Асtive', 'Ａctive',
 ];
 
+/**
+ * Roles OUTSIDE the canonical registry. Each is paired with an ACTIVE status, so the
+ * only thing that can refuse them is the role vocabulary itself.
+ */
+const OUT_OF_REGISTRY_ROLES = ['Owner', 'Admin', 'SuperUser', 'Partner', 'Analyst', 'director', 'DIRECTOR', 'Manger', 'staff', ''];
+
 for (const status of AUTHORIZING) {
   assert.equal(server.isActiveStaff({ role: 'Support', status }), true, `staff should authorize: ${JSON.stringify(status)}`);
 }
@@ -202,7 +208,14 @@ const MUTATIONS = [
   // labels for guards that protect availability or robustness instead.
   ['status normalization', 'lockout', /const normalized = value\.normalize\('NFC'\)\.trim\(\)\.toLowerCase\(\);/, 'const normalized = value;'],
   ['active-state allowlist', 'bypass', /if \(ACTIVE_STAFF_STATUSES\.indexOf\(status\) === -1\) return false;.*/, ''],
-  ['role verification', 'bypass', /if \(typeof adminDoc\.role !== 'string' \|\| adminDoc\.role\.trim\(\) === ''\) return false;.*/, ''],
+  // Reclassified when the ROLE REGISTRY landed. Removing the empty/non-string check no
+  // longer bypasses anything, because isCanonicalAdminRole below refuses '' and every
+  // non-string too — so this guard is now a safety net that states the refusal at the
+  // point a reader looks for it. Leaving it declared 'bypass' would have claimed a
+  // security proof this line no longer provides.
+  ['empty-role safety net', 'holds', /if \(typeof adminDoc\.role !== 'string' \|\| adminDoc\.role\.trim\(\) === ''\) return false;.*/, ''],
+  // THE REGISTRY IS THE PROOF NOW: remove it and any string whatsoever becomes a role.
+  ['canonical role registry', 'bypass', /if \(!isCanonicalAdminRole\(adminDoc\.role\)\) return false;.*/, ''],
   ['director role check', 'bypass', /return isActiveStaff\(adminDoc\) && adminDoc!\.role === 'Director';/, 'return isActiveStaff(adminDoc);'],
   ['missing-document denial', 'crash', /if \(!adminDoc \|\| typeof adminDoc !== 'object'\) return false;.*/, ''],
   // Safety nets: the allowlist already refuses everything these refuse. They exist so the
@@ -250,6 +263,12 @@ const matrixOutcome = async (mod) => {
     if (mod.isActiveStaff(undefined) !== false) return 'bypass';
     if (mod.isActiveDirector({ role: 'Support', status: 'Active' }) !== false) return 'bypass';
     if (mod.isActiveDirector(null) !== false) return 'bypass';
+    // OUT-OF-REGISTRY ROLES. Every probe above varies the STATUS and holds the role
+    // canonical, so no probe could ever notice the role vocabulary being removed — the
+    // registry mutation registered as 'holds' purely because nothing tested it.
+    for (const role of OUT_OF_REGISTRY_ROLES) {
+      if (mod.isActiveStaff({ role, status: 'Active' }) !== false) return 'bypass';
+    }
     return 'holds';
   } catch { return 'crash'; }
 };
@@ -258,6 +277,7 @@ const matrixHolds = async (mod) => {
     for (const status of AUTHORIZING) if (mod.isActiveStaff({ role: 'Support', status }) !== true) return false;
     for (const status of REFUSING) if (mod.isActiveStaff({ role: 'Director', status }) !== false) return false;
     if (mod.isActiveStaff({ role: 'Director' }) !== false) return false;
+    for (const role of OUT_OF_REGISTRY_ROLES) if (mod.isActiveStaff({ role, status: 'Active' }) !== false) return false;
     if (mod.isActiveStaff({ status: 'Active' }) !== false) return false;
     if (mod.isActiveStaff(['Active']) !== false) return false;
     // A missing document is part of the requirement, so the matrix has to state it —

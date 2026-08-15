@@ -20,6 +20,27 @@ export const KNOWN_INACTIVE_ADMIN_STATUSES = [
 ];
 
 /**
+ * The client twin of the ROLE REGISTRY in functions/src/authority.ts. Status was
+ * already an allowlist here; the role was "any non-empty string", so an unrecognized
+ * role rendered as ordinary staff on the very screens an operator uses to diagnose
+ * access. scripts/admin-authority-matrix-verify.mjs asserts the two files agree.
+ *
+ * Derived from the code that writes the value: HRManagement offers 'Manager' and
+ * 'Support'; 'Director' is the founding tier and is never hireable from the UI.
+ */
+export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
+
+export const CANONICAL_ADMIN_ROLES = ['Director', 'Manager', 'Support'];
+
+/** Retired roles that must now fail closed. Empty today; recorded, not implied. */
+export const OBSOLETE_ADMIN_ROLES = [];
+
+/** Exact membership. Never case-folded — folding a role widens authority. */
+export function isCanonicalAdminRole(value) {
+  return typeof value === 'string' && CANONICAL_ADMIN_ROLES.includes(value);
+}
+
+/**
  * Normalize a status for comparison: NFC, trimmed, lower-cased. Folds canonically
  * equivalent spellings only — a confusable such as a Cyrillic А is a different string and
  * stays rejected. Non-strings and blanks normalize to null, i.e. unknown.
@@ -43,7 +64,9 @@ export function isActiveAdminDoc(adminDoc) {
   if (!adminDoc || typeof adminDoc !== 'object' || Array.isArray(adminDoc)) return false;
   const status = normalizeStaffStatus(adminDoc.status);
   if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) return false;
-  return typeof adminDoc.role === 'string' && adminDoc.role.trim() !== '';
+  if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false;
+  if (OBSOLETE_ADMIN_ROLES.includes(adminDoc.role)) return false;
+  return isCanonicalAdminRole(adminDoc.role);
 }
 
 /** Director tier. Exact role match, for the same reason the server uses one. */

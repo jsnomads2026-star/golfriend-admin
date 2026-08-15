@@ -9,6 +9,21 @@ import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./co
 import { runSyncCoursesFromProviderPreview } from "./courseSyncPreview.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
+import {
+  MEMBERSHIP_REGISTRY_VERSION,
+  MEMBERSHIP_REGISTRY_COLLECTION,
+  GRANT_AUDIT_COLLECTION,
+  REMOVAL_AUDIT_COLLECTION,
+  GRANT_COUNTER_COLLECTION,
+  ENTERPRISE_STAFF_ROLES,
+  REMOVAL_REASONS,
+  isEnterpriseStaffRole,
+  isRemovalReason,
+  isValidCommandId,
+  evaluateMembershipCandidate,
+  decideMembershipAdmission,
+  removalFingerprint,
+} from "./enterpriseMembershipRegistry.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDecision, type SubmissionStatus } from "./partnerIntakeLogic.js";
@@ -259,7 +274,10 @@ export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) 
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // GATED AT THE READ. An address only stands in for an identity once Firebase
+  // says it was VERIFIED; anyone can register an address they do not control.
+  const callerAddressVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerAddressVerified ? (request.auth.token?.email || "").toLowerCase() : "";
   const { courseId } = request.data || {};
 
   if (!courseId || typeof courseId !== 'string') {
@@ -839,30 +857,57 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
-  const { action, email, staffUid, role } = request.data || {};
+  // A CONTACT ADDRESS MAY ONLY STAND IN FOR AN IDENTITY ONCE FIREBASE SAYS IT WAS
+  // VERIFIED. b2b_partners is address-keyed during the webhook-buffer window, so an
+  // unverified address was enough to be treated as that active partner — by
+  // registering it. The uid is the identity; an address is only ever a lookup key.
+  const callerAddressVerified = request.auth.token?.email_verified === true;
+  const callerAddress = callerAddressVerified ? (request.auth.token?.email || "").toLowerCase() : "";
+  const payload = (request.data || {}) as Record<string, unknown>;
+  const { action, email, staffUid, role } = payload as {
+    action?: unknown; email?: unknown; staffUid?: unknown; role?: unknown;
+  };
 
   if (action !== 'invite' && action !== 'remove') {
     throw new HttpsError('invalid-argument', 'action must be "invite" or "remove".');
   }
 
-  // Caller must be an ACTIVE ENTERPRISE partner (b2b_partners keyed by uid/email).
+  // SURPLUS FIELDS ARE REFUSED. An undeclared key means the caller and this handler
+  // disagree about what was asked for, and the unsafe resolution is to act on the
+  // half that was understood.
+  const ALLOWED_FIELDS: Record<string, readonly string[]> = {
+    invite: ['action', 'email', 'role'],
+    remove: ['action', 'staffUid', 'reason', 'commandId'],
+  };
+  const surplusFields = Object.keys(payload).filter((key) => ALLOWED_FIELDS[action].indexOf(key) === -1);
+  if (surplusFields.length > 0) {
+    throw new HttpsError('invalid-argument', `Unexpected field(s) for ${action}: ${surplusFields.sort().join(', ')}.`);
+  }
+
+  // Caller must be an ACTIVE ENTERPRISE partner (b2b_partners keyed by uid/address).
   const candidateIds = [callerUid];
-  if (callerEmail) {
-    candidateIds.push(callerEmail);
-    candidateIds.push(callerEmail.charAt(0).toUpperCase() + callerEmail.slice(1));
+  if (callerAddress) {
+    candidateIds.push(callerAddress);
+    candidateIds.push(callerAddress.charAt(0).toUpperCase() + callerAddress.slice(1));
   }
   let isEnterprisePartner = false;
+  // HOW the caller resolved is evidence, not an implementation detail: a uid match is
+  // a strong binding, an address match is acceptable only because the address was
+  // verified above. Recording it lets a later audit tell the two apart.
+  let actorResolvedBy: 'uid' | 'verified_address' | null = null;
+  let actorOrganizationId = '';
   for (const id of candidateIds) {
     const pSnap = await db.collection('b2b_partners').doc(id).get();
     const pData = pSnap.data();
     if (pSnap.exists && pData?.status === 'active_partner' &&
         (pData?.tier === 'enterprise' || pData?.tier === 'Enterprise')) {
       isEnterprisePartner = true;
+      actorResolvedBy = id === callerUid ? 'uid' : 'verified_address';
+      actorOrganizationId = String(pData?.organizationId || pSnap.id);
       break;
     }
   }
-  if (!isEnterprisePartner) {
+  if (!isEnterprisePartner || !actorResolvedBy) {
     throw new HttpsError('permission-denied', 'Only an active enterprise partner can manage staff.');
   }
 
@@ -871,45 +916,265 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
 
   try {
     if (action === 'invite') {
-      const cleanEmail = (email || "").toLowerCase().trim();
-      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      const cleanAddress = (typeof email === 'string' ? email : "").toLowerCase().trim();
+      if (!cleanAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanAddress)) {
         throw new HttpsError('invalid-argument', 'A valid staff email is required.');
       }
-      const allowedRoles = ['manager', 'venue_staff', 'analyst'];
-      const cleanRole = allowedRoles.includes(role) ? role : 'venue_staff';
+      // An unrecognized role used to be SILENTLY COERCED to 'venue_staff'. Coercing an
+      // authorization input hides a caller error and grants something nobody asked for.
+      if (!isEnterpriseStaffRole(role)) {
+        throw new HttpsError('invalid-argument', `role must be one of: ${ENTERPRISE_STAFF_ROLES.join(', ')}.`);
+      }
+      const cleanRole = role as string;
 
       // Resolve an EXISTING Firebase Auth user; roles bind to a real uid.
       let staffRecord;
       try {
-        staffRecord = await admin.auth().getUserByEmail(cleanEmail);
+        staffRecord = await admin.auth().getUserByEmail(cleanAddress);
       } catch {
         throw new HttpsError('not-found', 'No Golfriend account exists for that email. Ask them to sign up first.');
+      }
+      // THE TARGET'S ADDRESS MUST BE VERIFIED. getUserByEmail resolves whoever
+      // registered that address FIRST, and Firebase does not require verification to
+      // register. Binding a role grant to that alone hands the grant to whoever got
+      // there first — the same defect as trusting an unverified caller address,
+      // pointed at the recipient instead.
+      if (staffRecord.emailVerified !== true) {
+        throw new HttpsError('failed-precondition', 'That account has not verified its email address yet. Ask them to verify it, then invite again.');
       }
       if (staffRecord.uid === callerUid) {
         throw new HttpsError('failed-precondition', 'You cannot add yourself as staff.');
       }
 
-      await membersCol.doc(staffRecord.uid).set({
-        staffUid: staffRecord.uid,
-        email: cleanEmail,
-        role: cleanRole,
-        status: 'active',
-        enterpriseUid: callerUid,
-        invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-        invitedBy: callerUid,
-      }, { merge: true });
+      // The registry is read at a KNOWN PATH — one document, no query, no index, and
+      // no way for a same-named subcollection in another domain to appear in it.
+      const registryRef = db.collection(MEMBERSHIP_REGISTRY_COLLECTION).doc(staffRecord.uid);
+      // The page is BOUNDED and a FULL page fails closed: a bare limit silently
+      // answered "no foreign membership" for anyone whose next document was the
+      // foreign one.
+      const MEMBERSHIP_PAGE = 50;
+      let existingMembership;
+      try {
+        existingMembership = await db.collectionGroup('members')
+          .where('staffUid', '==', staffRecord.uid).limit(MEMBERSHIP_PAGE).get();
+      } catch {
+        // Includes FAILED_PRECONDITION when the collection-group index is absent.
+        // Refusing is correct: without the query we cannot rule out a foreign
+        // enterprise, and assuming "unattached" is how a principal gets re-homed.
+        throw new HttpsError('unavailable', 'Could not confirm existing staff membership. No change was made.');
+      }
 
-      logger.info(`🧑‍💼 Enterprise ${callerUid} added staff ${staffRecord.uid} (${cleanRole}).`);
-      return { success: true, staffUid: staffRecord.uid, role: cleanRole };
+      // PATH-QUALIFIED, REGISTRY-VALIDATED ADMISSION. Every candidate is judged by
+      // WHERE it is and whether it agrees with its own location — not by the fact that
+      // a query for a subcollection named `members` returned it.
+      const registrySnap = await registryRef.get();
+      const registryVerdict = registrySnap.exists
+        ? evaluateMembershipCandidate({
+          path: `enterprise_staff/${String(registrySnap.data()?.enterpriseUid || '')}/members/${staffRecord.uid}`,
+          data: registrySnap.data(),
+          expectedStaffUid: staffRecord.uid,
+          callerUid,
+          callerOrganizationId: actorOrganizationId,
+        })
+        : null;
+      const candidateVerdicts = existingMembership.docs.map((d) => evaluateMembershipCandidate({
+        path: d.ref?.path,
+        data: d.data(),
+        expectedStaffUid: staffRecord.uid,
+        callerUid,
+        callerOrganizationId: actorOrganizationId,
+      }));
+      const admission = decideMembershipAdmission({
+        registry: registryVerdict,
+        candidates: candidateVerdicts,
+        saturated: existingMembership.size >= MEMBERSHIP_PAGE,
+      });
+      if (admission.decision !== 'proceed') {
+        logger.warn(`🧑‍💼 membership admission refused for ${staffRecord.uid}: ${JSON.stringify(admission.counts)}`);
+        throw new HttpsError(admission.code as any, admission.reason);
+      }
+
+      // MEMBERSHIP AND EVIDENCE ARE ONE ATOMIC WRITE. Writing the member document
+      // first and the audit afterwards means a failed audit leaves a real, unevidenced
+      // grant behind while the caller is told nothing changed.
+      //
+      // grantSeq separates a REPLAY from a RE-GRANT, and it lives OUTSIDE the
+      // membership: derived from the member document it would reset to zero on
+      // removal, colliding with the original audit id and making a removed principal
+      // permanently un-re-grantable. `remove` never touches this counter.
+      const staffDocRef = membersCol.doc(staffRecord.uid);
+      const auditCol = db.collection(GRANT_AUDIT_COLLECTION);
+      const grantCounterRef = db.collection(GRANT_COUNTER_COLLECTION).doc(`${callerUid}__${staffRecord.uid}`);
+      const outcome = await db.runTransaction(async (tx) => {
+        const current = await tx.get(staffDocRef);
+        const currentData = current.exists ? (current.data() || {}) : {};
+        // An identical, already-active grant is a replay: no state change, no new evidence.
+        if (current.exists && currentData.status === 'active' && currentData.role === cleanRole
+            && String(currentData.enterpriseUid || '') === callerUid) {
+          return { grantSeq: Number(currentData.grantSeq) || 1, replayed: true };
+        }
+        const counterSnap = await tx.get(grantCounterRef);
+        const grantSeq = (Number(counterSnap.data()?.grants) || 0) + 1;
+        const grantAuditId = `${callerUid}__${staffRecord.uid}__${cleanRole}__${grantSeq}`;
+        // create() INSIDE the transaction: if this evidence cannot be written the whole
+        // transaction aborts, so the grant cannot exist without its record.
+        tx.create(auditCol.doc(grantAuditId), {
+          grantId: grantAuditId,
+          enterpriseUid: callerUid,
+          organizationId: actorOrganizationId,
+          staffUid: staffRecord.uid,
+          role: cleanRole,
+          grantSeq,
+          previousRole: typeof currentData.role === 'string' ? currentData.role : null,
+          actorUid: callerUid,
+          actorResolvedBy,
+          targetAddressVerified: true,
+          grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        tx.set(staffDocRef, {
+          staffUid: staffRecord.uid,
+          contactAddress: cleanAddress,
+          role: cleanRole,
+          status: 'active',
+          enterpriseUid: callerUid,
+          // The organization binding and registry version are what make this record
+          // evaluable later; without them it is indistinguishable from a legacy row.
+          organizationId: actorOrganizationId,
+          registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+          grantSeq,
+          invitedAt: admin.firestore.FieldValue.serverTimestamp(),
+          invitedBy: callerUid,
+        }, { merge: true });
+        tx.set(registryRef, {
+          staffUid: staffRecord.uid,
+          enterpriseUid: callerUid,
+          organizationId: actorOrganizationId,
+          role: cleanRole,
+          status: 'active',
+          registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+          grantSeq,
+          invitedBy: callerUid,
+          invitedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        tx.set(grantCounterRef, {
+          enterpriseUid: callerUid,
+          staffUid: staffRecord.uid,
+          grants: grantSeq,
+          lastGrantAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return { grantSeq, replayed: false };
+      });
+
+      logger.info(`🧑‍💼 Enterprise ${callerUid} ${outcome.replayed ? 're-confirmed' : 'added'} staff ${staffRecord.uid} (${cleanRole}, grant #${outcome.grantSeq}) via ${actorResolvedBy}.`);
+      return { success: true, staffUid: staffRecord.uid, role: cleanRole, grantSeq: outcome.grantSeq, replayed: outcome.replayed };
     }
 
     // action === 'remove'
-    if (!staffUid || typeof staffUid !== 'string') {
+    //
+    // REMOVAL IS A TOMBSTONE, NOT A DELETE. The old path called delete() on the
+    // membership: the grant vanished, the audit trail lost its subject, and nothing
+    // recorded who removed whom, when, or why. Revoking authority is itself an
+    // authority action and leaves the same evidence granting it does.
+    if (!staffUid || typeof staffUid !== 'string' || staffUid.trim() === '') {
       throw new HttpsError('invalid-argument', 'A staffUid is required to remove a member.');
     }
-    await membersCol.doc(staffUid).delete();
-    logger.info(`🧑‍💼 Enterprise ${callerUid} removed staff ${staffUid}.`);
-    return { success: true, staffUid };
+    const { reason, commandId } = payload as { reason?: unknown; commandId?: unknown };
+    if (!isRemovalReason(reason)) {
+      throw new HttpsError('invalid-argument', `reason must be one of: ${REMOVAL_REASONS.join(', ')}.`);
+    }
+    // COMMAND IDENTITY. The caller names the command, so an interrupted removal can be
+    // retried without removing twice and without a second evidence record.
+    if (!isValidCommandId(commandId)) {
+      throw new HttpsError('invalid-argument', 'A commandId of 8-64 characters (A-Z, a-z, 0-9, - or _) is required.');
+    }
+    const removalReason = reason as string;
+    const removalCommandId = commandId as string;
+
+    const targetRef = membersCol.doc(staffUid);
+    const removalRegistryRef = db.collection(MEMBERSHIP_REGISTRY_COLLECTION).doc(staffUid);
+    const removalAuditRef = db.collection(REMOVAL_AUDIT_COLLECTION)
+      .doc(`${callerUid}__${staffUid}__${removalCommandId}`);
+    const fingerprint = removalFingerprint({
+      enterpriseUid: callerUid, staffUid, reason: removalReason, commandId: removalCommandId,
+    });
+
+    const removal = await db.runTransaction(async (tx) => {
+      const priorAudit = await tx.get(removalAuditRef);
+      if (priorAudit.exists) {
+        const prior = priorAudit.data() || {};
+        // AN ALTERED REPLAY IS NOT A REPLAY. Same command id, different content, means
+        // the caller reused an identifier for a different action; honouring either
+        // reading would be a guess about which one they meant.
+        if (prior.fingerprint !== fingerprint) {
+          throw new HttpsError('already-exists', 'That commandId was already used for a different removal.');
+        }
+        return { replayed: true, removalSeq: Number(prior.removalSeq) || 1 };
+      }
+
+      const current = await tx.get(targetRef);
+      if (!current.exists) {
+        throw new HttpsError('not-found', 'That account is not staff of this enterprise.');
+      }
+      const currentData = current.data() || {};
+      // STALE AUTHORITY. The membership must still belong to this enterprise AND this
+      // organization at the moment of removal — a record since re-bound elsewhere is
+      // not this caller's to revoke.
+      if (String(currentData.enterpriseUid || '') !== callerUid) {
+        throw new HttpsError('permission-denied', 'That membership belongs to another enterprise.');
+      }
+      if (String(currentData.organizationId || '') !== actorOrganizationId) {
+        throw new HttpsError('permission-denied', 'That membership is bound to a different organization.');
+      }
+      if (currentData.status === 'removed') {
+        // Already tombstoned under a DIFFERENT command: report it honestly rather than
+        // writing a second removal record for an authority that no longer exists.
+        return { replayed: true, removalSeq: Number(currentData.removalSeq) || 1 };
+      }
+
+      const removalSeq = (Number(currentData.grantSeq) || 0) + 1;
+      // IMMUTABLE EVIDENCE FIRST, INSIDE THE TRANSACTION. If this create() fails the
+      // whole transaction aborts and the membership is untouched — there is no
+      // ordering in which the state changes without its record.
+      tx.create(removalAuditRef, {
+        removalId: removalAuditRef.id,
+        commandId: removalCommandId,
+        fingerprint,
+        enterpriseUid: callerUid,
+        organizationId: actorOrganizationId,
+        staffUid,
+        removedRole: typeof currentData.role === 'string' ? currentData.role : null,
+        grantSeq: Number(currentData.grantSeq) || null,
+        removalSeq,
+        reason: removalReason,
+        actorUid: callerUid,
+        actorResolvedBy,
+        removedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.set(targetRef, {
+        status: 'removed',
+        previousRole: typeof currentData.role === 'string' ? currentData.role : null,
+        removedAt: admin.firestore.FieldValue.serverTimestamp(),
+        removedBy: callerUid,
+        removalCommandId,
+        removalReason,
+        removalSeq,
+        registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+      }, { merge: true });
+      tx.set(removalRegistryRef, {
+        staffUid,
+        enterpriseUid: callerUid,
+        organizationId: actorOrganizationId,
+        status: 'removed',
+        registryVersion: MEMBERSHIP_REGISTRY_VERSION,
+        removalSeq,
+        removedBy: callerUid,
+        removedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return { replayed: false, removalSeq };
+    });
+
+    logger.info(`🧑‍💼 Enterprise ${callerUid} ${removal.replayed ? 're-confirmed removal of' : 'removed'} staff ${staffUid} (${removalReason}, #${removal.removalSeq}).`);
+    return { success: true, staffUid, removalSeq: removal.removalSeq, replayed: removal.replayed };
   } catch (error: any) {
     if (error instanceof HttpsError) throw error;
     logger.error("🧑‍💼 Enterprise staff management failed:", error);
@@ -1168,7 +1433,10 @@ export const cancelB2BContract = onCall({ memory: "256MiB" }, async (request) =>
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // GATED AT THE READ. An address only stands in for an identity once Firebase
+  // says it was VERIFIED; anyone can register an address they do not control.
+  const callerAddressVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerAddressVerified ? (request.auth.token?.email || "").toLowerCase() : "";
 
   try {
     // 2. RESOLVE the caller's own contract document. b2b_partners is keyed by
@@ -1428,7 +1696,10 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
   }
 
   const reporterUid = request.auth.uid;
-  const reporterEmail = (request.auth.token?.email || "").toLowerCase();
+  // GATED AT THE READ. An address only stands in for an identity once Firebase
+  // says it was VERIFIED; anyone can register an address they do not control.
+  const reporterAddressVerified = request.auth.token?.email_verified === true;
+  const reporterEmail = reporterAddressVerified ? (request.auth.token?.email || "").toLowerCase() : "";
   const { targetUid, gameId, reason } = request.data || {};
 
   if (!targetUid || typeof targetUid !== 'string') {
@@ -1822,7 +2093,10 @@ export const submitPartnerApplication = onCall({ memory: "256MiB" }, async (requ
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
+  // GATED AT THE READ. An address only stands in for an identity once Firebase
+  // says it was VERIFIED; anyone can register an address they do not control.
+  const callerAddressVerified = request.auth.token?.email_verified === true;
+  const callerEmail = callerAddressVerified ? (request.auth.token?.email || "").toLowerCase() : "";
 
   const validation = validateSubmission(request.data || {});
   if (!validation.ok || !validation.clean) {

@@ -152,8 +152,8 @@ const fake = {
     return out;
   },
 };
-fake.data.set('admin_users/author-x', { role: 'Ops', status: 'Active' });
-fake.data.set('admin_users/reviewer-x', { role: 'Ops', status: 'Active' });
+fake.data.set('admin_users/author-x', { role: 'Manager', status: 'Active' });
+fake.data.set('admin_users/reviewer-x', { role: 'Manager', status: 'Active' });
 fake.data.set('enterprise_legal_holds/uid1', { active: false });
 const boundStore = createOutreachStore(fake);
 const ctx = (uid) => ({ uid, adminDoc: null, appCheckVerified: true });
@@ -188,7 +188,7 @@ assert.equal(listed.rows[0].sendable, false);
 // An UNRELATED staff member sees the row but NOT the free text. Persisting the content
 // created that exposure; scoping it is what keeps the projection honest about carrying no
 // one else's information.
-fake.data.set('admin_users/reader-x', { role: 'Ops', status: 'Active' });
+fake.data.set('admin_users/reader-x', { role: 'Manager', status: 'Active' });
 const outsider = await boundStore.listDrafts(ctx('reader-x'));
 assert.equal(outsider.rows[0].subject, null, 'an unrelated staff member received the draft subject');
 assert.equal(outsider.rows[0].body, null, 'an unrelated staff member received the draft body');
