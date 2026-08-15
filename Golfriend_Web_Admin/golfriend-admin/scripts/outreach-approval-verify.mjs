@@ -15,6 +15,10 @@ import {
   DRAFT_TYPES,
   draftIsPrivacySafe,
   boundFromDraft,
+  CANONICAL_FIELDS,
+  canonicalizeOutreachContent,
+  digestsEqual,
+  outreachContentDigest,
   deriveClaims,
   draftPreviewStructure,
   EVIDENCE_BEARING_TYPES,
@@ -127,27 +131,34 @@ assert.ok(SUPPORTED_JURISDICTIONS.includes('TH'));
 // === 3. Binding and claims ==============================================
 const ok = build();
 const draft = ok.draft;
-for (const field of ['prospectId', 'country', 'jurisdiction', 'locale', 'contactPreference', 'consentState', 'consentAuthority', 'purpose', 'evidenceVersion', 'templateVersion', 'contentDigest']) assert.ok(Object.hasOwn(draft, field), `draft must bind ${field}`);
-assert.equal(draft.doNotContact, false);
+for (const field of CANONICAL_FIELDS) assert.ok(Object.hasOwn(draft, field), `draft must bind ${field}`);
+// Every version that could change meaning or lawfulness is bound.
+for (const field of ['jurisdictionApprovalVersion', 'contactPreferenceVersion', 'consentVersion', 'doNotContactVersion', 'evidenceVersion', 'templateVersion', 'recipientRef']) assert.ok(CANONICAL_FIELDS.includes(field), `${field} must be canonical`);
 assert.equal(draft.deliveryAvailable, false);
 assert.ok(Object.isFrozen(draft));
 // No draft may assert a commercial or legal claim.
 for (const claim of PROHIBITED_CLAIMS) assert.equal(draft.claims[claim], false, `${claim} must be false`);
 assert.doesNotMatch(JSON.stringify(draft.claims), /true/);
 // A clean identifier is preserved; one carrying personal data is surrogated, never emitted.
-assert.equal(draft.prospectId, 'p1');
+assert.equal(draft.prospectRef, 'p1');
 const hostileId = build({ prospect: { ...base.prospect, prospectId: 'somchai@leak.example' }, contact: { ...base.contact, prospectId: 'somchai@leak.example' } });
-assert.match(hostileId.draft.prospectId, /^prospect-/);
+assert.match(hostileId.draft.prospectRef, /^prospect-/);
 assert.doesNotMatch(JSON.stringify(hostileId.draft), /somchai@leak\.example/);
 // The author is an operator identity and is always surrogated when it carries personal data.
 assert.doesNotMatch(JSON.stringify(draft), /author@admin\.example/);
 assert.match(draft.createdBy, /^actor-/);
 
 // === 4. Content digest ===================================================
-assert.equal(draft.digestAlgorithm, DIGEST_ALGORITHM);
-assert.equal(contentDigest({ a: 1, b: 2 }), contentDigest({ b: 2, a: 1 }), 'the digest must be key-order independent');
-assert.notEqual(contentDigest({ a: 1 }), contentDigest({ a: 2 }));
-assert.equal(draft.contentDigest.length > 32, true, 'a wide digest bounds accidental collision');
+
+assert.equal(draft.digestAlgorithm, 'sha-256');
+assert.match(draft.contentDigest, /^sha-256:[0-9a-f]{64}$/, 'a full-width SHA-256 digest');
+// Field ORDER in the input object cannot change the digest: the canonical order is declared.
+const forward = boundFromDraft(draft);
+const reversed = Object.fromEntries(Object.entries(forward).reverse());
+assert.equal(outreachContentDigest(forward).digest, outreachContentDigest(reversed).digest, 'declared field order, not input order');
+// An arbitrary object is no longer digestible at all: only canonical content yields a digest.
+assert.equal(contentDigest({ a: 1 }), null, 'non-canonical input must refuse, not hash loosely');
+
 // Any bound change produces a different digest.
 for (const overrides of [
   { locale: 'th' },
@@ -173,7 +184,10 @@ assert.equal(build({ draftType: 'renewal_continuation' }).reason, 'no_prior_rela
 assert.equal(build({ draftType: 'partnership_follow_up' }).reason, 'no_prior_relationship');
 // Production ships no approved jurisdiction block, so every jurisdiction refuses.
 assert.equal(buildOutreachDraft({ draftType: 'course_introduction', locale: 'en', ...base }).reason, 'jurisdiction_compliance_block_unavailable');
-assert.equal(draft.complianceBlockApproved, false, 'the test block is explicitly not legally approved');
+// The jurisdiction approval VERSION is bound, so approving a block later changes the digest
+// and invalidates every outstanding approval made under the unapproved one.
+assert.equal(draft.jurisdictionApprovalVersion, 'unapproved-test-block.v0');
+assert.ok(CANONICAL_FIELDS.includes('jurisdictionApprovalVersion'));
 // Deny flags accept any truthy value, not only === true.
 for (const flag of ['true', 1, 'yes']) {
   assert.equal(build({ contact: { ...base.contact, doNotContact: flag } }).reason, 'do_not_contact', `doNotContact:${JSON.stringify(flag)} must refuse`);
@@ -195,6 +209,26 @@ assert.equal(build({ draftType: 'played_evidence_opportunity', evidence: { autho
 assert.equal(build({ draftType: 'played_evidence_opportunity', evidence: { authoritative: true, stale: false, evidenceVersion: 'e1', period: '2026-07' } }).reason, 'missing_evidence_summary');
 // Identical inputs are deterministic.
 assert.equal(build().draft.contentDigest, draft.contentDigest);
+
+// Canonicalization rejects everything ambiguous rather than digesting it loosely.
+assert.equal(canonicalizeOutreachContent({ ...boundFromDraft(draft), evil: 'x' }).error, 'unknown_field');
+assert.equal(canonicalizeOutreachContent((({ subject, ...rest }) => rest)(boundFromDraft(draft))).error, 'missing_field');
+assert.equal(canonicalizeOutreachContent({ ...boundFromDraft(draft), purpose: 5 }).error, 'unsupported_value');
+assert.equal(canonicalizeOutreachContent({ ...boundFromDraft(draft), purpose: null }).error, 'unsupported_value');
+assert.equal(canonicalizeOutreachContent({ ...boundFromDraft(draft), subject: 'e' + String.fromCharCode(0x301) }).error, 'non_normalized_text');
+assert.equal(canonicalizeOutreachContent({ ...boundFromDraft(draft), body: 'a' + String.fromCharCode(0x200B) + 'b' }).error, 'control_character');
+assert.equal(canonicalizeOutreachContent({ ...boundFromDraft(draft), body: 'a' + String.fromCharCode(0x202E) + 'b' }).error, 'control_character');
+assert.equal(canonicalizeOutreachContent(null).error, 'unsupported_value');
+assert.equal(outreachContentDigest({ ...boundFromDraft(draft), evil: 'x' }).digest, null, 'a refusal yields no digest');
+// Length-prefixed canonicalization: a value containing the delimiter cannot forge another
+// field, so two materially different drafts cannot share a digest.
+const injA = { ...boundFromDraft(draft), subject: 'A', body: 'B' };
+const injB = { ...boundFromDraft(draft), subject: 'A' + String.fromCharCode(10) + 'body:1:B', body: '' };
+assert.notEqual(outreachContentDigest(injA).digest, outreachContentDigest(injB).digest);
+// Constant-time comparison is a real comparison.
+assert.equal(digestsEqual(draft.contentDigest, draft.contentDigest), true);
+assert.equal(digestsEqual(draft.contentDigest, draft.contentDigest.replace(/.$/, '0')), false);
+assert.equal(digestsEqual(draft.contentDigest, null), false);
 
 // === 5. Workflow and separation of duties ===============================
 assert.deepEqual([...APPROVAL_ACTIONS], ['assign_reviewer', 'preview', 'approve', 'reject', 'request_changes', 'expire', 'revoke']);
@@ -290,7 +324,9 @@ assert.ok(preview.regions.every((r) => r.label && r.role && typeof r.text === 's
 assert.equal(preview.regions.find((r) => r.id === 'status').role, 'status');
 assert.ok(Object.isFrozen(preview.regions));
 // A draft without an explicitly selected recipient carries no personal data.
-assert.equal(draft.recipientIncluded, false);
+// No selected recipient binds a null role, which is itself part of the canonical digest.
+assert.equal(draft.recipientRole, null);
+assert.equal(draft.recipientRef, null);
 assert.equal(draftIsPrivacySafe(draft), true);
 assert.ok(draft.body.includes(DRAFT_COPY.en.recipientFallback), 'the name-free fallback is used');
 // Hostile free text is now REFUSED at the gate rather than redacted after rendering: a value

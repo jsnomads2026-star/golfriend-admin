@@ -9,6 +9,7 @@
 import{safeIdentifier}from'./courseAcquisitionModel.mjs';
 import{isProductionApproved}from'./acquisitionAdapters.mjs';
 import{contentDigest,DIGEST_ALGORITHM}from'./outreachDraftDomain.mjs';
+import{digestsEqual}from'./outreachDigest.mjs';
 
 export const APPROVAL_SCHEMA='golfriend.admin.outreach-approval.v1';
 export const APPROVAL_VERSION=1;
@@ -98,7 +99,8 @@ export function revalidateApproval({approval,currentBound,context,at}){
   const failures=[];
   if(!approval||approval.state!=='approved')failures.push('not_approved');
   const recomputed=currentBound?contentDigest(currentBound):null;
-  if(!recomputed||recomputed!==approval?.approvedDigest)failures.push('content_changed');
+  // Recomputed from the CURRENT authoritative content and compared in constant time.
+  if(!recomputed||!digestsEqual(recomputed,approval?.approvedDigest??''))failures.push('content_changed');
   const elapsed=approval?.approvedAt&&at?minutesBetween(approval.approvedAt,at):null;
   if(elapsed===null||elapsed<0||elapsed>APPROVAL_TTL_MINUTES)failures.push('approval_expired');
   // Authorization is revalidated NOW: a grant held at approval time may since have been revoked.

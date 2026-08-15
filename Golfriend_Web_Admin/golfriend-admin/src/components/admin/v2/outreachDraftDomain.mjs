@@ -10,6 +10,8 @@
 // contact with a real person under a real legal regime.
 import{containsPersonalData,redactText,safeIdentifier,surrogateRef}from'./courseAcquisitionModel.mjs';
 import{DRAFT_COPY,DRAFT_TYPES,SHARED_COPY_KEYS}from'./outreachDraftCopy.mjs';
+import{CANONICAL_FIELDS,canonicalizeOutreachContent,DIGEST_ALGORITHM as SHA_ALGORITHM,digestsEqual,outreachContentDigest}from'./outreachDigest.mjs';
+export{CANONICAL_FIELDS,canonicalizeOutreachContent,digestsEqual,outreachContentDigest};
 
 export const DRAFT_SCHEMA='golfriend.admin.outreach-draft.v1';
 export const DRAFT_VERSION=1;
@@ -70,26 +72,19 @@ export function deriveClaims(renderedText){
 }
 
 // --- content digest -------------------------------------------------------
-// A 128-bit FNV-1a variant over the canonical serialization. This is an INTEGRITY binding, not
-// a cryptographic commitment: it detects change, and makes accidental collision negligible, but
-// a determined attacker who can choose content could search for a collision. The server layer
-// must supply a cryptographic digest when these drafts are persisted — recorded as a deferred
-// boundary rather than pretended away here.
-const FNV_SEEDS=Object.freeze([0x811c9dc5,0x01000193,0x9e3779b1,0x85ebca6b]);
-function fnvLane(text,seed){let hash=seed>>>0;for(let i=0;i<text.length;i+=1){hash^=text.charCodeAt(i);hash=Math.imul(hash,0x01000193)>>>0;}return hash.toString(16).padStart(8,'0');}
-/** Canonical serialization: sorted keys, so key order can never change the digest. */
-function canonical(value){
-  if(value===null||typeof value!=='object')return JSON.stringify(value)??'null';
-  if(Array.isArray(value))return`[${value.map(canonical).join(',')}]`;
-  return`{${Object.keys(value).sort().map((key)=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
-}
-export function contentDigest(bound){const text=canonical(bound);return`sha-lite:${FNV_SEEDS.map((seed)=>fnvLane(text,seed)).join('')}`;}
-export const DIGEST_ALGORITHM='fnv1a-128-lite';
+// Canonical SHA-256. The previous 128-bit FNV-1a-lite was an integrity check only: an
+// attacker who can choose content could search for a collision, and an approval digest is
+// precisely what such an attacker would target. Canonicalization is length-prefixed and
+// strictly validated, so a refusal to canonicalize yields no digest at all.
+export const DIGEST_ALGORITHM=SHA_ALGORITHM;
+/** Digest the bound content. Throws only on a programming error; invalid input refuses. */
+export function contentDigest(bound){const result=outreachContentDigest(bound);return result.ok?result.digest:null;}
 
 
-export const BOUND_FIELDS=Object.freeze(['draftType','locale','templateVersion','prospectId','country','jurisdiction','contactPreference','recipientIncluded','recipientRef','authorRef','consentState','consentAuthority','doNotContact','purpose','evidenceVersion','evidenceAuthoritative','complianceBlockVersion','complianceBlockApproved','subject','body']);
+/** The bound set IS the canonical field set — one definition, so they cannot drift. */
+export const BOUND_FIELDS=CANONICAL_FIELDS;
 /** Re-project the bound subset from a draft, so a caller never hand-maintains the shape. */
-export function boundFromDraft(draft){return Object.freeze(Object.fromEntries(BOUND_FIELDS.map((k)=>[k,draft?.[k]])));}
+export function boundFromDraft(draft){return Object.freeze(Object.fromEntries(BOUND_FIELDS.map((k)=>[k,draft?.[k]??null])));}
 
 const nonEmpty=(v)=>typeof v==='string'&&v.trim().length>0;
 const refuse=(reason,detail)=>Object.freeze({ok:false,reason,detail,draft:null});
@@ -164,25 +159,31 @@ export function buildOutreachDraft({draftType,locale,prospect,contact,consent,ev
   // pitch: 'clear and conspicuous' is a legal requirement, not a formatting preference.
   if(complianceBlock)lines.push('',String(complianceBlock.text??''));
 
+  // Exactly the canonical field set, in the canonical shape. Every version that could change
+  // the meaning or the lawfulness of this message is bound, so a change to any of them
+  // invalidates an existing approval.
   const bound=Object.freeze({
     draftType,locale,templateVersion:TEMPLATE_VERSION,
-    prospectId:safeIdentifier(prospect.prospectId,'prospect'),
-    country:prospect.country??null,jurisdiction:prospect.jurisdiction,
-    contactPreference:contact.preference,recipientIncluded:contact.recipientSelected===true,
-    // The DESTINATION is bound (as a surrogate, never in clear): swapping the address after
-    // approval must change the digest, or approval covers a recipient it never saw.
+    jurisdiction:prospect.jurisdiction,
+    jurisdictionApprovalVersion:complianceBlock?.version??null,
+    prospectRef:safeIdentifier(prospect.prospectId,'prospect'),
+    contactRef:safeIdentifier(contact.contactId??prospect.prospectId,'contact'),
+    recipientRole:contact.recipientSelected===true?recipient:null,
     recipientRef:nonEmpty(contact.address)?surrogateRef(contact.address,'rcpt'):null,
-    authorRef:safeIdentifier(createdBy,'actor'),
-    consentState:consent.state,consentAuthority:consent.authority,
-    doNotContact:false,purpose,
-    evidenceVersion:evidence?.evidenceVersion??null,evidenceAuthoritative:evidence?.authoritative===true,
-    complianceBlockVersion:complianceBlock?.version??null,complianceBlockApproved:complianceBlock?.legallyApproved===true,
-    subject:fill(template.subject),body:lines.join('\n'),
+    contactPreferenceVersion:`${contact.preference}@${contact.preferenceVersion??'v0'}`,
+    consentVersion:`${consent.state}@${consent.authority}@${consent.version??'v0'}`,
+    doNotContactVersion:`false@${contact.doNotContactVersion??'v0'}`,
+    purpose,
+    evidenceVersion:evidence?.evidenceVersion??null,
+    subject:fill(template.subject),body:lines.join(String.fromCharCode(10)),
   });
+  // A draft whose content cannot be canonicalized is refused rather than digested loosely.
+  const canonical=canonicalizeOutreachContent(bound);
+  if(!canonical.ok)return refuse(canonical.error==='non_normalized_text'||canonical.error==='control_character'?'unsafe_injected_content':'unsafe_injected_content',`${canonical.error}:${canonical.field}`);
   return Object.freeze({ok:true,reason:'draft_prepared',detail:null,draft:Object.freeze({
     schema:DRAFT_SCHEMA,version:DRAFT_VERSION,
     ...bound,
-    digestAlgorithm:DIGEST_ALGORITHM,contentDigest:contentDigest(bound),
+    digestAlgorithm:DIGEST_ALGORITHM,contentDigest:outreachContentDigest(bound).digest,
     createdBy:safeIdentifier(createdBy,'actor'),createdAt,preparedAt:now??createdAt,
     // Derived from the RENDERED text, not asserted. A hardcoded all-false map reads to a
     // reviewer as "we checked" when nothing was checked.
