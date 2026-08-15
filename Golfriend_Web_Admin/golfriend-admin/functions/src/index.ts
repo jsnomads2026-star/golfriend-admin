@@ -18,6 +18,16 @@ import { FieldValue } from "firebase-admin/firestore";
 import { createOutreachStore } from "./outreachStore.js";
 import type { CallerContext as OutreachCallerContext } from "./outreachAuthority.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
+export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,uploadMarketingAssetVersion,transitionMarketingAsset,getMarketingAssetDownload} from "./marketingAssetRuntime.js";
+export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2, getMyVerifiedCourseOnboardingV2, saveVerifiedCourseOnboardingDraftV2, acceptVerifiedCourseOnboardingAgreementV2, submitVerifiedCourseOnboardingV2} from "./partnerOnboardingRuntime.js";
+export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin} from "./partnerActivationRuntime.js";
+export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
+export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSlot,reviewCourseAvailabilityV2,getCourseAvailabilityV2,listCourseAvailabilityAdminV2} from "./partnerAvailabilityRuntime.js";
+export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,sendPlayBookingMessageV2 as sendBookingMessage,getPlayBookingsPortalV2,getPlayBookingsAdminV2} from "./partnerBookingRuntime.js";
+export {getBookingOperationsPortalV2,getBookingOperationsAdminV2,reconcileBookingOperationsV2,exportBookingOperationsV2,getBookingOperationsReceiptV2} from "./bookingReportingRuntime.js";
+export {prepareBookingProviderPublicationV2,publishBookingProviderPublicationV2,getBookingProviderPublicationsV2} from "./bookingProviderPublicationRuntime.js";
+export {getEnterpriseOrganizationAuthorityV2} from "./enterpriseAuthorityRuntime.js";
+export {getEnterpriseCourseProfileV1,submitEnterpriseCourseProfileV1,getEnterpriseMemberLinksV1,getEnterpriseMemberLinkInvitationsForGolferV1,inviteKnownGolferEnterpriseMemberV1,unlinkEnterpriseMemberV1,revokeEnterpriseMemberLinkAsStaffV1,acceptEnterpriseMemberLinkV1,declineEnterpriseMemberLinkV1,revokeEnterpriseMemberLinkV1,unlinkEnterpriseMemberLinkAsGolferV1} from "./enterpriseOperationsRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -253,7 +263,8 @@ export const inviteEmployee = onCall({ memory: "256MiB" }, async (request) => {
 // availability/pricing (see manageTeeTimeSlot). Operator assignment is a role
 // grant, so it is server-owned: the client cannot self-assign, claim a course
 // that does not exist, or seize a course already operated by someone else.
-export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) => {
+// const legacyClaimCourseOperator is intentionally not exported; retained below for migration comparison.
+const _legacyClaimCourseOperator = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -323,6 +334,7 @@ export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) 
     throw new HttpsError('internal', error.message || 'Course claim failed.');
   }
 });
+void _legacyClaimCourseOperator;
 
 // ==========================================
 // ⛳ TEE-TIME INVENTORY (Server-Authoritative Supply)
@@ -335,7 +347,7 @@ export const claimCourseOperator = onCall({ memory: "256MiB" }, async (request) 
 // validated against the real `courses` vault, deduped per (course,date,time),
 // and it initializes bookedCount server-side so later booking transactions have
 // an authoritative counter to increment.
-export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) => {
+const legacyManageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -446,6 +458,7 @@ export const manageTeeTimeSlot = onCall({ memory: "256MiB" }, async (request) =>
 
   throw new HttpsError('invalid-argument', 'Unknown action. Use "create" or "setStatus".');
 });
+void legacyManageTeeTimeSlot;
 
 // ==========================================
 // 📅 BOOKING LIFECYCLE (Server-Authoritative, NON-FINANCIAL)
@@ -539,7 +552,7 @@ export const requestBooking = onCall({ memory: "256MiB" }, async (request) => {
 });
 
 // Course operator (or staff) confirms or rejects a pending booking. No settle/refund.
-export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
+const legacyRespondBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -618,7 +631,7 @@ export const respondBooking = onCall({ memory: "256MiB" }, async (request) => {
 
 // Cancel a booking. The owning player, the course operator, or staff may cancel
 // a pending/confirmed booking; the seat is released. Non-financial.
-export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
+const legacyCancelBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -682,7 +695,7 @@ export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
 
 // Booking messaging: a participant (the player, the course operator, or staff)
 // appends a message to the booking thread. Purely communicative, non-financial.
-export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
+const legacySendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -725,6 +738,9 @@ export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) =
   logger.info(`📅 Booking message on ${bookingId} by ${callerUid} (${senderRole}).`);
   return { success: true };
 });
+void legacyRespondBooking;
+void legacyCancelBooking;
+void legacySendBookingMessage;
 
 // ==========================================
 // 📖 ADMIN BOOKING OVERSIGHT (Non-Financial Force-Resolve: Confirm / Reject / Cancel)

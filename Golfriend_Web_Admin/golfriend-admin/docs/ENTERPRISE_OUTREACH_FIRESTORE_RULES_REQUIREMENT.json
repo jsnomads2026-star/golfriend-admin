@@ -6,7 +6,12 @@
     "still contains a God-Mode identity backdoor and a status denylist, and must not be treated as",
     "the contract). The rules owner is the mobile/backend lane. This file states exactly what those",
     "rules must enforce and how to test it, so the requirement can be applied without re-deriving it.",
-    "Nothing here has been deployed, and no rules file has been modified by this lane."
+    "Nothing here has been deployed, and no rules file has been modified by this lane.",
+    "v2.0.0 strengthens this from a description into a machine-verifiable contract:",
+    "every collection now declares its permitted server projection, the role/status required to",
+    "reach it through a callable, and the aliases/alternate paths that must NOT bypass it.",
+    "scripts/outreach-production-binding-verify.mjs enforces the parts that are checkable from",
+    "this repository; the rules themselves remain the owning lane's to apply."
   ],
   "requirementId": "GF-ADMIN-OUTREACH-RULES-001",
   "raisedBy": "Admin Enterprise acquisition lane",
@@ -27,13 +32,122 @@
       "clientRead": "deny",
       "clientWrite": "deny",
       "serverAccess": "admin_sdk_only",
-      "carries": ["approval state", "version", "content digest", "draft subject/body", "reviewer and creator comparison keys"],
-      "notes": "Client reads must be denied even for staff: the server projection scopes draft content to the creator and assigned reviewer, and a direct read would bypass that scoping."
+      "carries": [
+        "approval state",
+        "version",
+        "content digest",
+        "draft subject/body",
+        "reviewer and creator comparison keys"
+      ],
+      "notes": "Client reads must be denied even for staff: the server projection scopes draft content to the creator and assigned reviewer, and a direct read would bypass that scoping.",
+      "permittedServerProjection": [
+        "draftId",
+        "state",
+        "version",
+        "jurisdiction",
+        "jurisdictionApproved",
+        "legalHold",
+        "expiresAt",
+        "subject",
+        "body",
+        "hasAssignedReviewer",
+        "callerIsCreator",
+        "callerIsAssignedReviewer",
+        "sendable",
+        "sendableReason"
+      ],
+      "projectionScoping": "subject and body are returned ONLY to the record creator or the assigned reviewer; every other active staff member receives null for both.",
+      "neverProjected": [
+        "createdByKey",
+        "assignedReviewerKey",
+        "contentDigest",
+        "content"
+      ],
+      "requiredCallerStatus": "Active",
+      "requiredCallerRole": "any assigned role",
+      "writeAuthority": "admin_sdk_only"
     },
-    { "path": "enterprise_outreach_receipts/{receiptId}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["immutable append-only approval audit trail"], "notes": "Append-only. No client, including staff, may create, update or delete a receipt." },
-    { "path": "enterprise_outreach_commands/{commandId}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["replay ledger: command fingerprint and stored outcome"], "notes": "A client that could write this could forge a replayed success for a command it never made." },
-    { "path": "enterprise_legal_holds/{draftId}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["legal hold state"], "notes": "A client write here would let a caller lift their own legal hold. Absence of a document means NOT held; a failed read means UNKNOWN and blocks." },
-    { "path": "enterprise_jurisdiction_approvals/{jurisdictionCode}", "clientRead": "deny", "clientWrite": "deny", "serverAccess": "admin_sdk_only", "carries": ["legallyApproved flag", "policy version"], "notes": "A client write here would manufacture legal approval for a jurisdiction counsel has not approved." }
+    {
+      "path": "enterprise_outreach_receipts/{receiptId}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "immutable append-only approval audit trail"
+      ],
+      "notes": "Append-only. No client, including staff, may create, update or delete a receipt.",
+      "permittedServerProjection": [],
+      "projectionScoping": "not projected to any client by any callable in this lane.",
+      "neverProjected": [
+        "subject",
+        "body"
+      ],
+      "requiredCallerStatus": "Active",
+      "requiredCallerRole": "any assigned role",
+      "writeAuthority": "admin_sdk_only_create_only"
+    },
+    {
+      "path": "enterprise_outreach_commands/{commandId}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "replay ledger: command fingerprint and stored outcome"
+      ],
+      "notes": "A client that could write this could forge a replayed success for a command it never made.",
+      "permittedServerProjection": [],
+      "projectionScoping": "internal replay ledger; never projected.",
+      "neverProjected": [
+        "result",
+        "fingerprint"
+      ],
+      "requiredCallerStatus": "Active",
+      "requiredCallerRole": "any assigned role",
+      "writeAuthority": "admin_sdk_only_create_only"
+    },
+    {
+      "path": "enterprise_legal_holds/{draftId}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "legal hold state"
+      ],
+      "notes": "A client write here would let a caller lift their own legal hold. Absence of a document means NOT held; a failed read means UNKNOWN and blocks.",
+      "permittedServerProjection": [
+        "legalHold"
+      ],
+      "projectionScoping": "exposed only as the boolean/null hold state on a draft row.",
+      "neverProjected": [
+        "holdReason",
+        "holdAuthority"
+      ],
+      "requiredCallerStatus": "Active",
+      "requiredCallerRole": "any assigned role",
+      "writeAuthority": "admin_sdk_only"
+    },
+    {
+      "path": "enterprise_jurisdiction_approvals/{jurisdictionCode}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "legallyApproved flag",
+        "policy version"
+      ],
+      "notes": "A client write here would manufacture legal approval for a jurisdiction counsel has not approved.",
+      "permittedServerProjection": [
+        "jurisdictionApproved"
+      ],
+      "projectionScoping": "exposed only as a boolean on a draft row; the approval version is not projected.",
+      "neverProjected": [
+        "legallyApproved",
+        "version"
+      ],
+      "requiredCallerStatus": "Active",
+      "requiredCallerRole": "Director for any future write path",
+      "writeAuthority": "admin_sdk_only"
+    }
   ],
   "requiredRule": {
     "form": "explicit deny for every operation, placed so no earlier broader match can grant access",
@@ -41,17 +155,122 @@
     "placement": "Must not be shadowed by a preceding wildcard match such as /{document=**} that allows staff reads. Verify with the rules simulator that an authenticated staff account is denied."
   },
   "testContract": [
-    { "id": "R1", "as": "unauthenticated", "operation": "get", "path": "enterprise_outreach_drafts/d1", "expect": "deny" },
-    { "id": "R2", "as": "authenticated_member", "operation": "get", "path": "enterprise_outreach_drafts/d1", "expect": "deny" },
-    { "id": "R3", "as": "authenticated_active_staff", "operation": "get", "path": "enterprise_outreach_drafts/d1", "expect": "deny", "notes": "Staff too. The callable is the only authorized path, because it applies content scoping." },
-    { "id": "R4", "as": "authenticated_director", "operation": "update", "path": "enterprise_outreach_drafts/d1", "expect": "deny", "notes": "A direct write would bypass the digest, version and separation-of-duties checks." },
-    { "id": "R5", "as": "authenticated_active_staff", "operation": "create", "path": "enterprise_outreach_receipts/r1", "expect": "deny" },
-    { "id": "R6", "as": "authenticated_active_staff", "operation": "delete", "path": "enterprise_outreach_receipts/r1", "expect": "deny", "notes": "Receipts are append-only; deletion must be impossible from any client." },
-    { "id": "R7", "as": "authenticated_active_staff", "operation": "create", "path": "enterprise_outreach_commands/c1", "expect": "deny", "notes": "Forging a ledger entry would let a caller be served a success for a command never made." },
-    { "id": "R8", "as": "authenticated_active_staff", "operation": "update", "path": "enterprise_legal_holds/d1", "expect": "deny", "notes": "Otherwise a caller can lift the hold that blocks them." },
-    { "id": "R9", "as": "authenticated_director", "operation": "set", "path": "enterprise_jurisdiction_approvals/TH", "expect": "deny", "notes": "Legal approval is not a thing any client may assert." },
-    { "id": "R10", "as": "authenticated_partner_representative", "operation": "list", "path": "enterprise_outreach_drafts", "expect": "deny" },
-    { "id": "R11", "as": "admin_sdk", "operation": "get/set", "path": "any of the five", "expect": "allow", "notes": "Admin SDK bypasses rules by design; this entry records the intended server path, not a rule to write." }
+    {
+      "id": "R1",
+      "as": "unauthenticated",
+      "operation": "get",
+      "path": "enterprise_outreach_drafts/d1",
+      "expect": "deny"
+    },
+    {
+      "id": "R2",
+      "as": "authenticated_member",
+      "operation": "get",
+      "path": "enterprise_outreach_drafts/d1",
+      "expect": "deny"
+    },
+    {
+      "id": "R3",
+      "as": "authenticated_active_staff",
+      "operation": "get",
+      "path": "enterprise_outreach_drafts/d1",
+      "expect": "deny",
+      "notes": "Staff too. The callable is the only authorized path, because it applies content scoping."
+    },
+    {
+      "id": "R4",
+      "as": "authenticated_director",
+      "operation": "update",
+      "path": "enterprise_outreach_drafts/d1",
+      "expect": "deny",
+      "notes": "A direct write would bypass the digest, version and separation-of-duties checks."
+    },
+    {
+      "id": "R5",
+      "as": "authenticated_active_staff",
+      "operation": "create",
+      "path": "enterprise_outreach_receipts/r1",
+      "expect": "deny"
+    },
+    {
+      "id": "R6",
+      "as": "authenticated_active_staff",
+      "operation": "delete",
+      "path": "enterprise_outreach_receipts/r1",
+      "expect": "deny",
+      "notes": "Receipts are append-only; deletion must be impossible from any client."
+    },
+    {
+      "id": "R7",
+      "as": "authenticated_active_staff",
+      "operation": "create",
+      "path": "enterprise_outreach_commands/c1",
+      "expect": "deny",
+      "notes": "Forging a ledger entry would let a caller be served a success for a command never made."
+    },
+    {
+      "id": "R8",
+      "as": "authenticated_active_staff",
+      "operation": "update",
+      "path": "enterprise_legal_holds/d1",
+      "expect": "deny",
+      "notes": "Otherwise a caller can lift the hold that blocks them."
+    },
+    {
+      "id": "R9",
+      "as": "authenticated_director",
+      "operation": "set",
+      "path": "enterprise_jurisdiction_approvals/TH",
+      "expect": "deny",
+      "notes": "Legal approval is not a thing any client may assert."
+    },
+    {
+      "id": "R10",
+      "as": "authenticated_partner_representative",
+      "operation": "list",
+      "path": "enterprise_outreach_drafts",
+      "expect": "deny"
+    },
+    {
+      "id": "R11",
+      "as": "admin_sdk",
+      "operation": "get/set",
+      "path": "any of the five",
+      "expect": "allow",
+      "notes": "Admin SDK bypasses rules by design; this entry records the intended server path, not a rule to write."
+    },
+    {
+      "id": "R12",
+      "as": "authenticated_active_staff",
+      "operation": "collectionGroup query",
+      "path": "enterprise_outreach_drafts",
+      "expect": "deny",
+      "notes": "A single-path match rule does not cover collection-group reads; this needs its own denial."
+    },
+    {
+      "id": "R13",
+      "as": "authenticated_active_staff",
+      "operation": "get",
+      "path": "anything/{id}/enterprise_outreach_drafts/{id}",
+      "expect": "deny",
+      "notes": "A nested copy must not be readable."
+    },
+    {
+      "id": "R14",
+      "as": "authenticated_suspended_staff",
+      "operation": "get",
+      "path": "enterprise_outreach_drafts/d1",
+      "expect": "deny",
+      "notes": "Suspended staff have no path at all, callable or direct."
+    },
+    {
+      "id": "R15",
+      "as": "authenticated_status_less_staff",
+      "operation": "get",
+      "path": "enterprise_outreach_drafts/d1",
+      "expect": "deny",
+      "notes": "The legacy shape the old denylist admitted must be denied here too."
+    }
   ],
   "verifiedByThisLane": {
     "callablesUseAdminSdk": true,
@@ -61,7 +280,45 @@
   },
   "handoff": {
     "owner": "mobile/backend rules lane",
-    "action": "Apply requiredRule to the canonical firestore.rules and add testContract R1-R10 to the rules test suite.",
-    "blocking": "Until applied, these collections rely solely on the absence of client code that reads them — which is a convention, not a control."
+    "action": "Apply requiredRule to the canonical firestore.rules and add testContract R1-R15 to the rules test suite. Cover the alternate paths in aliasAndAlternatePathControls.",
+    "blocking": "Until applied, these collections rely solely on the absence of client code that reads them — which is a convention, not a control.",
+    "testContractSize": 15
+  },
+  "version": "2.0.0",
+  "machineVerifiable": true,
+  "aliasAndAlternatePathControls": {
+    "rationale": "A deny rule on an exact collection path is bypassed by any other path that reaches the same data: a collection-group query, a differently-cased or pluralized alias, a nested subcollection, or a client constant that spells the name indirectly.",
+    "forbiddenAlternatePaths": [
+      {
+        "form": "collectionGroup",
+        "example": "collectionGroup(\"enterprise_outreach_drafts\")",
+        "requirement": "must be denied; a collection-group query is not covered by a single-path match rule"
+      },
+      {
+        "form": "subcollection",
+        "example": "{anyPath=**}/enterprise_outreach_drafts/{id}",
+        "requirement": "must be denied; nesting must not create a readable copy"
+      },
+      {
+        "form": "case or plural alias",
+        "example": "Enterprise_Outreach_Drafts, enterprise_outreach_draft",
+        "requirement": "no such collection may be created; Firestore paths are case-sensitive so an alias is a distinct, unruled collection"
+      },
+      {
+        "form": "indirect client constant",
+        "example": "const C = 'enterprise_' + 'outreach_drafts'",
+        "requirement": "client code must not construct these names at all, directly or by concatenation"
+      },
+      {
+        "form": "mirror/export collection",
+        "example": "enterprise_outreach_drafts_export",
+        "requirement": "no mirror may be created without extending this contract"
+      }
+    ],
+    "verifiedHere": [
+      "no client file names any of the five collections",
+      "no client file constructs a collection name by concatenation of the enterprise_ prefix",
+      "no collectionGroup query names any of the five collections anywhere in the repository"
+    ]
   }
 }

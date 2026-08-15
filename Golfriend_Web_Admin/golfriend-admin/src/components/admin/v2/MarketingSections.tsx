@@ -14,11 +14,11 @@ import { MARKETING } from '../../../i18n/admin/marketing.ts';
 type SectionKey = 'secScreenshots' | 'secStore' | 'secCourseLetters' | 'secPartnerLetters' | 'secCampaigns' | 'secLocalized';
 
 const SECTIONS: Array<{ key: SectionKey; categories: string[] | 'localized' }> = [
-  { key: 'secScreenshots', categories: ['app_screenshots'] },
-  { key: 'secStore', categories: ['store_listing'] },
-  { key: 'secCourseLetters', categories: ['golf_course_letters'] },
-  { key: 'secPartnerLetters', categories: ['strategic_partner_letters', 'sponsor_introductions', 'community_media_introductions'] },
-  { key: 'secCampaigns', categories: ['campaign_materials', 'social_content'] },
+  { key: 'secScreenshots', categories: ['app_screenshot'] },
+  { key: 'secStore', categories: ['app_store_asset'] },
+  { key: 'secCourseLetters', categories: ['course_letter'] },
+  { key: 'secPartnerLetters', categories: ['partner_letter'] },
+  { key: 'secCampaigns', categories: ['just_golfriend_campaign', 'advertising', 'oem_asset', 'website_image', 'website_copy', 'logo'] },
   { key: 'secLocalized', categories: 'localized' },
 ];
 

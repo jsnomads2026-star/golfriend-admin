@@ -71,7 +71,13 @@ assert.match(readinessCss, /overflow-x:auto/);
 assert.match(shellCss + readinessCss, /prefers-reduced-motion:reduce/);
 assert.match(course, /preview\?\.results\.filter\(\(row\)=>row\.result==='updated'\)/);
 assert.doesNotMatch(course, /service\.sync\(\{mode:'apply',limit\}\)/);
-assert.match(marketing, /local-preview/i);
+// Reconciled during Admin/Portal integration: the Portal lane moved this surface from a
+// local-preview provider to firebaseMarketingLibraryProvider and left this assertion
+// behind, so it fails at that lane's own head. The check now names the provider the code
+// really uses, and still proves the surface refuses to act when storage is unconfigured.
+assert.match(marketing, /provider=firebaseMarketingLibraryProvider/);
+assert.match(marketing, /PROVIDER_UNCONFIGURED/);
+assert.match(marketing, /disabled=\{busy\|\|!snapshot\.storageConfigured\}/);
 assert.match(partners, /No approved request backend or decision service is configured/);
 assert.match(partnerProvider, /decisionService:null/);
 assert.match(reports, /disabled=\{!transmitter\}/);

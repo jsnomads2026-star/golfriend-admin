@@ -8,6 +8,12 @@ import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
 import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
+import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
+import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
+import CourseAvailabilityV2 from './components/B2B/CourseAvailabilityV2';
+import PlayBookingLifecycleV2 from './components/B2B/PlayBookingLifecycleV2';
+import BookingOperationsReportV2 from './components/B2B/BookingOperationsReportV2';
+import BookingProviderPublicationV2 from './components/B2B/BookingProviderPublicationV2';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
 import B2BStorefront from './components/public/B2BStorefront';
 import CourseDiscovery from './components/public/CourseDiscovery';
@@ -49,6 +55,8 @@ import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
 import V2CourseAcquisition from './components/admin/v2/V2CourseAcquisition';
 import V2AcquisitionReport from './components/admin/v2/V2AcquisitionReport';
+import V2PartnerApplications from './components/admin/v2/V2PartnerApplications';
+import V2PartnerAuthority from './components/admin/v2/V2PartnerAuthority';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 import { AdminIdentityContext, type AdminIdentity } from './components/admin/v2/AdminIdentityContext';
 import { useOnlineStatus } from './components/admin/v2/useOnlineStatus';
@@ -220,6 +228,11 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     );
   }
 
+  // A signed-in applicant may apply without receiving partner-organization authority.
+  if (mode === 'partner' && user && access.state === 'unauthorized') {
+    return <><PartnerInvitationAcceptance /><PartnerApplicationJourney onSignOut={executeSecureLogout} /></>;
+  }
+
   // Loading / role-resolving / error / unauthorized / suspended → honest state screens.
   if (access.state !== 'authorized') {
     const copy = STATE_COPY[access.state] || STATE_COPY.error;
@@ -259,7 +272,10 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
-    {activeArea === 'bookings' && <><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
+    {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
+    {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingProviderPublicationV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
+    {activeArea === 'partners' && <V2PartnerApplications />}
+    {activeArea === 'partners' && <V2PartnerAuthority />}
     {activeArea === 'partners' && <V2PartnerOperations />}
     {activeArea === 'partners' && <V2CourseAcquisition />}
     {activeArea === 'partners' && <PartnerIngestion />}

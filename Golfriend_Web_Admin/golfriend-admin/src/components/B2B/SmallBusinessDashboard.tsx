@@ -12,9 +12,14 @@ import { db, storage } from '../../firebaseConfig';
 import PolicyUnavailable from '../common/PolicyUnavailable';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import CourseAvailability from './CourseAvailability';
+import CourseAvailabilityV2 from './CourseAvailabilityV2';
 import BookingRequests from './BookingRequests';
+import PlayBookingLifecycleV2 from './PlayBookingLifecycleV2';
+import BookingOperationsReportV2 from './BookingOperationsReportV2';
+import BookingProviderPublicationV2 from './BookingProviderPublicationV2';
 import PartnerDocuments from './PartnerDocuments';
 import PartnerOnboarding from './PartnerOnboarding';
+import PartnerAuthorityConsole from './PartnerAuthorityConsole';
 import GolfText from '../common/GolfText';
 import { useLocale } from '../../i18n/hooks.ts';
 import { translate } from '../../i18n/core.ts';
@@ -564,9 +569,9 @@ export default function SmallBusinessDashboard({ partnerData }: PartnerDashboard
       </div>
 
       <div style={styles.content}>
-        {activeTab === 'onboarding' && <PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} />}
-        {activeTab === 'availability' && <CourseAvailability partnerUid={authUid} />}
-        {activeTab === 'bookings' && <BookingRequests partnerUid={authUid} />}
+        {activeTab === 'onboarding' && <><PartnerAuthorityConsole /><PartnerOnboarding partnerUid={authUid} onNavigate={setActiveTab} /></>}
+        {activeTab === 'availability' && <><CourseAvailabilityV2 /><CourseAvailability partnerUid={authUid} /></>}
+        {activeTab === 'bookings' && <><PlayBookingLifecycleV2 /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><BookingRequests partnerUid={authUid} /></>}
         {activeTab === 'documents' && <PartnerDocuments partnerUid={authUid} />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}

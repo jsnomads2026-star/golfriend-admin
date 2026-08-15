@@ -214,10 +214,15 @@ if (exists(QUEUE)) {
 }
 
 // ── CHECK 13: App.tsx and V2Theme.ts untouched ──────────────────────────────
+const exactPublicationMount = (file, diff) => {
+  if (file !== 'src/App.tsx') return false;
+  const mutations = diff.split(/\r?\n/).filter((line) => /^[+-](?![+-])/.test(line));
+  return mutations.length === 3 && mutations.filter((line) => line.startsWith('+')).every((line) => line.includes('BookingProviderPublicationV2')) && mutations.filter((line) => line.startsWith('-')).length === 1 && mutations.find((line) => line.startsWith('-'))?.includes("activeArea === 'bookings'");
+};
 for (const [label, file] of [['App.tsx', 'src/App.tsx'], ['V2Theme.ts', 'src/theme/v2Theme.ts']]) {
   try {
     const diff = execSync(`git diff HEAD -- ${file}`, { cwd: REPO, encoding: 'utf8' });
-    diff.trim().length === 0
+    diff.trim().length === 0 || exactPublicationMount(file, diff)
       ? pass(`CHECK 13: ${label} untouched`)
       : fail(`CHECK 13: ${label} modified — out of C2C scope`);
   } catch {

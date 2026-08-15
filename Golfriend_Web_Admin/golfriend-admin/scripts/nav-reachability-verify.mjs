@@ -22,6 +22,8 @@ const App = read('App.tsx');
 const Ent = read('components/B2B/EnterpriseDashboard.tsx');
 const SB = read('components/B2B/SmallBusinessDashboard.tsx');
 const Tee = read('components/B2B/CourseTeeSheet.tsx');
+const EnterpriseTournament = read('components/B2B/enterpriseTournament/EnterpriseTournamentOperations.tsx');
+const EnterpriseTournamentService = read('components/B2B/enterprise/tournamentOperationsService.ts');
 
 // Quarantined/unresolved consoles must NOT be JSX-mounted in any nav file.
 const FORBIDDEN_MOUNTS = ['EscrowWatchtower', 'ManualOverride', 'FiatLedger', 'PhotoValidator', 'CentralBankMonitor', 'OrderFulfillmentHub', 'B2BPartners', 'RaffleEngine', 'TournamentManager'];
@@ -37,8 +39,14 @@ for (const tab of ADMIN_UNAVAILABLE_TABS) {
   const re = new RegExp(`activeTab === '${tab}' && <PolicyUnavailable`);
   assert(re.test(App), `App: '${tab}' tab renders PolicyUnavailable`);
 }
-// Enterprise + Small-Business tournament/raffle tabs render PolicyUnavailable.
-assert(/activeTab === 'tournaments' && <PolicyUnavailable/.test(Ent), `EnterpriseDashboard: 'tournaments' renders PolicyUnavailable`);
+// The recorded Enterprise tournament consumer is mounted, but remains honest and
+// unavailable unless its separately owned authoritative producer is supplied.
+assert(/activeTab === 'tournaments' && <EnterpriseTournamentOperations\s*\/>/.test(Ent), `EnterpriseDashboard: 'tournaments' mounts the approved scoped consumer`);
+assert(/service=unavailableService/.test(EnterpriseTournament), `Enterprise tournament consumer defaults to the unavailable service`);
+assert(/new EnterpriseTournamentOperationsService\(null\)/.test(EnterpriseTournament), `Enterprise tournament consumer does not invent a producer`);
+assert(/state==="unavailable"/.test(EnterpriseTournament) && /role="alert"/.test(EnterpriseTournament), `Enterprise tournament consumer exposes an accessible unavailable state`);
+assert(/if \(!this\.producer/.test(EnterpriseTournamentService) && /TOURNAMENT_PRODUCER_UNAVAILABLE/.test(EnterpriseTournamentService), `Enterprise tournament service fails closed without its producer`);
+assert(!/firebase\/firestore|setDoc|updateDoc|addDoc|deleteDoc/.test(EnterpriseTournament), `Enterprise tournament consumer performs no direct datastore writes`);
 assert(/activeTab === 'raffle' && <PolicyUnavailable/.test(Ent), `EnterpriseDashboard: 'raffle' renders PolicyUnavailable`);
 assert(/activeTab === 'tournaments' && <PolicyUnavailable/.test(SB), `SmallBusinessDashboard: 'tournaments' renders PolicyUnavailable`);
 
@@ -52,7 +60,14 @@ for (const [tab, comp] of APPROVED_APP_MOUNTS) {
   assert(new RegExp(`activeTab === '${tab}' && <${comp}`).test(App), `App: approved '${tab}' still mounts <${comp}>`);
 }
 // Enterprise/SB approved surfaces preserved.
-assert(/activeTab === 'teesheet' && <CourseTeeSheet/.test(Ent), `EnterpriseDashboard: approved 'teesheet' preserved`);
+const teeSheetBranch = Ent.match(/activeTab === 'teesheet' && <>([\s\S]*?)<\/?>/)?.[1] || '';
+assert(
+  teeSheetBranch.includes('<PlayBookingLifecycleV2 />') &&
+  teeSheetBranch.includes('<BookingOperationsReportV2 />') &&
+  teeSheetBranch.includes('<BookingProviderPublicationV2 />') &&
+  teeSheetBranch.includes('<CourseTeeSheet />'),
+  `EnterpriseDashboard: approved 'teesheet' lifecycle, reporting, publication and tee sheet preserved`,
+);
 assert(/CourseAvailability/.test(SB), `SmallBusinessDashboard: approved availability surface preserved`);
 
 // The approved flight sheet stays, but its check-in control no longer calls the callable.

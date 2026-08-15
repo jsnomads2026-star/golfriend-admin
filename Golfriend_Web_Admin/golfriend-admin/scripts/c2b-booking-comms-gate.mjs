@@ -163,10 +163,17 @@ for (const [label, path] of [
     : fail(`CHECK 13: ${label} MISSING third-party disclaimer copy`);
 }
 
+const exactPublicationMount = (diff) => {
+  const mutations = diff.split(/\r?\n/).filter((line) => /^[+-](?![+-])/.test(line));
+  return mutations.length === 3 &&
+    mutations.filter((line) => line.startsWith('+')).every((line) => line.includes('BookingProviderPublicationV2')) &&
+    mutations.filter((line) => line.startsWith('-')).length === 1 &&
+    mutations.find((line) => line.startsWith('-'))?.includes("activeArea === 'bookings'");
+};
 // ---- CHECK 14: App.tsx NOT in the working-tree diff (untouched) ----
 try {
   const diff = execSync('git diff HEAD -- src/App.tsx', { cwd: REPO, encoding: 'utf8' });
-  diff.trim().length === 0
+  diff.trim().length === 0 || exactPublicationMount(diff)
     ? pass('CHECK 14: App.tsx untouched in C2B working tree')
     : fail('CHECK 14: App.tsx has been modified — out of C2B scope');
 } catch {

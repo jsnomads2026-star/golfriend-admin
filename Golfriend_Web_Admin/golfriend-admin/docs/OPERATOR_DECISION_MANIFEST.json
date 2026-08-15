@@ -1,0 +1,116 @@
+{
+  "$comment": [
+    "The exact business and legal decisions this lane CANNOT make, and which keep specific",
+    "capabilities disabled until an operator supplies them.",
+    "",
+    "Nothing here is a placeholder value waiting to be filled in by code. Every entry is a",
+    "decision with a named owner. Until each is supplied through its configuration port, the",
+    "corresponding capability stays fail-closed — the software does not guess a duration, a",
+    "jurisdiction, or an approval, and does not degrade to a permissive default.",
+    "",
+    "No deletion is executed by anything in this repository. There is no deletion path at all;",
+    "the retention port decides eligibility and nothing consumes that decision to delete."
+  ],
+  "manifestId": "GF-OPERATOR-DECISIONS-001",
+  "version": "1.0.0",
+  "raisedOn": "2026-08-15",
+  "raisedBy": "Admin Enterprise acquisition / Shared Authority Hardening lane",
+  "status": "awaiting_operator_decisions",
+
+  "decisions": [
+    {
+      "id": "D1",
+      "topic": "Outreach draft retention duration",
+      "owner": "Founder + legal counsel",
+      "question": "How long may an enterprise outreach draft, and its approval receipts, be retained after creation or after a terminal state?",
+      "whyCodeCannotDecide": "A retention period is a legal and commercial commitment. Inventing one would create a policy nobody approved and would silently start deleting evidence.",
+      "requiredValues": ["retentionDays (integer)", "policyVersion (string)", "approvedBy (string)", "effectiveFrom (ISO date)"],
+      "port": "RETENTION_PORT in src/components/admin/v2/outreachRepository.mjs and retentionDecision() in functions/src/outreachAuthority.ts",
+      "currentBehaviour": "retention_policy_unavailable — every retention-dependent operation refuses",
+      "blocks": ["automated retention", "any eligibility-for-deletion calculation"],
+      "doesNotBlock": ["creating, reviewing or approving drafts"]
+    },
+    {
+      "id": "D2",
+      "topic": "Deletion authority and method",
+      "owner": "Founder + legal counsel + data protection owner",
+      "question": "Who may delete outreach records, under what recorded authority, and is deletion hard or is it tombstoning?",
+      "whyCodeCannotDecide": "Receipts are append-only audit evidence. Deleting them is a deliberate legal act, not a maintenance task.",
+      "requiredValues": ["deletionAuthority (role)", "deletionMethod ('hard' | 'tombstone')", "policyVersion", "approvedBy"],
+      "port": "DELETION_PORT in src/components/admin/v2/outreachRepository.mjs",
+      "currentBehaviour": "fail-closed; NO deletion path exists in the codebase",
+      "blocks": ["any deletion"],
+      "doesNotBlock": []
+    },
+    {
+      "id": "D3",
+      "topic": "Legal hold authority",
+      "owner": "Legal counsel",
+      "question": "Who may place and lift a legal hold, and what evidence must a hold record carry?",
+      "whyCodeCannotDecide": "A hold is a legal instrument. The code can only enforce one it is told about.",
+      "requiredValues": ["holdAuthority (role)", "requiredEvidenceFields", "policyVersion"],
+      "port": "LEGAL_HOLD_PORT; enterprise_legal_holds collection",
+      "currentBehaviour": "three-valued: held / not held / UNKNOWN. Unknown BLOCKS. A failed read never degrades to 'not held'.",
+      "blocks": ["approving or transitioning a draft whose hold state cannot be determined"],
+      "doesNotBlock": ["reading the draft list"]
+    },
+    {
+      "id": "D4",
+      "topic": "Jurisdiction legal approval",
+      "owner": "Legal counsel, per jurisdiction",
+      "question": "For each jurisdiction, is outreach to an unsigned course legally approved, under which wording, opt-out mechanism and policy version?",
+      "whyCodeCannotDecide": "This lane is explicitly barred from authoring legal wording, opt-out language or jurisdiction policy. A default-allow would manufacture an approval nobody granted.",
+      "requiredValues": ["jurisdictionCode", "legallyApproved (must be boolean true)", "version (string)", "approvedBy", "approvedOn"],
+      "port": "enterprise_jurisdiction_approvals/{code}; jurisdictionDecision() in functions/src/outreachAuthority.ts",
+      "currentBehaviour": "NO jurisdiction is approved. Every jurisdiction refuses. A truthy-but-not-true value such as 'pending' does not read as approval.",
+      "blocks": ["sendability in every jurisdiction"],
+      "doesNotBlock": ["drafting, review and approval, which record an approval without transmitting anything"]
+    },
+    {
+      "id": "D5",
+      "topic": "Transmission authorization",
+      "owner": "Founder",
+      "question": "Is outbound transmission to courses authorized at all, and through which provider under which contract?",
+      "whyCodeCannotDecide": "Standing instruction for this lane is that nothing is transmitted. Enabling transmission is a founder decision.",
+      "requiredValues": ["transmissionAuthorized (boolean)", "providerContractRef", "approvedBy"],
+      "port": "TRANSMISSION_ENABLED in functions/src/outreachAuthority.ts",
+      "currentBehaviour": "false. There is no transmitter, no mail client and no outbound HTTP in the server binding. Even a fully approved draft in an approved jurisdiction reports not sendable, with the reason transmission_not_permitted.",
+      "blocks": ["all outbound communication"],
+      "doesNotBlock": ["everything else"]
+    },
+    {
+      "id": "D6",
+      "topic": "App Check provisioning",
+      "owner": "Platform operator",
+      "question": "Which App Check attestation provider is configured, for which project, and when does enforcement begin?",
+      "whyCodeCannotDecide": "Provisioning is a Firebase console action plus a client attestation provider. Neither exists in this repository, and claiming enforcement without them would be a fabricated production state.",
+      "requiredValues": ["attestationProvider", "projectId", "enforcementDate", "rolloutStage ('monitoring' then 'enforced')"],
+      "port": "COMMISSIONING_STAGE in functions/src/appCheckCommissioning.ts",
+      "currentBehaviour": "not_provisioned. REQUIRED_IN_PRODUCTION is true, so the port REFUSES rather than silently allowing; commissioningReadiness() reports not ready with the operator action named.",
+      "blocks": ["a truthful claim that privileged callables are attested"],
+      "doesNotBlock": ["current operation, because enforcement is not yet switched on"],
+      "knownInconsistency": "The Partner Portal lane already declares enforceAppCheck: true on ~59 privileged callables while the Admin lane declares it nowhere. Same project, two postures. Either App Check IS provisioned — in which case the Admin callables are unprotected — or it is not, in which case every Portal callable would reject in production. This must be resolved before either lane deploys."
+    },
+    {
+      "id": "D7",
+      "topic": "Legacy admin_users status repair",
+      "owner": "Platform operator",
+      "question": "Which existing admin_users records lack a canonical Active status, and should each be set Active or Suspended?",
+      "whyCodeCannotDecide": "It requires reading production data, which this lane is barred from, and a judgement about who is genuinely still staff.",
+      "requiredValues": ["a completed repair pass against the generated manifest"],
+      "port": "scripts/admin-status-migration-dryrun.mjs (read-only; generates a plan, applies nothing)",
+      "currentBehaviour": "The allowlist denies any record without a canonical Active status, including the status-less shape the previous denylist admitted. Both in-product recovery paths require an ACTIVE Director.",
+      "blocks": ["safe activation of the allowlist in an environment with legacy records"],
+      "doesNotBlock": ["the change itself, which is correct; this is a data-readiness step"],
+      "severity": "This is the highest-risk item in the manifest: if no Director record carries a canonical Active status, there is no in-product way back in."
+    }
+  ],
+
+  "invariants": [
+    "No duration, jurisdiction, approval or policy value is invented anywhere in this repository.",
+    "Every port above fails CLOSED while its decision is outstanding; none degrades to a permissive default.",
+    "No deletion is executed. There is no deletion path.",
+    "Unknown legal-hold state blocks. It never collapses to 'not held'.",
+    "Unknown jurisdiction is unsendable."
+  ]
+}

@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore { match /databases/{database}/documents {
+  match /partner_applications_v2/{document=**} { allow read, write: if false; }
+  match /partner_application_audits/{document=**} { allow read, write: if false; }
+  match /course_growth_candidates/{document=**} { allow read, write: if false; }
+  match /partner_organizations/{document=**} { allow read, write: if false; }
+  match /partner_identity_bindings/{document=**} { allow read, write: if false; }
+  match /partner_memberships/{document=**} { allow read, write: if false; }
+  match /partner_course_claims/{document=**} { allow read, write: if false; }
+  match /partner_staff_invitations/{document=**} { allow read, write: if false; }
+  match /partner_claim_disputes/{document=**} { allow read, write: if false; }
+  match /partner_authority_audits/{document=**} { allow read, write: if false; }
+  match /availability_audits/{document=**} { allow read, write: if false; }
+  match /play_booking_audits/{document=**} { allow read, write: if false; }
+  match /booking_reconciliation_receipts/{document=**} { allow read, write: if false; }
+  match /booking_report_export_receipts/{document=**} { allow read, write: if false; }
+  match /booking_report_access_audits/{document=**} { allow read, write: if false; }
+  match /booking_provider_publications/{document=**} { allow read, write: if false; }
+  match /booking_provider_publication_receipts/{document=**} { allow read, write: if false; }
+} }

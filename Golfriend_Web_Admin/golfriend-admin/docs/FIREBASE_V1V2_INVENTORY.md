@@ -58,6 +58,42 @@ Of these, the **literal string `golfriend-v1`** appears in exactly **4 places**:
 ### 4. Enterprise Portal — `src/components/B2B/EnterpriseDashboard.tsx` + `enterprise/*`
 - `EnterpriseDashboard.tsx:8` → `db, storage`; `getAuth` + `signOut` (`:5, :465, :496`).
 - `enterprise/*`: VenueManager (`claimCourseOperator`), StaffRoles (`manageEnterpriseStaff`), OrgProfile, EnterpriseReporting, BillingBoundary — import `db` from `../../../firebaseConfig`; callables via `getFunctions()` (no region).
+
+### 5. Approved partner activation and course authority (V2)
+
+- `activatePartner` is the sole activation authority: an active Admin binds an approved `partner_applications_v2` record, its `course_growth_candidates` handoff, a verified Firebase Auth UID, and a specific existing `courses` record.
+- `claimCourseOperator` creates only `pending_admin` claims. `reviewCourseOperatorClaim` is the Admin approval boundary that writes `course_operators`; every course operator record retains `publishToApp: false`.
+- `partner_organizations`, identity bindings, memberships, invitations, disputes, claims and immutable receipts are callable-only. Clients have deny-all direct access.
+- Portal consumers are mounted in both Small Business onboarding and Enterprise venue management. Admin activation/claim review is mounted in the V2 Partners area.
+- Course-sync interoperability is deliberately read-only: activation accepts an existing authoritative `courses/{courseId}` record and never invokes a provider or changes synchronization provenance.
+
+### 6. Organization-scoped course availability (V2)
+
+- `manageCourseAvailabilityV2` authorizes active owner, manager or course-staff memberships only after an approved `course_operators` claim; support and analyst roles are read-only.
+- Deterministic course/date/local-time IDs prevent duplicate slots. IANA time zone, capacity, command ID and expected version are server validated.
+- New and changed availability remains `pending_admin`; `reviewCourseAvailabilityV2` is the approval boundary for open/closed/cancelled supply. Records remain provider-neutral and `publishToApp: false`.
+- `tee_time_slots` contains capacity and booking coordination only: no price, payment, fee, wallet, settlement or financial ownership.
+
+### 7. Provider-neutral Play booking lifecycle (V2)
+
+- `requestPlayBookingV2` accepts authenticated member requests against approved open provider availability; capacity is reserved transactionally without payment or ledger behavior.
+- `managePlayBookingV2` scopes confirmed, alternative, cancelled and completed transitions to the claimed course organization. Owners/managers manage the lifecycle; course staff confirm, propose alternatives and complete; support/analyst roles cannot mutate lifecycle state.
+- `sendPlayBookingMessageV2` permits only the authenticated member or authorized organization participant. Portal/Admin projections omit member UID and expose only a bounded display name and operational fields.
+- Command/version checks, deterministic messages and immutable `play_booking_audits` receipts provide retry and restart recovery. Notification delivery remains honestly `PROVIDER_UNCONFIGURED` until commissioned.
+
+### 8. Operational booking reporting and reconciliation (V2)
+
+- `getBookingOperationsPortalV2` and `getBookingOperationsAdminV2` project organization/course/date/status summaries from provider-neutral bookings, availability, active claims and immutable receipts. Portal scope follows delegated membership; Admin global access is staff-authorized and audited.
+- `reconcileBookingOperationsV2` detects over-capacity, orphaned bookings, stale alternatives, duplicate receipts, missing claims and status divergence against an expected source version. It creates a deterministic immutable receipt and never calls a provider or alters booking capacity.
+- `exportBookingOperationsV2` creates its immutable audit receipt before returning privacy-safe CSV/JSON. Member identity and payment, fee, wallet, ledger and settlement fields are excluded.
+- Small Business, Enterprise and Admin consumers provide deterministic filters, pagination, receipt lookup, eight locales and accessible loading, empty and error states. Direct client access to sources and receipts remains denied.
+
+### 9. Provider-neutral booking publication boundary (V2)
+
+- `prepareBookingProviderPublicationV2` produces a deterministic, versioned outbox envelope from approved course availability, booking lifecycle/status, message receipts and reconciliation sources only. It excludes member identity, message text, payment, fee, wallet, ledger, settlement and Golfriend Trip behavior.
+- `publishBookingProviderPublicationV2` uses an injected adapter contract and currently fails closed with an immutable `PROVIDER_UNCONFIGURED` receipt. No destination, credentials or external transmission is configured.
+- Owners/managers are restricted to active claimed courses in their organization; other partner roles are read-only. Active Admin staff may inspect/prepare an explicitly selected organization. Every callable enforces App Check.
+- Small Business, Enterprise and Admin consumers expose prepared-not-transmitted state in eight complete, independent locale dictionaries. The publication verifier rejects English-spread fallback dictionaries and requires every operational state/action label per locale. Direct client access to publication documents and receipts is denied.
 - All bind to `golfriend-v1`.
 
 ### 5. Functions — `functions/src/index.ts`

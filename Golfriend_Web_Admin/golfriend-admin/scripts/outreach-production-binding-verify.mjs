@@ -315,6 +315,48 @@ assert.deepEqual(clientOffenders, [], `client code references a server-owned col
 // And the server reaches them through the Admin SDK Firestore handle, never a client SDK.
 assert.doesNotMatch(store, /from ['"]firebase\/firestore['"]/, 'the store imports the CLIENT Firestore SDK');
 assert.match(store, /from ["']firebase-admin\/firestore["']/, 'the store does not use the Admin SDK Firestore types');
+// ALIASES AND ALTERNATE PATHS. A deny rule on an exact path is bypassed by anything else
+// that reaches the same data — a collection-group query, a nested copy, or a name the
+// client assembles indirectly. The contract's alternate-path controls are enforced here
+// for every part this repository can actually see.
+assert.ok(requirement.aliasAndAlternatePathControls, 'the rules requirement declares no alternate-path controls');
+assert.ok(requirement.aliasAndAlternatePathControls.forbiddenAlternatePaths.length >= 5, 'too few alternate-path controls to hand over');
+for (const collection of requirement.collections) {
+  assert.ok(Array.isArray(collection.permittedServerProjection), collection.path + ' declares no permitted projection');
+  assert.ok(Array.isArray(collection.neverProjected) && collection.neverProjected.length > 0, collection.path + ' declares nothing as never-projected');
+  assert.equal(collection.requiredCallerStatus, 'Active', collection.path + ' does not require an Active caller');
+  assert.match(collection.writeAuthority, /^admin_sdk_only/, collection.path + ' permits a non-Admin-SDK write');
+}
+
+// No collection-group query anywhere may name a server-owned collection.
+const groupPattern = (name) => new RegExp('collectionGroup\\s*\\(\\s*[\'"`]' + name);
+const groupOffenders = [];
+for (const file of clientFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const collection of SERVER_OWNED_COLLECTIONS) {
+    if (groupPattern(collection).test(text)) groupOffenders.push(relative(ROOT, file).replace(/\\/g, '/') + ' → ' + collection);
+  }
+}
+assert.deepEqual(groupOffenders, [], 'a collection-group query reaches a server-owned collection:\n  ' + groupOffenders.join('\n  '));
+
+// Nor may client code assemble one of these names indirectly.
+const indirect = [];
+for (const file of clientFiles) {
+  const text = readFileSync(file, 'utf8');
+  if (/['"`]enterprise_['"`]\s*\+/.test(text)) indirect.push(relative(ROOT, file).replace(/\\/g, '/'));
+}
+assert.deepEqual(indirect, [], 'client code assembles an enterprise_ collection name by concatenation: ' + indirect.join(', '));
+
+// The DECLARED projection must match what listDrafts actually returns — a contract that
+// drifts from the code it describes is worse than none, because it is trusted.
+const draftContract = requirement.collections.find((c) => c.path.startsWith('enterprise_outreach_drafts'));
+for (const field of ['subject', 'body', 'sendable', 'legalHold', 'jurisdictionApproved']) {
+  assert.ok(draftContract.permittedServerProjection.includes(field), 'the declared projection omits ' + field + ', which listDrafts returns');
+}
+for (const forbidden of draftContract.neverProjected) {
+  assert.equal(draftContract.permittedServerProjection.includes(forbidden), false, 'the contract both permits and forbids ' + forbidden);
+  assert.equal(new RegExp('^\\s+' + forbidden + ':', 'm').test(store.slice(store.indexOf('rows.push({'))), false, 'listDrafts projects ' + forbidden + ', which the contract forbids');
+}
 ok(`${SERVER_OWNED_COLLECTIONS.length} server-owned collections: rules requirement complete, no client code references them, Admin SDK only`);
 
 console.log(`\nOutreach production binding verification PASS: ${checks} checks (compile, ${VECTORS.length} canonical vectors, ${REFUSALS.length} shared refusals, NIST vectors, callable authorization, server clock, stable codes, no transmitter, server-decided writes, no client authority).`);

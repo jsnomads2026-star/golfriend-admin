@@ -1,0 +1,45 @@
+name: Partner Portal Onboarding
+on:
+  pull_request:
+    paths: ['Golfriend_Web_Admin/golfriend-admin/**']
+  push:
+    branches: ['codex/partner-portal-onboarding']
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Golfriend_Web_Admin/golfriend-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            Golfriend_Web_Admin/golfriend-admin/package-lock.json
+            Golfriend_Web_Admin/golfriend-admin/functions/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run test:partner-v2
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run test:partner-activation
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run test:partner-availability
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run test:partner-booking
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run verify:partner-onboarding
+      - run: npm run verify:partner-activation
+      - run: npm run verify:partner-availability
+      - run: npm run verify:partner-booking
+      - run: npm run verify:partner-booking-reporting
+      - run: npm run test:godmode-aliases
+      - run: npm run verify:booking-provider-publication
+      - run: npm --prefix functions run test:booking-provider-publication
+      - run: npm --prefix functions run test:partner-booking-reporting
+      - run: npm run gate:i18n
+      - run: npm run build
+      - run: git diff --check
+        working-directory: .
