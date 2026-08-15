@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   commandFingerprint,
   createOutreachRepository,
+  PERSISTED_STATES,
   DELETION_PORT,
   LEGAL_HOLD_PORT,
   NEVER_PERSISTED,
@@ -131,8 +132,8 @@ assert.equal(hist.history('d1')[0].toState, 'draft_created');
 
 // === privacy =============================================================
 for (const field of ['subject', 'body', 'recipientRole', 'address', 'contactEmail', 'contactPhone', 'purpose']) assert.ok(NEVER_PERSISTED.includes(field), `${field} must be barred from persistence`);
-assert.deepEqual(persistedShapeIsMinimal(hist.get('d1')), { minimal: true, offendingFields: [] });
-assert.deepEqual(persistedShapeIsMinimal(hist.history('d1')), { minimal: true, offendingFields: [] });
+assert.deepEqual(persistedShapeIsMinimal(hist.get('d1')), { minimal: true, offendingFields: [], personalValueCount: 0 });
+assert.deepEqual(persistedShapeIsMinimal(hist.history('d1')), { minimal: true, offendingFields: [], personalValueCount: 0 });
 // The rendered body, subject and purpose never reach the store, even though they were supplied.
 const stored = JSON.stringify(hist.get('d1')) + JSON.stringify(hist.history('d1'));
 assert.doesNotMatch(stored, /Subject|Body|introduce Golfriend/, 'no rendered content or purpose is persisted');
@@ -155,5 +156,73 @@ for (const port of [PRODUCTION_STORE_PORT, RETENTION_PORT, DELETION_PORT, LEGAL_
 
 // The canonical field set is shared, not duplicated, so the two cannot drift.
 assert.ok(CANONICAL_FIELDS.includes('consentVersion') && CANONICAL_FIELDS.includes('doNotContactVersion'));
+
+
+// === review findings: each was reproduced before it was fixed =============
+// HIGH 1 — separation of duties keys on the TARGET STATE, not the caller-supplied verb.
+// Keying on `action` let a creator approve their own draft by renaming the verb.
+const verb = fresh();
+verb.assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: 'rev-1', actorRef: 'author-1', at, commandId: 'v1' });
+assert.equal(verb.transition({ draftId: 'd1', expectedVersion: 2, action: 'ratify', toState: 'approved', actorRef: 'author-1', at, currentBound: bound, commandId: 'v2' }).error, 'separation_of_duties');
+for (const bad of ['REENTERED', '', undefined, 42]) assert.equal(verb.transition({ draftId: 'd1', expectedVersion: 2, action: 'x', toState: bad, actorRef: 'rev-1', at, currentBound: bound, commandId: 'iv-' + String(bad) }).error, 'invalid_transition');
+// An approval always requires the assigned reviewer; it is not the caller's to opt out of.
+assert.equal(verb.transition({ draftId: 'd1', expectedVersion: 2, action: 'approve', toState: 'approved', actorRef: 'stranger', at, currentBound: bound, commandId: 'v3' }).error, 'separation_of_duties');
+assert.ok(PERSISTED_STATES.includes('approved') && !PERSISTED_STATES.includes('REENTERED'));
+
+// HIGH 2 — a published surrogate may never be presented back as an identity.
+const forge = fresh();
+forge.assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: 'reviewer@golfclub.example', actorRef: 'author-1', at, commandId: 'f1' });
+const published = forge.get('d1').assignedReviewerRef;
+assert.match(published, /^actor-/);
+assert.equal(forge.transition({ draftId: 'd1', expectedVersion: 2, action: 'approve', toState: 'approved', actorRef: published, at, currentBound: bound, commandId: 'f2' }).error, 'payload_rejected');
+
+// HIGH 3 — identity comparison is normalized: case and whitespace cannot defeat SoD.
+for (const variant of ['AUTHOR-1', 'Author-1', ' author-1 ']) assert.equal(fresh().assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: variant, actorRef: 'a', at, commandId: 'n1' }).error, 'separation_of_duties', variant + ' is the creator');
+
+// HIGH 4 — the digest is recomputed on EVERY transition; omitting content never skips it.
+const mand = fresh();
+mand.assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: 'rev-1', actorRef: 'author-1', at, commandId: 'm1' });
+assert.equal(mand.transition({ draftId: 'd1', expectedVersion: 2, action: 'approve', toState: 'approved', actorRef: 'rev-1', at, commandId: 'm2' }).error, 'payload_rejected');
+
+// HIGH 5 — a getter on caller content cannot re-enter between the version check and the write.
+const reenter = fresh();
+reenter.assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: 'rev-1', actorRef: 'author-1', at, commandId: 'r1' });
+let inner = null;
+let reads = 0;
+const evil = { ...bound };
+Object.defineProperty(evil, 'body', { enumerable: true, get() { reads += 1; if (reads === 2 && !inner) inner = reenter.transition({ draftId: 'd1', expectedVersion: 2, action: 'x', toState: 'revoked', actorRef: 'rev-1', at, currentBound: bound, commandId: 'r-in' }); return bound.body; } });
+const outer = reenter.transition({ draftId: 'd1', expectedVersion: 2, action: 'approve', toState: 'approved', actorRef: 'rev-1', at, currentBound: evil, commandId: 'r-out' });
+assert.ok([outer.ok, inner && inner.ok].filter(Boolean).length <= 1, 'two commands must not both write the same version');
+const chain = reenter.history('d1');
+assert.ok(chain.every((r, i) => i === 0 || r.fromVersion === chain[i - 1].toVersion), 'the receipt chain must stay contiguous');
+
+// MEDIUM — a replay is FLAGGED so a caller can tell it from a fresh write.
+const flag = fresh();
+const one = flag.assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: 'rev-1', actorRef: 'a', at, commandId: 'fl' });
+const two = flag.assignReviewer({ draftId: 'd1', expectedVersion: 1, reviewerRef: 'rev-1', actorRef: 'a', at, commandId: 'fl' });
+assert.equal(one.replayed, false);
+assert.equal(two.replayed, true);
+
+// MEDIUM — the fingerprint is injective and order-independent.
+assert.notEqual(commandFingerprint({ a: 1 }), commandFingerprint({ a: 1, b: undefined }), 'undefined must not be erased');
+assert.equal(commandFingerprint({ a: 1, b: 2 }), commandFingerprint({ b: 2, a: 1 }), 'key order must not matter');
+assert.equal(commandFingerprint({ f: () => {} }), null, 'an unserializable payload has no fingerprint');
+
+// MEDIUM — expiry is ENFORCED, not merely stored.
+const exp = createOutreachRepository();
+exp.createDraft({ draftId: 'e1', bound, createdByRef: 'author-1', at: '2020-01-01T00:00:00.000Z', expiresAt: '2020-01-02T00:00:00.000Z', commandId: 'e1' });
+exp.assignReviewer({ draftId: 'e1', expectedVersion: 1, reviewerRef: 'rev-1', actorRef: 'author-1', at: '2020-01-01T00:00:00.000Z', commandId: 'e2' });
+assert.equal(exp.transition({ draftId: 'e1', expectedVersion: 2, action: 'approve', toState: 'approved', actorRef: 'rev-1', at: '2026-08-15T00:00:00.000Z', currentBound: bound, commandId: 'e3' }).error, 'invalid_transition');
+assert.equal(exp.transition({ draftId: 'e1', expectedVersion: 2, action: 'expire', toState: 'expired', actorRef: 'rev-1', at: '2026-08-15T00:00:00.000Z', currentBound: bound, commandId: 'e4' }).ok, true, 'marking it expired is still permitted');
+
+// MEDIUM — ids and references are screened; a non-opaque draft id is refused.
+assert.equal(createOutreachRepository().createDraft({ draftId: 'draft for john@x.com', bound, createdByRef: 'a', at, commandId: 'o1' }).error, 'payload_rejected');
+const screened = createOutreachRepository();
+const dirty = screened.createDraft({ draftId: 'd7', bound: { ...bound, prospectRef: 'somchai.p@golfclub.example', contactRef: '+66 81 234 5678' }, createdByRef: 'a', at, commandId: 'o2' });
+assert.match(dirty.record.prospectRef, /^prospect-/);
+assert.match(dirty.record.contactRef, /^contact-/);
+assert.doesNotMatch(JSON.stringify(screened.get('d7')) + JSON.stringify(screened.receipts()), /somchai|66 81/);
+// Minimality screens VALUES, not just key names, so it can actually fail.
+assert.equal(persistedShapeIsMinimal({ anything: 'ops@leak.example' }).minimal, false);
 
 console.log('Outreach repository verification PASS: canonical SHA-256 persisted, exact-version optimistic concurrency with stale-write and changed-payload rejection, separation of duties from the persisted creator and assigned reviewer, replay returning the original result with one transition and one receipt per command id and a fail-closed payload mismatch, immutable frozen history recording previous state and version, no rendered content/contact/purpose persisted, and unmounted store plus fail-closed retention, deletion and legal-hold ports.');
