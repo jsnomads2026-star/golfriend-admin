@@ -273,6 +273,10 @@ ok('every UI action calls the service; state is re-read from the server');
 const SERVER_OWNED_COLLECTIONS = [
   'enterprise_outreach_drafts', 'enterprise_outreach_receipts', 'enterprise_outreach_commands',
   'enterprise_legal_holds', 'enterprise_jurisdiction_approvals',
+  // The enterprise staff grant collections are server-owned on exactly the same terms: the
+  // membership document IS the role grant, the audit is the evidence it happened, and the
+  // counter is what stops a re-grant from overwriting that evidence.
+  'enterprise_staff', 'enterprise_staff_grant_audits', 'enterprise_staff_grant_counters',
 ];
 const requirementPath = resolve(ROOT, 'docs/ENTERPRISE_OUTREACH_FIRESTORE_RULES_REQUIREMENT.json');
 assert.ok(existsSync(requirementPath), 'the rules requirement handoff document is missing');
@@ -287,9 +291,15 @@ for (const collection of requirement.collections) {
   assert.equal(collection.clientWrite, 'deny', collection.path);
 }
 assert.ok(requirement.testContract.length >= 10, 'the rules test contract is too thin to hand over');
-// The store must name every collection it uses, so the requirement cannot silently omit one.
+// Every declared server-owned collection must actually be reached by SERVER code, so the
+// requirement cannot list a collection nothing creates — nor omit one that exists. The
+// check used to name outreachStore.ts alone; the enterprise grant collections live in
+// index.ts, and pinning it to one file would have meant either a false entry in the
+// handoff or dropping those collections out of the rules owner's scope entirely.
+const serverSources = ['functions/src/outreachStore.ts', 'functions/src/index.ts']
+  .map((rel) => readFileSync(resolve(ROOT, rel), 'utf8')).join('\n');
 for (const collection of SERVER_OWNED_COLLECTIONS) {
-  assert.ok(store.includes(collection), `outreachStore.ts does not reference ${collection}`);
+  assert.ok(serverSources.includes(collection), `no server module references ${collection}`);
 }
 
 // No CLIENT file may name these collections at all. src/ is the browser bundle; a single
@@ -324,7 +334,18 @@ assert.ok(requirement.aliasAndAlternatePathControls.forbiddenAlternatePaths.leng
 for (const collection of requirement.collections) {
   assert.ok(Array.isArray(collection.permittedServerProjection), collection.path + ' declares no permitted projection');
   assert.ok(Array.isArray(collection.neverProjected) && collection.neverProjected.length > 0, collection.path + ' declares nothing as never-projected');
-  assert.equal(collection.requiredCallerStatus, 'Active', collection.path + ' does not require an Active caller');
+  // A collection with NO client-facing projection must SAY SO, rather than arriving here
+  // with an empty allowlist that is indistinguishable from an omission.
+  if (collection.permittedServerProjection.length === 0) {
+    assert.equal(collection.serverProjection, 'none',
+      collection.path + ' has an empty projection allowlist but does not declare serverProjection: "none"');
+  }
+  // The caller requirement must be RECORDED and specific. It was pinned to the literal
+  // 'Active' — the Admin staff requirement — which the enterprise grant collections would
+  // have had to state falsely, since those callables require an active enterprise partner
+  // instead. An artifact the rules owner will act on must not be made to lie to pass a gate.
+  assert.match(String(collection.requiredCallerStatus || ''), /^(Active|n\/a \(no client path\))$/,
+    collection.path + ' does not record a specific caller requirement');
   assert.match(collection.writeAuthority, /^admin_sdk_only/, collection.path + ' permits a non-Admin-SDK write');
 }
 

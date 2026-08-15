@@ -1,18 +1,5 @@
 {
-  "$comment": [
-    "MACHINE-READABLE RULES REQUIREMENT — HANDOFF, NOT AN IMPLEMENTATION.",
-    "This repository does not own a canonical firestore.rules file: firebase.json here has no",
-    "'firestore' section, and .emulator-local/firestore.rules is untracked local scratch (it also",
-    "still contains a God-Mode identity backdoor and a status denylist, and must not be treated as",
-    "the contract). The rules owner is the mobile/backend lane. This file states exactly what those",
-    "rules must enforce and how to test it, so the requirement can be applied without re-deriving it.",
-    "Nothing here has been deployed, and no rules file has been modified by this lane.",
-    "v2.0.0 strengthens this from a description into a machine-verifiable contract:",
-    "every collection now declares its permitted server projection, the role/status required to",
-    "reach it through a callable, and the aliases/alternate paths that must NOT bypass it.",
-    "scripts/outreach-production-binding-verify.mjs enforces the parts that are checkable from",
-    "this repository; the rules themselves remain the owning lane's to apply."
-  ],
+  "$comment": "MACHINE-READABLE RULES REQUIREMENT — HANDOFF, NOT AN IMPLEMENTATION.,This repository does not own a canonical firestore.rules file: firebase.json here has no,'firestore' section, and .emulator-local/firestore.rules is untracked local scratch (it also,still contains a God-Mode identity backdoor and a status denylist, and must not be treated as,the contract). The rules owner is the mobile/backend lane. This file states exactly what those,rules must enforce and how to test it, so the requirement can be applied without re-deriving it.,Nothing here has been deployed, and no rules file has been modified by this lane.,v2.0.0 strengthens this from a description into a machine-verifiable contract:,every collection now declares its permitted server projection, the role/status required to,reach it through a callable, and the aliases/alternate paths that must NOT bypass it.,scripts/outreach-production-binding-verify.mjs enforces the parts that are checkable from,this repository; the rules themselves remain the owning lane's to apply. v2.1.0 adds the three server-owned enterprise staff grant collections raised by the manageEnterpriseStaff re-review.",
   "requirementId": "GF-ADMIN-OUTREACH-RULES-001",
   "raisedBy": "Admin Enterprise acquisition lane",
   "raisedOn": "2026-08-15",
@@ -77,14 +64,15 @@
       ],
       "notes": "Append-only. No client, including staff, may create, update or delete a receipt.",
       "permittedServerProjection": [],
-      "projectionScoping": "not projected to any client by any callable in this lane.",
+      "projectionScoping": "not projected to any client by any callable in this lane. No field of this record is projected to any client. The empty allowlist above is a deliberate \"nothing is exposed\", not an unfilled section.",
       "neverProjected": [
         "subject",
         "body"
       ],
       "requiredCallerStatus": "Active",
       "requiredCallerRole": "any assigned role",
-      "writeAuthority": "admin_sdk_only_create_only"
+      "writeAuthority": "admin_sdk_only_create_only",
+      "serverProjection": "none"
     },
     {
       "path": "enterprise_outreach_commands/{commandId}",
@@ -96,14 +84,15 @@
       ],
       "notes": "A client that could write this could forge a replayed success for a command it never made.",
       "permittedServerProjection": [],
-      "projectionScoping": "internal replay ledger; never projected.",
+      "projectionScoping": "internal replay ledger; never projected. No field of this record is projected to any client. The empty allowlist above is a deliberate \"nothing is exposed\", not an unfilled section.",
       "neverProjected": [
         "result",
         "fingerprint"
       ],
       "requiredCallerStatus": "Active",
       "requiredCallerRole": "any assigned role",
-      "writeAuthority": "admin_sdk_only_create_only"
+      "writeAuthority": "admin_sdk_only_create_only",
+      "serverProjection": "none"
     },
     {
       "path": "enterprise_legal_holds/{draftId}",
@@ -147,6 +136,98 @@
       "requiredCallerStatus": "Active",
       "requiredCallerRole": "Director for any future write path",
       "writeAuthority": "admin_sdk_only"
+    },
+    {
+      "path": "enterprise_staff/{enterpriseUid}/members/{staffUid}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "staffUid",
+        "granted role",
+        "status",
+        "owning enterpriseUid",
+        "grantSeq"
+      ],
+      "notes": "This document IS the role grant. A client write here is a self-issued authorization. It is also the target of a collection-group query, so a rule must cover the SUBCOLLECTION scope, not only a top-level path.",
+      "requiredCallerStatus": "n/a (no client path)",
+      "writeAuthority": "admin_sdk_only",
+      "collectionGroupScope": "members — the rule must deny at collection-group scope; a rule matching only /enterprise_staff/{a}/members/{b} does not constrain a collectionGroup query",
+      "permittedServerProjection": [],
+      "serverProjection": "none",
+      "projectionScoping": "No client projection exists. These records are read by the server only; nothing here is returned to a browser.",
+      "neverProjected": [
+        "staffUid",
+        "granted role",
+        "status",
+        "owning enterpriseUid",
+        "grantSeq"
+      ],
+      "requiredCallerAuthority": "an active enterprise-tier b2b_partner, resolved by uid or by a VERIFIED address — not Admin staff status. Recorded here because it differs from the outreach collections above."
+    },
+    {
+      "path": "enterprise_staff_grant_audits/{grantId}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "grantId",
+        "enterpriseUid",
+        "organizationId",
+        "staffUid",
+        "role",
+        "grantSeq",
+        "previousRole",
+        "inviterResolvedBy",
+        "targetAddressVerified",
+        "grantedAt"
+      ],
+      "notes": "Append-only evidence that a role grant occurred, written inside the same transaction as the grant itself. A client able to create one could manufacture evidence for a grant that never happened; a client able to overwrite one could erase a grant that did. The target address is deliberately NOT stored — the uid is the identity.",
+      "requiredCallerStatus": "n/a (no client path)",
+      "writeAuthority": "admin_sdk_only",
+      "immutability": "created with create() inside a transaction; never updated or deleted by application code",
+      "permittedServerProjection": [],
+      "serverProjection": "none",
+      "projectionScoping": "No client projection exists. These records are read by the server only; nothing here is returned to a browser.",
+      "neverProjected": [
+        "grantId",
+        "enterpriseUid",
+        "organizationId",
+        "staffUid",
+        "role",
+        "grantSeq",
+        "previousRole",
+        "inviterResolvedBy",
+        "targetAddressVerified",
+        "grantedAt"
+      ],
+      "requiredCallerAuthority": "an active enterprise-tier b2b_partner, resolved by uid or by a VERIFIED address — not Admin staff status. Recorded here because it differs from the outreach collections above."
+    },
+    {
+      "path": "enterprise_staff_grant_counters/{enterpriseUid__staffUid}",
+      "clientRead": "deny",
+      "clientWrite": "deny",
+      "serverAccess": "admin_sdk_only",
+      "carries": [
+        "enterpriseUid",
+        "staffUid",
+        "grants (monotonic count)",
+        "lastGrantAt"
+      ],
+      "notes": "The monotonic grant sequence. It lives outside the membership document precisely so that removing a member does not reset it — a reset would make the next genuine grant collide with the first audit id. A client that could lower this counter could cause a later grant to overwrite earlier evidence.",
+      "requiredCallerStatus": "n/a (no client path)",
+      "writeAuthority": "admin_sdk_only",
+      "immutability": "monotonic; only ever increased, by the server, inside the grant transaction",
+      "permittedServerProjection": [],
+      "serverProjection": "none",
+      "projectionScoping": "No client projection exists. These records are read by the server only; nothing here is returned to a browser.",
+      "neverProjected": [
+        "enterpriseUid",
+        "staffUid",
+        "grants (monotonic count)",
+        "lastGrantAt"
+      ],
+      "requiredCallerAuthority": "an active enterprise-tier b2b_partner, resolved by uid or by a VERIFIED address — not Admin staff status. Recorded here because it differs from the outreach collections above."
     }
   ],
   "requiredRule": {
@@ -284,7 +365,7 @@
     "blocking": "Until applied, these collections rely solely on the absence of client code that reads them — which is a convention, not a control.",
     "testContractSize": 15
   },
-  "version": "2.0.0",
+  "version": "2.1.0",
   "machineVerifiable": true,
   "aliasAndAlternatePathControls": {
     "rationale": "A deny rule on an exact collection path is bypassed by any other path that reaches the same data: a collection-group query, a differently-cased or pluralized alias, a nested subcollection, or a client constant that spells the name indirectly.",

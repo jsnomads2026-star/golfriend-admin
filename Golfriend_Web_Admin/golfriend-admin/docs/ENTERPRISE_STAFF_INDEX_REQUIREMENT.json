@@ -1,0 +1,48 @@
+{
+  "artifact": "GF-ENTERPRISE-STAFF-INDEX-001",
+  "version": "1.0.0",
+  "kind": "technical_deployment_prerequisite",
+  "notADecision": "This is a technical index requirement, not a policy decision. It creates NO tenth operator decision. The nine decisions in OPERATOR_DECISION_MANIFEST.json remain exactly nine and all __UNRESOLVED__.",
+  "raisedBy": "hostile re-review of manageEnterpriseStaff, 2026-08-15",
+
+  "requirement": {
+    "summary": "manageEnterpriseStaff('invite') runs a COLLECTION-GROUP query to detect an existing active membership at a different enterprise. Firestore does not create collection-group indexes automatically; the single-field exemption must be enabled explicitly.",
+    "query": "db.collectionGroup('members').where('staffUid', '==', <uid>).limit(50)",
+    "indexNeeded": {
+      "collectionGroup": "members",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "staffUid", "order": "ASCENDING" }]
+    },
+    "declaredForm": "firestore.indexes.json → fieldOverrides entry for `members`.`staffUid` with a COLLECTION_GROUP ASCENDING index"
+  },
+
+  "currentState": {
+    "firebaseJsonBindsFirestore": false,
+    "indexFileInRepo": false,
+    "reason": "firebase.json in this repo binds only functions and hosting. Adding a firestore.rules or firestore.indexes binding changes what a deploy from this repo would push, and that binding is owned by the D9 Firestore rules/deploy owner — not by this lane. The requirement is recorded here instead of being wired in unilaterally."
+  },
+
+  "behaviourWithoutTheIndex": {
+    "outcome": "FAIL-CLOSED, not open",
+    "detail": "The query throws FAILED_PRECONDITION. The handler catches it and throws HttpsError('unavailable', 'Could not confirm existing staff membership. No change was made.'). No membership is written and no grant audit is created.",
+    "operationalConsequence": "Every enterprise staff invite is refused until the index exists. The feature is unavailable, never permissive.",
+    "verifiedBy": "scripts/admin-security-regression-verify.mjs — the index-absent path is exercised and asserted to refuse."
+  },
+
+  "legacyDataDependency": {
+    "field": "staffUid",
+    "issue": "The foreign-membership check finds a document only if that document carries a `staffUid` field. Every document written by this codebase does (it is set on the same write as the role), but any `enterprise_staff/*/members/*` document written before that field existed would be invisible to the query.",
+    "consequence": "A principal rostered ONLY by such a legacy document could be re-homed by a second enterprise without the cross-enterprise refusal firing.",
+    "resolutionOwner": "the same owner as D7 (legacy record repair) — this is a data-backfill task of the same kind",
+    "resolutionRequired": "backfill `staffUid` = document id across all enterprise_staff/*/members/* documents, then re-run the dry-run verifier",
+    "notResolvedHere": "No production data is read, written or repaired by this lane. This is recorded, not performed.",
+    "interimPosture": "The check covers every membership this codebase has ever written. It does not claim to cover documents that predate the field, and this artifact exists so that limit is not mistaken for coverage."
+  },
+
+  "doesNotAuthorize": [
+    "deploying any index",
+    "deploying or authoring any ruleset",
+    "binding firestore configuration into firebase.json",
+    "reading, writing or repairing any production document"
+  ]
+}

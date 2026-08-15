@@ -40,6 +40,10 @@ export const PROTECTED_COLLECTIONS = Object.freeze([
   // Server-owned outreach
   'enterprise_outreach_drafts', 'enterprise_outreach_receipts', 'enterprise_outreach_commands',
   'enterprise_legal_holds', 'enterprise_jurisdiction_approvals',
+  // Server-owned enterprise staff grants. The audit is the evidence a role grant happened
+  // and the counter is what stops a re-grant from overwriting it; a client that could write
+  // either could manufacture its own authorization record.
+  'enterprise_staff', 'enterprise_staff_grant_audits', 'enterprise_staff_grant_counters',
 ]);
 
 /** Collections reachable ONLY through the Admin SDK; a client must never touch them. */

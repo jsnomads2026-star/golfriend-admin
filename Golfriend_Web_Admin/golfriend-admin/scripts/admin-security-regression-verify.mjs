@@ -67,6 +67,7 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
       get: async () => snap(`${name}/${id}`),
       set: async (v) => DOCS.set(`${name}/${id}`, v),
       update: async () => undefined,
+      delete: async () => DOCS.delete(`${name}/${id}`),
       create: async (v) => {
         if (DOCS.has(`${name}/${id}`)) { const e = new Error('ALREADY_EXISTS'); e.code = 6; throw e; }
         DOCS.set(`${name}/${id}`, v); created.push(`${name}/${id}`);
@@ -77,12 +78,50 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
     limit: () => collection(name),
     get: async () => ({ docs: [...DOCS.entries()].filter(([k]) => k.includes('/members/')).map(([, v]) => ({ data: () => v })) }),
   });
+  // The membership query is CONTROLLABLE so the index-absent and full-page paths can be
+  // driven, and it honours the caller's limit instead of always returning everything.
+  let membershipFailure = null;
+  let membershipPadding = 0;
+  const membershipDocs = (limit) => {
+    if (membershipFailure) throw membershipFailure;
+    const real = [...DOCS.entries()].filter(([k]) => k.includes('/members/')).map(([, v]) => ({ data: () => v }));
+    const padded = real.concat(
+      Array.from({ length: membershipPadding }, (_, i) => ({ data: () => ({ staffUid: 'target-uid', status: 'inactive', enterpriseUid: `pad-${i}` }) })),
+    );
+    const docs = padded.slice(0, limit ?? padded.length);
+    return { docs, size: docs.length };
+  };
   const fakeDb = {
     collection,
     collectionGroup: () => ({
-      where: () => ({ limit: () => ({ get: async () => ({ docs: [...DOCS.entries()].filter(([k]) => k.includes('/members/')).map(([, v]) => ({ data: () => v })) }) }) }),
+      where: () => {
+        const q = (limit) => ({ limit: (n) => q(n), get: async () => membershipDocs(limit) });
+        return q(undefined);
+      },
     }),
-    runTransaction: async (fn) => fn({ get: async (r) => snap(r.path), set: () => undefined, update: () => undefined, create: () => undefined }),
+    // A FAITHFUL transaction: writes are buffered and applied only on commit, and create()
+    // collides exactly as Firestore's does. The previous stub discarded every write, so an
+    // atomicity claim could not have failed here no matter what the handler did.
+    runTransaction: async (fn) => {
+      const buffered = [];
+      const tx = {
+        get: async (r) => snap(r.path),
+        set: (r, v) => buffered.push({ kind: 'set', path: r.path, value: v }),
+        update: (r, v) => buffered.push({ kind: 'set', path: r.path, value: v }),
+        create: (r, v) => buffered.push({ kind: 'create', path: r.path, value: v }),
+      };
+      const result = await fn(tx);
+      for (const write of buffered) {
+        if (write.kind === 'create' && DOCS.has(write.path)) {
+          const e = new Error('ALREADY_EXISTS'); e.code = 6; throw e;
+        }
+      }
+      for (const write of buffered) {
+        DOCS.set(write.path, write.value);
+        if (write.kind === 'create') created.push(write.path);
+      }
+      return result;
+    },
   };
   const FieldValue = { serverTimestamp: () => 'TS', increment: (n) => n, arrayUnion: (...v) => v, delete: () => null };
   const inject = (spec, exportsValue) => {
@@ -111,6 +150,8 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
     DOCS = new Map();
     AUTH_USERS = new Map();
     created.length = 0;
+    membershipFailure = null;
+    membershipPadding = 0;
     DOCS.set(`b2b_partners/${INVITER}`, { status: 'active_partner', tier: 'enterprise', organizationId: 'org-1' });
   };
   const invite = async (over = {}) => {
@@ -181,7 +222,77 @@ execFileSync(process.execPath, [tsc, '-p', FUNCTIONS], { stdio: 'pipe' });
     assert.equal(denied.code, 'permission-denied');
     assertions += 2;
   }
-  ok(`manageEnterpriseStaff: unverified target refused, verified target succeeds, evidence recorded without the address, cross-enterprise re-homing refused, ${6} role coercions refused, ${3} unauthorized inviters refused`);
+  // ---- The following five cases are the RE-REVIEW findings against the repair itself. ----
+
+  // (g) ATOMICITY. The membership write used to run BEFORE the evidence write, so a failed
+  // audit threw "No change was made" over a grant that had already persisted. Colliding the
+  // audit must now abort the whole transaction and leave no membership behind.
+  setup();
+  AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+  DOCS.set(`enterprise_staff_grant_audits/${INVITER}__target-uid__manager__1`, { preexisting: true });
+  const auditBlocked = await invite();
+  assert.equal(auditBlocked.ok, false, 'a grant succeeded even though its evidence could not be written');
+  assert.equal(
+    DOCS.has(`enterprise_staff/${INVITER}/members/target-uid`), false,
+    'THE GRANT PERSISTED WITHOUT EVIDENCE: the membership survived a failed audit write',
+  );
+  assertions += 2;
+
+  // (h) RE-GRANT AFTER REMOVAL PRODUCES NEW EVIDENCE. Keying the audit on
+  // enterprise+staff+role alone made the second genuine grant collide with the first and be
+  // swallowed as a replay, so re-granting revoked authority left no record at all.
+  setup();
+  AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+  await invite();
+  const firstAudits = created.filter((p) => p.startsWith('enterprise_staff_grant_audits/')).length;
+  await manage({ auth: { uid: INVITER, token: { email: 'inviter@example.test', email_verified: true } }, data: { action: 'remove', staffUid: 'target-uid' } });
+  const regrant = await invite();
+  assert.equal(regrant.ok, true, regrant.message || 're-granting after removal failed');
+  const allAudits = created.filter((p) => p.startsWith('enterprise_staff_grant_audits/'));
+  assert.equal(firstAudits, 1, 'the first grant produced no evidence');
+  assert.equal(allAudits.length, 2, 'RE-GRANTING AFTER REMOVAL PRODUCED NO NEW EVIDENCE');
+  assert.equal(DOCS.get(allAudits[1]).grantSeq, 2, 'the re-grant did not receive its own sequence');
+  assert.equal(DOCS.get(allAudits[1]).previousRole, null, 'the re-grant recorded a stale previous role');
+  assertions += 5;
+
+  // (i) A TRUE REPLAY writes no new evidence. (h) must not have been bought by making every
+  // duplicate click a fresh grant record.
+  setup();
+  AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+  await invite();
+  const replay = await invite();
+  assert.equal(replay.ok, true, replay.message || '');
+  assert.equal(replay.value.replayed, true, 'an identical repeat grant was not recognized as a replay');
+  assert.equal(
+    created.filter((p) => p.startsWith('enterprise_staff_grant_audits/')).length, 1,
+    'an identical repeat grant wrote a second evidence record',
+  );
+  assertions += 3;
+
+  // (j) A FULL MEMBERSHIP PAGE FAILS CLOSED. A bare limit(10) answered "no foreign
+  // membership" for anyone whose eleventh document was the foreign one.
+  setup();
+  AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+  membershipPadding = 60;
+  const saturated = await invite();
+  assert.equal(saturated.ok, false, 'a saturated membership page was treated as proof of no foreign enterprise');
+  assert.equal(saturated.code, 'unavailable');
+  assert.equal(DOCS.has(`enterprise_staff/${INVITER}/members/target-uid`), false, 'a membership was written despite an unevaluable page');
+  assertions += 3;
+
+  // (k) INDEX ABSENT (FAILED_PRECONDITION) REFUSES. Recorded in
+  // docs/ENTERPRISE_STAFF_INDEX_REQUIREMENT.json: without the collection-group index the
+  // query throws, and the only safe answer is to refuse rather than assume unattached.
+  setup();
+  AUTH_USERS.set('target@example.test', { uid: 'target-uid', emailVerified: true });
+  membershipFailure = Object.assign(new Error('FAILED_PRECONDITION: index required'), { code: 9 });
+  const noIndex = await invite();
+  assert.equal(noIndex.ok, false, 'a grant proceeded while the membership check was unavailable');
+  assert.equal(noIndex.code, 'unavailable');
+  assert.equal(DOCS.has(`enterprise_staff/${INVITER}/members/target-uid`), false, 'a membership was written without a membership check');
+  assertions += 3;
+
+  ok(`manageEnterpriseStaff: unverified target refused, verified target succeeds, evidence recorded without the address, cross-enterprise re-homing refused, ${6} role coercions refused, ${3} unauthorized inviters refused, grant+evidence atomic, re-grant evidenced, replay not double-recorded, saturated page and absent index both fail closed`);
 }
 
 // ---- 3. UNCONDITIONAL-ALLOW EVASIONS -------------------------------------------------

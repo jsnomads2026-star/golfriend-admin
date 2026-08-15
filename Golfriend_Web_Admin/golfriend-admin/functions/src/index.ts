@@ -943,11 +943,20 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
       // CURRENT ORGANIZATION MEMBERSHIP: a principal already rostered to a DIFFERENT
       // enterprise may not be silently re-homed by a second one. Fail closed on a read
       // error rather than assuming they are unattached.
+      // The page is BOUNDED and a full page fails closed. A bare limit silently answered
+      // "no foreign membership" for anyone whose eleventh document was the foreign one.
+      const MEMBERSHIP_PAGE = 50;
       let existingMembership;
       try {
-        existingMembership = await db.collectionGroup('members').where('staffUid', '==', staffRecord.uid).limit(10).get();
+        existingMembership = await db.collectionGroup('members')
+          .where('staffUid', '==', staffRecord.uid).limit(MEMBERSHIP_PAGE).get();
       } catch {
+        // Includes FAILED_PRECONDITION when the collection-group index is absent. Refusing
+        // is correct: without the query we cannot rule out a foreign enterprise.
         throw new HttpsError('unavailable', 'Could not confirm existing staff membership. No change was made.');
+      }
+      if (existingMembership.size >= MEMBERSHIP_PAGE) {
+        throw new HttpsError('unavailable', 'Too many existing membership records to evaluate safely. No change was made.');
       }
       const foreign = existingMembership.docs.find((d) => {
         const data = d.data() || {};
@@ -957,42 +966,68 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
         throw new HttpsError('already-exists', 'That account is already active staff of another enterprise.');
       }
 
-      await membersCol.doc(staffRecord.uid).set({
-        staffUid: staffRecord.uid,
-        email: cleanEmail,
-        role: cleanRole,
-        status: 'active',
-        enterpriseUid: callerUid,
-        invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-        invitedBy: callerUid,
-      }, { merge: true });
-
-      // FAIL-CLOSED EVIDENCE. Written with create(), so a grant cannot be silently
-      // re-issued over an existing record, and carrying HOW the inviter was authorized.
-      // The address is not stored — the uid is the identity; the address was only a lookup.
-      const grantAuditId = `${callerUid}__${staffRecord.uid}__${cleanRole}`;
-      try {
-        await db.collection('enterprise_staff_grant_audits').doc(grantAuditId).create({
+      // MEMBERSHIP AND EVIDENCE ARE ONE ATOMIC WRITE. Writing the member document first and
+      // the audit afterwards meant a failed audit threw "No change was made" while the
+      // grant had already persisted — an untrue error over a real, unevidenced grant.
+      //
+      // grantSeq separates a REPLAY from a RE-GRANT. Keying the audit on
+      // enterprise+staff+role alone made re-granting after a removal collide with the
+      // original record, so the second genuine grant produced no evidence at all.
+      const staffDocRef = membersCol.doc(staffRecord.uid);
+      const auditCol = db.collection('enterprise_staff_grant_audits');
+      // THE SEQUENCE LIVES OUTSIDE THE MEMBERSHIP. Deriving it from the member document
+      // reset it to zero whenever a member was removed, so the next genuine grant collided
+      // with the original audit id and the whole transaction aborted — a removal made the
+      // principal permanently un-re-grantable. `remove` never touches this counter.
+      const grantCounterRef = db.collection('enterprise_staff_grant_counters').doc(`${callerUid}__${staffRecord.uid}`);
+      const outcome = await db.runTransaction(async (tx) => {
+        const current = await tx.get(staffDocRef);
+        const currentData = current.exists ? (current.data() || {}) : {};
+        // An identical, already-active grant is a replay: no state change, no new evidence.
+        if (current.exists && currentData.status === 'active' && currentData.role === cleanRole
+            && String(currentData.enterpriseUid || '') === callerUid) {
+          return { grantSeq: Number(currentData.grantSeq) || 1, replayed: true };
+        }
+        const counterSnap = await tx.get(grantCounterRef);
+        const grantSeq = (Number(counterSnap.data()?.grants) || 0) + 1;
+        const grantAuditId = `${callerUid}__${staffRecord.uid}__${cleanRole}__${grantSeq}`;
+        // create() inside the transaction: if this evidence cannot be written the whole
+        // transaction aborts, so the grant cannot exist without its record.
+        tx.create(auditCol.doc(grantAuditId), {
           grantId: grantAuditId,
           enterpriseUid: callerUid,
           organizationId: inviterOrganizationId,
           staffUid: staffRecord.uid,
           role: cleanRole,
+          grantSeq,
+          previousRole: typeof currentData.role === 'string' ? currentData.role : null,
+          // HOW the inviter was authorized. The address is not stored — the uid is the
+          // identity; the address was only ever a lookup key.
           inviterResolvedBy,
           targetAddressVerified: true,
           grantedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-      } catch (auditError: any) {
-        // ALREADY_EXISTS (6) means this exact grant is already recorded; anything else
-        // means the evidence could not be written, and a grant without evidence is not a
-        // grant we are willing to make.
-        if (auditError?.code !== 6) {
-          throw new HttpsError('unavailable', 'Could not record the staff grant. No change was made.');
-        }
-      }
+        tx.set(staffDocRef, {
+          staffUid: staffRecord.uid,
+          email: cleanEmail,
+          role: cleanRole,
+          status: 'active',
+          enterpriseUid: callerUid,
+          grantSeq,
+          invitedAt: admin.firestore.FieldValue.serverTimestamp(),
+          invitedBy: callerUid,
+        }, { merge: true });
+        tx.set(grantCounterRef, {
+          enterpriseUid: callerUid,
+          staffUid: staffRecord.uid,
+          grants: grantSeq,
+          lastGrantAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return { grantSeq, replayed: false };
+      });
 
-      logger.info(`🧑‍💼 Enterprise ${callerUid} added staff ${staffRecord.uid} (${cleanRole}) via ${inviterResolvedBy}.`);
-      return { success: true, staffUid: staffRecord.uid, role: cleanRole };
+      logger.info(`🧑‍💼 Enterprise ${callerUid} ${outcome.replayed ? 're-confirmed' : 'added'} staff ${staffRecord.uid} (${cleanRole}, grant #${outcome.grantSeq}) via ${inviterResolvedBy}.`);
+      return { success: true, staffUid: staffRecord.uid, role: cleanRole, grantSeq: outcome.grantSeq, replayed: outcome.replayed };
     }
 
     // action === 'remove'
