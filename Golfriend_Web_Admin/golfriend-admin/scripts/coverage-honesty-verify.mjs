@@ -76,6 +76,29 @@ const LEDGER = [
     runner: 'scripts/monday-authority-scenarios-verify.mjs',
   },
   {
+    // Discovered by the derived group check — these three were arrays in the world that no
+    // hard-coded total counted, so they were invisible to the reconciliation entirely.
+    group: 'organizations',
+    count: world.organizations.length,
+    status: 'executed',
+    targets: [{ module: 'functions/lib/partnerActivationRuntime.js', exports: ['managePartnerStaff'] }],
+    runner: 'scripts/monday-authority-scenarios-verify.mjs',
+  },
+  {
+    group: 'legacyNoSurvivingDirector',
+    count: world.legacyNoSurvivingDirector.length,
+    status: 'executed',
+    targets: [{ module: 'scripts/admin-status-migration-dryrun.mjs', exports: ['analyze', 'activationDecision'] }],
+    runner: 'scripts/monday-authority-scenarios-verify.mjs',
+  },
+  {
+    group: 'legacyConforming',
+    count: world.legacyConforming.length,
+    status: 'executed',
+    targets: [{ module: 'scripts/admin-status-migration-dryrun.mjs', exports: ['analyze', 'activationDecision'] }],
+    runner: 'scripts/monday-authority-scenarios-verify.mjs',
+  },
+  {
     group: 'scenarios',
     count: world.scenarios.length,
     status: 'specification',
@@ -140,13 +163,34 @@ assert.match(specBlock, /DECLARED, NOT YET EXECUTED/, 'the surface scenarios are
 ok('the fixture labels its specification-only scenarios as such');
 
 // ---- 4. NO GROUP MAY SILENTLY BECOME UNCOUNTED --------------------------------------
+// Group discovery is DERIVED from the world, not a hard-coded list. Six group names were
+// written out by hand, so a NEW fixture group was invisible to both totals and the
+// reconciliation could not see it — the same shape as counting only what you remember.
+const discoveredGroups = Object.entries(world)
+  .filter(([, value]) => Array.isArray(value))
+  .map(([name, value]) => ({ name, count: value.length }));
+assert.ok(discoveredGroups.length >= 6, `only ${discoveredGroups.length} array groups discovered in the world`);
+
+const ledgerNames = new Set(LEDGER.map((entry) => entry.group));
+const unaccounted = discoveredGroups.filter((group) => !ledgerNames.has(group.name));
+assert.deepEqual(
+  unaccounted.map((g) => `${g.name} (${g.count})`), [],
+  'a scenario group exists in the world but is absent from the coverage ledger; it would be invisible to every count',
+);
+const stale = [...ledgerNames].filter((name) => !discoveredGroups.some((g) => g.name === name));
+assert.deepEqual(stale, [], `the ledger names group(s) the world no longer has: ${stale.join(', ')}`);
+
+// Counts must agree per GROUP, not only in total — two errors that cancel out would
+// otherwise reconcile perfectly.
+for (const group of discoveredGroups) {
+  const entry = LEDGER.find((e) => e.group === group.name);
+  assert.equal(entry.count, group.count,
+    `ledger says ${entry.count} for ${group.name} but the world contains ${group.count}`);
+}
 const ledgerTotal = LEDGER.reduce((sum, entry) => sum + entry.count, 0);
-const worldTotal = world.identities.length + world.legacyStatusRecords.length
-  + world.appCheckEvidence.length + world.lifecycleScenarios.length
-  + world.organizationScenarios.length + world.scenarios.length;
-assert.equal(ledgerTotal, worldTotal,
-  `the ledger accounts for ${ledgerTotal} scenarios but the world contains ${worldTotal} — a group is missing from the ledger`);
-ok(`the ledger accounts for every one of the ${worldTotal} scenarios in the world`);
+const worldTotal = discoveredGroups.reduce((sum, group) => sum + group.count, 0);
+assert.equal(ledgerTotal, worldTotal, `the ledger accounts for ${ledgerTotal} scenarios but the world contains ${worldTotal}`);
+ok(`${discoveredGroups.length} groups DISCOVERED from the world (not hard-coded); every one is in the ledger with a matching count, ${worldTotal} scenarios total`);
 
 // ---- REPORT --------------------------------------------------------------------------
 const executed = LEDGER.filter((e) => e.status === 'executed').reduce((s, e) => s + e.count, 0)

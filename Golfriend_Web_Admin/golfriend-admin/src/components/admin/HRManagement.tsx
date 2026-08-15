@@ -1,7 +1,53 @@
 import { useState, useEffect } from 'react';
+import {
+  ACTIVE_ADMIN_STATUSES,
+  CANONICAL_ADMIN_ROLES,
+  isCanonicalAdminRole,
+  normalizeStaffStatus,
+} from '../../auth/roleJourney.js';
+
+/** The Director tier, taken from the registry rather than repeated as a literal. */
+const DIRECTOR_ROLE = 'Director';
 import { db } from '../../firebaseConfig';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+
+/**
+ * How this record will be treated by the server predicate. Rendering only — nothing here
+ * grants anything, and the server re-derives authority on every callable. It exists so the
+ * roster shows the truth: a record the server denies must not look active here.
+ */
+type StaffAuthority = {
+  effective: 'active' | 'denied';
+  reason: 'active' | 'inactive_status' | 'missing_status' | 'unknown_role' | 'missing_role' | 'malformed';
+  detail: string;
+};
+
+function classifyStaffRecord(record: any): StaffAuthority {
+  if (!record || typeof record !== 'object') {
+    return { effective: 'denied', reason: 'malformed', detail: 'Malformed record' };
+  }
+  const status = normalizeStaffStatus(record.status);
+  if (status === null) {
+    return { effective: 'denied', reason: 'missing_status', detail: 'No status — access denied' };
+  }
+  if (!ACTIVE_ADMIN_STATUSES.includes(status)) {
+    return { effective: 'denied', reason: 'inactive_status', detail: `Status "${String(record.status)}" — access denied` };
+  }
+  if (typeof record.role !== 'string' || record.role.trim() === '') {
+    return { effective: 'denied', reason: 'missing_role', detail: 'No role — access denied' };
+  }
+  if (!isCanonicalAdminRole(record.role)) {
+    // Legacy, obsolete, mis-spelled or foreign-vocabulary roles all land here. The repair
+    // differs from a status repair, so the roster says which it is.
+    return {
+      effective: 'denied',
+      reason: 'unknown_role',
+      detail: `Role "${record.role}" is not in the registry (${CANONICAL_ADMIN_ROLES.join(', ')}) — access denied`,
+    };
+  }
+  return { effective: 'active', reason: 'active', detail: 'Active' };
+}
 
 export default function HRManagement() {
   const [staff, setStaff] = useState<any[]>([]);
@@ -23,7 +69,11 @@ export default function HRManagement() {
       // 🔥 Added 'as any' to satisfy strict typing on Firestore docs
       const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       
-      setStaff(allUsers.filter((u: any) => u.role !== 'Partner')); 
+      // Classified through the CANONICAL REGISTRY, not a single-literal denylist. The
+      // previous filter excluded only 'Partner', so a record carrying any other
+      // out-of-registry role rendered as ordinary staff — on the one screen an operator
+      // uses to diagnose exactly that problem.
+      setStaff(allUsers.map((u: any) => ({ ...u, authority: classifyStaffRecord(u) })));
     });
     return () => unsubscribe();
   }, []);
@@ -147,16 +197,24 @@ export default function HRManagement() {
                 <tr key={emp.id} style={{ borderBottom: '1px solid #333', opacity: emp.status === 'Suspended' ? 0.5 : 1 }}>
                   <td style={{ padding: '12px 0', fontWeight: 'bold' }}>
                     {emp.name || emp.email}
-                    {emp.role === 'Director' && <span style={{ marginLeft: '8px', fontSize: '12px' }}>👑</span>}
+                    {emp.role === DIRECTOR_ROLE && emp.authority?.effective === 'active' && <span style={{ marginLeft: '8px', fontSize: '12px' }}>👑</span>}
                   </td>
-                  <td style={{ padding: '12px 0', color: '#D4AF37' }}>{emp.role}</td>
+                  <td style={{ padding: '12px 0', color: emp.authority?.effective === 'active' ? '#D4AF37' : '#F44336' }}>
+                    {emp.role || '—'}
+                    {emp.authority?.effective !== 'active' && (
+                      <div style={{ fontSize: '11px', color: '#F44336' }}>{emp.authority?.detail}</div>
+                    )}
+                  </td>
                   <td style={{ padding: '12px 0' }}>
                     <span style={{ color: emp.status === 'Suspended' ? '#F44336' : '#4CAF50', fontWeight: 'bold' }}>
-                      {emp.status || 'No status — access denied'}
+                      {emp.authority?.effective === 'active' ? (emp.status || 'Active') : emp.authority?.detail}
                     </span>
                   </td>
                   <td style={{ padding: '12px 0', textAlign: 'right' }}>
-                    {emp.role !== 'Director' && (
+                    {/* A record the server already denies has no access to revoke, and a
+                        non-canonical role cannot be reasoned about here — the repair is a
+                        data correction, not a suspension. */}
+                    {emp.role !== DIRECTOR_ROLE && emp.authority?.reason !== 'unknown_role' && emp.authority?.reason !== 'malformed' && (
                       <button 
                         onClick={() => handleRevoke(emp.id, emp.status || 'Active')} 
                         style={{ backgroundColor: 'transparent', border: '1px solid ' + (emp.status === 'Suspended' ? '#4CAF50' : '#F44336'), color: emp.status === 'Suspended' ? '#4CAF50' : '#F44336', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}

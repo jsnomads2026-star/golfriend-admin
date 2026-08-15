@@ -59,6 +59,8 @@ jobs:
       # Identity binding: no authority may derive from a mutable address.
       - name: Verified-identity regression
         run: npm run verify:identity-binding
+      - name: Admin security regression (five repaired paths)
+        run: npm run verify:admin-security-regression
 
   safety:
     name: Rules, App Check, lifecycle, privacy
@@ -138,11 +140,19 @@ jobs:
       - name: Whitespace / diff hygiene
         run: git diff --check
         working-directory: .
+      # The pattern is ASSEMBLED FROM FRAGMENTS. Written out as one literal it matched
+      # itself — this file is in the tree being scanned — so the job failed on every run
+      # and the only way to make it green was to stop believing it.
       - name: Secret scan
         working-directory: .
         run: |
           set -o pipefail
-          if git grep -nIE '(-----BEGIN [A-Z ]*PRIVATE KEY|sk_live_|xox[baprs]-|ghp_[0-9A-Za-z]{36}|"type": *"service_account")' -- . ':!*node_modules*'; then
+          KEY="-----BEGIN [A-Z ]*PRIVATE"' KEY'
+          STRIPE='sk_''live_'
+          SLACK='xox''[baprs]-'
+          GITHUB='ghp_''[0-9A-Za-z]{36}'
+          SVC='"type": *"service''_account"'
+          if git grep -nIE "($KEY|$STRIPE|$SLACK|$GITHUB|$SVC)" -- . ':!*node_modules*'; then
             echo "::error::secret material found in the working tree"
             exit 1
           fi

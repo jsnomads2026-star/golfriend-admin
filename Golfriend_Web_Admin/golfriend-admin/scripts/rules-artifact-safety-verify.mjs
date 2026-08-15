@@ -81,11 +81,35 @@ export function evaluateRuleset(source, { name = 'candidate' } = {}) {
   if (/match\s*\/\{[A-Za-z0-9_]+\}\s*\/\s*\{[A-Za-z0-9_]+\}/.test(stripped)) {
     reasons.push('contains a variable collection segment, which matches every collection');
   }
-  // An unconditional allow in ANY form: combined or separate statements, any spacing.
+  // An unconditional allow in ANY form. Anchoring on `if true;` caught only the literal
+  // spelling: `if (true)`, `if x || true` and a bare `exists(...)` all walked past, and
+  // each of them grants unconditionally.
   for (const statement of stripped.match(/allow[^;]*;/g) || []) {
-    if (/if\s+true\s*;?\s*$/.test(statement)) {
+    const condition = (statement.split(/:\s*if\s/)[1] || '').trim().replace(/;$/, '');
+    if (!condition) continue;
+    // Strip redundant parentheses so `(true)`, `((true))` and `true` are one case.
+    let bare = condition;
+    while (/^\((.*)\)$/.test(bare.trim())) bare = bare.trim().replace(/^\((.*)\)$/, '$1');
+    bare = bare.trim();
+
+    if (/^true$/.test(bare)) {
       reasons.push(`contains an unconditional allow: ${statement.trim().slice(0, 60)}`);
-      break;
+      continue;
+    }
+    // A disjunction with a constant-true arm is unconditional regardless of the rest.
+    if (/(^|\|\|)\s*\(?\s*true\s*\)?\s*(\|\||$)/.test(bare)) {
+      reasons.push(`contains a tautological allow (a || true arm makes the rest irrelevant): ${statement.trim().slice(0, 60)}`);
+      continue;
+    }
+    // exists()/get() prove a DOCUMENT is there, not that this caller may act. Used as the
+    // whole condition they authorize anyone who can name an existing path.
+    if (/^(exists|get)\s*\(/.test(bare)) {
+      reasons.push(`uses ${bare.slice(0, 6)}() as the entire authorization condition; document existence is not authority: ${statement.trim().slice(0, 60)}`);
+      continue;
+    }
+    // A condition that never mentions the caller cannot be about the caller.
+    if (!/request\.auth|request\.resource|resource\.data|false/.test(bare)) {
+      reasons.push(`allow condition never references the caller: ${statement.trim().slice(0, 60)}`);
     }
   }
   // A condition that delegates to a helper cannot be read as a denial. Any `if <fn>()` is

@@ -886,16 +886,23 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
     candidateIds.push(callerEmail.charAt(0).toUpperCase() + callerEmail.slice(1));
   }
   let isEnterprisePartner = false;
+  // HOW the inviter resolved is evidence, not an implementation detail: a uid match is a
+  // strong binding, an address match is only acceptable because the address was verified
+  // above. Recording it means a later audit can tell the two apart.
+  let inviterResolvedBy: 'uid' | 'verified_address' | null = null;
+  let inviterOrganizationId = '';
   for (const id of candidateIds) {
     const pSnap = await db.collection('b2b_partners').doc(id).get();
     const pData = pSnap.data();
     if (pSnap.exists && pData?.status === 'active_partner' &&
         (pData?.tier === 'enterprise' || pData?.tier === 'Enterprise')) {
       isEnterprisePartner = true;
+      inviterResolvedBy = id === callerUid ? 'uid' : 'verified_address';
+      inviterOrganizationId = String(pData?.organizationId || pSnap.id);
       break;
     }
   }
-  if (!isEnterprisePartner) {
+  if (!isEnterprisePartner || !inviterResolvedBy) {
     throw new HttpsError('permission-denied', 'Only an active enterprise partner can manage staff.');
   }
 
@@ -909,7 +916,12 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
         throw new HttpsError('invalid-argument', 'A valid staff email is required.');
       }
       const allowedRoles = ['manager', 'venue_staff', 'analyst'];
-      const cleanRole = allowedRoles.includes(role) ? role : 'venue_staff';
+      // An unrecognized role used to be SILENTLY COERCED to 'venue_staff'. Coercing an
+      // authorization input hides a caller error and grants something nobody asked for.
+      if (!allowedRoles.includes(role)) {
+        throw new HttpsError('invalid-argument', `role must be one of: ${allowedRoles.join(', ')}.`);
+      }
+      const cleanRole = role;
 
       // Resolve an EXISTING Firebase Auth user; roles bind to a real uid.
       let staffRecord;
@@ -918,8 +930,31 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
       } catch {
         throw new HttpsError('not-found', 'No Golfriend account exists for that email. Ask them to sign up first.');
       }
+      // THE TARGET'S ADDRESS MUST BE VERIFIED. getUserByEmail resolves whoever registered
+      // that address FIRST, and Firebase does not require verification to register. Binding
+      // a role grant to that alone hands the grant to whoever got there first — the same
+      // defect as trusting an unverified caller address, pointed at the recipient.
+      if (staffRecord.emailVerified !== true) {
+        throw new HttpsError('failed-precondition', 'That account has not verified its email address yet. Ask them to verify it, then invite again.');
+      }
       if (staffRecord.uid === callerUid) {
         throw new HttpsError('failed-precondition', 'You cannot add yourself as staff.');
+      }
+      // CURRENT ORGANIZATION MEMBERSHIP: a principal already rostered to a DIFFERENT
+      // enterprise may not be silently re-homed by a second one. Fail closed on a read
+      // error rather than assuming they are unattached.
+      let existingMembership;
+      try {
+        existingMembership = await db.collectionGroup('members').where('staffUid', '==', staffRecord.uid).limit(10).get();
+      } catch {
+        throw new HttpsError('unavailable', 'Could not confirm existing staff membership. No change was made.');
+      }
+      const foreign = existingMembership.docs.find((d) => {
+        const data = d.data() || {};
+        return data.status === 'active' && String(data.enterpriseUid || '') !== callerUid;
+      });
+      if (foreign) {
+        throw new HttpsError('already-exists', 'That account is already active staff of another enterprise.');
       }
 
       await membersCol.doc(staffRecord.uid).set({
@@ -932,7 +967,31 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
         invitedBy: callerUid,
       }, { merge: true });
 
-      logger.info(`🧑‍💼 Enterprise ${callerUid} added staff ${staffRecord.uid} (${cleanRole}).`);
+      // FAIL-CLOSED EVIDENCE. Written with create(), so a grant cannot be silently
+      // re-issued over an existing record, and carrying HOW the inviter was authorized.
+      // The address is not stored — the uid is the identity; the address was only a lookup.
+      const grantAuditId = `${callerUid}__${staffRecord.uid}__${cleanRole}`;
+      try {
+        await db.collection('enterprise_staff_grant_audits').doc(grantAuditId).create({
+          grantId: grantAuditId,
+          enterpriseUid: callerUid,
+          organizationId: inviterOrganizationId,
+          staffUid: staffRecord.uid,
+          role: cleanRole,
+          inviterResolvedBy,
+          targetAddressVerified: true,
+          grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (auditError: any) {
+        // ALREADY_EXISTS (6) means this exact grant is already recorded; anything else
+        // means the evidence could not be written, and a grant without evidence is not a
+        // grant we are willing to make.
+        if (auditError?.code !== 6) {
+          throw new HttpsError('unavailable', 'Could not record the staff grant. No change was made.');
+        }
+      }
+
+      logger.info(`🧑‍💼 Enterprise ${callerUid} added staff ${staffRecord.uid} (${cleanRole}) via ${inviterResolvedBy}.`);
       return { success: true, staffUid: staffRecord.uid, role: cleanRole };
     }
 
