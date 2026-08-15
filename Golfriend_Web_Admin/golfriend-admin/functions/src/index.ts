@@ -1793,3 +1793,5 @@ export const photoWatchtower = functionsV1
 });
 
 export { getEconomyRateCard, publishEconomyRateCard, rollbackEconomyRateCard, quoteEconomyAction, settleEconomyAction, getEconomyWallet, refundEconomyTransaction, getEconomyProfitability } from "./economyAuthority.js";
+
+export { claimVerifiedTeePurchase, publishCourseCommissionAgreement, settleVerifiedBookingCommission, getCourseCommissionStatement } from "./economyCommercialAuthority.js";
