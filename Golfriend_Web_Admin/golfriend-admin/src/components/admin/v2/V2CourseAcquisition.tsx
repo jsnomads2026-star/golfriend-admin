@@ -34,6 +34,7 @@ import {
 import { adapterStateLabel } from "./acquisitionAdapterStates.mjs";
 import { createReceiptLedger } from "./acquisitionReceipts.mjs";
 import { PRODUCTION_ACQUISITION_ADAPTERS } from "./previewAcquisitionAdapters.mjs";
+import V2OutreachApprovals from "./V2OutreachApprovals";
 import { LOCALE_CODES, coerceLocale } from "../../../i18n/locales";
 import { useAdminLocale } from "./AdminLocaleContext";
 import "./V2CourseAcquisition.css";
@@ -309,6 +310,10 @@ export default function V2CourseAcquisition({
           {announcement || "No capability command has been run."}
         </p>
       </section>
+      {/* The authoritative outreach approval workflow. Unlike the preview adapters above,
+          every row and every action here goes to the server callables — there is no
+          client-side authority and no simulated outcome. */}
+      <V2OutreachApprovals />
       <section className="acq-grid">
         <main>
           <div className="acq-tools">

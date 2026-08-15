@@ -1,0 +1,33 @@
+.out-approvals{display:grid;gap:10px;margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.out-approvals>header span{color:#8a6d1f;font-size:9px;font-weight:800;letter-spacing:.14em}
+.out-approvals h3{font:700 18px Georgia;margin:4px 0}
+.out-approvals>header p{font-size:12px;color:var(--slate)}
+.out-notice{padding:9px 11px;border:1px solid #dabd7d;border-radius:10px;background:#fff9e9;font-size:12px;line-height:1.45}
+.out-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.out-bar button,.out-actions button{min-height:44px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:11px}
+.out-bar button[disabled],.out-actions button[disabled]{opacity:.55;cursor:not-allowed}
+.out-result{padding:8px 10px;border:1px solid #dabd7d;border-radius:8px;background:#fff9e9;font-size:11px}
+.out-result[data-ok="true"]{border-color:#9ec7a8;background:#eef7f0}
+.out-state{padding:28px;text-align:center;font-size:12px;color:var(--slate)}
+.out-error{color:#a3372f}
+.out-table{max-height:460px;overflow:auto}
+.out-table table{width:100%;border-collapse:collapse;font-size:11px}
+.out-table th,.out-table td{padding:9px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
+.out-table small{display:block;margin-top:3px;font-size:10px;color:var(--slate)}
+/* Blocked and terminal states are visually distinct from a live, workable draft. */
+.out-table b[data-state="approved"]{color:#1f6b3a}
+.out-table b[data-state="rejected"],.out-table b[data-state="revoked"]{color:#a3372f}
+.out-table b[data-state="expired"]{color:#8a6d1f}
+/* Unknown legal hold reads as a WARNING, never as the neutral styling of "no hold". */
+.out-table td[data-hold="null"]{color:#8a6d1f;font-weight:700}
+.out-table td[data-hold="true"]{color:#a3372f;font-weight:700}
+.out-actions{display:flex;flex-wrap:wrap;gap:6px}
+.out-approvals :focus-visible{outline:3px solid var(--green);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.out-approvals *{transition:none!important;animation:none!important}}
+@media(max-width:700px){
+  .out-table table,.out-table tbody,.out-table tr,.out-table td{display:block}
+  .out-table thead{display:none}
+  .out-table tr{padding:9px;border-top:1px solid var(--line)}
+  .out-table td{padding:4px;border:0}
+  .out-actions{display:grid}
+}

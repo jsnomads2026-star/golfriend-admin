@@ -1,0 +1,188 @@
+// ============================================================================
+// Enterprise outreach approvals — mounted inside the existing V2 Course Acquisition
+// surface (Admin → Partners). This is NOT a demonstration page: every row comes from
+// listOutreachDrafts and every button calls outreachDraftCommand. There is no local
+// state machine, no optimistic transition and no client-side authority.
+//
+// What the client decides: what to render, and which buttons to OFFER. What the server
+// decides: whether the action is permitted. The two are deliberately not the same thing —
+// a hidden button is a usability affordance, never a control. Every action the UI offers
+// is re-authorized on the server, so a user who calls the callable directly gains nothing.
+//
+// Nothing is sent from this screen. There is no transmitter, and the server reports every
+// draft as not sendable with the reason why.
+// ============================================================================
+import { useCallback, useEffect, useState } from 'react';
+import { useT } from '../../../i18n/hooks.ts';
+import { outreachDict, outreachErrorKey, type OutreachKey } from '../../../i18n/admin/outreach.ts';
+import {
+  newCommandId, productionOutreachTransport,
+  type OutreachRow, type OutreachTransport,
+} from './outreachService';
+import './V2OutreachApprovals.css';
+
+const STATE_KEYS: Record<string, OutreachKey> = {
+  draft_created: 'state.draft_created',
+  reviewer_assigned: 'state.reviewer_assigned',
+  previewed: 'state.previewed',
+  approved: 'state.approved',
+  rejected: 'state.rejected',
+  changes_requested: 'state.changes_requested',
+  expired: 'state.expired',
+  revoked: 'state.revoked',
+};
+
+/** A state with no translation renders as its raw code rather than as a blank cell. */
+const stateKey = (state: string): OutreachKey | null => STATE_KEYS[state] ?? null;
+
+export default function V2OutreachApprovals({
+  transport = productionOutreachTransport,
+}: { transport?: OutreachTransport }) {
+  const t = useT(outreachDict as unknown as Record<string, Record<string, string>>);
+  const [rows, setRows] = useState<OutreachRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ code: string | null; replayed: boolean } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => transport.list(), [transport]);
+
+  /**
+   * Applies a server listing. A failed listing shows the error and must NOT fall back to
+   * an empty table — an empty table reads as "there is nothing awaiting approval", which
+   * is the most misleading thing this screen could say.
+   */
+  const applyList = useCallback((result: Awaited<ReturnType<OutreachTransport['list']>>) => {
+    setListError(result.ok ? null : (result.code ?? 'internal_error'));
+    setRows(result.ok ? result.rows : []);
+    setLoading(false);
+  }, []);
+
+  const failedList = useCallback(() => {
+    applyList({ ok: false, code: 'internal_error', rows: [] });
+  }, [applyList]);
+
+  useEffect(() => { void load().then(applyList, failedList); }, [load, applyList, failedList]);
+
+  /** Refresh is a plain event handler; the server remains the only source of the rows. */
+  const reload = () => { setLoading(true); void load().then(applyList, failedList); };
+
+  const send = useCallback(async (row: OutreachRow, requestedState: string) => {
+    setBusy(row.draftId);
+    setNotice(null);
+    const outcome = await transport.command({
+      op: 'transition',
+      draftId: row.draftId,
+      expectedVersion: row.version,
+      requestedState,
+      commandId: newCommandId(),
+    });
+    setNotice({ code: outcome.code, replayed: outcome.replayed });
+    setBusy(null);
+    // Re-read from the server rather than patching local state: the server is the only
+    // place that knows what actually landed.
+    applyList(await load());
+  }, [transport, load, applyList]);
+
+  const holdLabel = (hold: boolean | null): OutreachKey =>
+    hold === null ? 'hold.unknown' : hold ? 'hold.active' : 'hold.clear';
+
+  return (
+    <section className="out-approvals" aria-labelledby="out-approvals-title">
+      <header>
+        <span>{t('eyebrow')}</span>
+        <h3 id="out-approvals-title">{t('title')}</h3>
+        <p>{t('subtitle')}</p>
+      </header>
+
+      <p className="out-notice">{t('notice.noTransmission')}</p>
+      <p className="out-notice">{t('notice.serverAuthority')}</p>
+
+      <div className="out-bar">
+        <button type="button" onClick={() => void reload()} disabled={loading}>{t('refresh')}</button>
+        {notice && (
+          <output className="out-result" data-ok={notice.code === null}>
+            {notice.code === null
+              ? (notice.replayed ? t('replayed') : t('state.approved'))
+              : t(outreachErrorKey(notice.code))}
+          </output>
+        )}
+      </div>
+
+      {loading && <p className="out-state">{t('loading')}</p>}
+      {!loading && listError && <p className="out-state out-error">{t(outreachErrorKey(listError))}</p>}
+      {!loading && !listError && rows.length === 0 && <p className="out-state">{t('empty')}</p>}
+
+      {!loading && !listError && rows.length > 0 && (
+        <div className="out-table">
+          <table>
+            <thead>
+              <tr>
+                <th>{t('col.draft')}</th>
+                <th>{t('col.state')}</th>
+                <th>{t('col.version')}</th>
+                <th>{t('col.jurisdiction')}</th>
+                <th>{t('col.reviewer')}</th>
+                <th>{t('col.expires')}</th>
+                <th>{t('col.hold')}</th>
+                <th>{t('col.sendable')}</th>
+                <th aria-label={t('action.approve')} />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const key = stateKey(row.state);
+                return (
+                  <tr key={row.draftId} data-state={row.state}>
+                    <td><b>{row.draftId}</b></td>
+                    <td><b data-state={row.state}>{key ? t(key) : row.state}</b></td>
+                    <td>{row.version}</td>
+                    <td>
+                      {row.jurisdiction ?? '—'}
+                      <small>{t(row.jurisdictionApproved ? 'jurisdiction.approved' : 'jurisdiction.unapproved')}</small>
+                    </td>
+                    <td>
+                      {row.hasAssignedReviewer ? t('reviewer.assigned') : t('reviewer.none')}
+                      {row.callerIsAssignedReviewer && <small>{t('reviewer.you')}</small>}
+                      {row.callerIsCreator && <small>{t('creator.you')}</small>}
+                    </td>
+                    <td>{row.expiresAt ?? t('expires.none')}</td>
+                    <td data-hold={String(row.legalHold)}>{t(holdLabel(row.legalHold))}</td>
+                    <td>
+                      <b>{t('sendable.no')}</b>
+                      <small>{t(outreachErrorKey(row.sendableReason))}</small>
+                    </td>
+                    <td className="out-actions">
+                      {/* Offered only to the assigned reviewer — but the SERVER is what
+                          enforces it. Hiding the button is convenience, not a control. */}
+                      <button
+                        type="button"
+                        disabled={busy === row.draftId || !row.callerIsAssignedReviewer}
+                        onClick={() => void send(row, 'approved')}
+                      >{t('action.approve')}</button>
+                      <button
+                        type="button"
+                        disabled={busy === row.draftId || !row.callerIsAssignedReviewer}
+                        onClick={() => void send(row, 'rejected')}
+                      >{t('action.reject')}</button>
+                      <button
+                        type="button"
+                        disabled={busy === row.draftId}
+                        onClick={() => void send(row, 'changes_requested')}
+                      >{t('action.requestChanges')}</button>
+                      <button
+                        type="button"
+                        disabled={busy === row.draftId}
+                        onClick={() => void send(row, 'revoked')}
+                      >{t('action.revoke')}</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}

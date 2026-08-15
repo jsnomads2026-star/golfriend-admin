@@ -15,6 +15,8 @@ import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDec
 // Modular FieldValue — robust under the Functions emulator, whose admin stub can
 // drop the `admin.firestore.FieldValue` static. Used by the partner-intake callables.
 import { FieldValue } from "firebase-admin/firestore";
+import { createOutreachStore } from "./outreachStore.js";
+import type { CallerContext as OutreachCallerContext } from "./outreachAuthority.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 
 // Initialize Firebase Admin
@@ -1942,5 +1944,89 @@ export const listPartnerSubmissions = onCall({ memory: "256MiB" }, async (reques
   } catch (error: any) {
     logger.error("🧾 listPartnerSubmissions failed:", error);
     throw new HttpsError('internal', error.message || 'Could not list applications.');
+  }
+});
+
+// ==========================================
+// 🧾 ENTERPRISE OUTREACH — AUTHORITATIVE DRAFT / APPROVAL CALLABLES
+//
+// The smallest authoritative surface the Admin application needs. EVERY state
+// transition happens on this trusted boundary, inside a Firestore transaction, using
+// server-resolved identity and roles. The client cannot transition a draft, cannot
+// assign itself as reviewer, cannot supply its own role or digest, and cannot approve
+// its own work — those decisions are made in outreachAuthority.ts from persisted values.
+//
+// Refusals return a STABLE error code the Admin UI localizes into all eight locales.
+// No record field, reviewer identity, stack or internal message crosses the boundary,
+// so an error string can never become an identity-disclosure channel.
+//
+// NO EMAIL IS SENT. NO COURSE IS CONTACTED. NO PARTNER STATUS IS CHANGED. Approval
+// records an approval; TRANSMISSION_ENABLED is false and there is no transmitter here.
+// ==========================================
+const outreachStore = createOutreachStore(db);
+
+/** Server clock. A caller-supplied timestamp could walk a draft past its own expiry. */
+const outreachNow = () => new Date().toISOString();
+
+/** Caller context assembled from VERIFIED runtime values only — never from request.data. */
+function outreachCaller(request: { auth?: { uid?: string } | null; app?: unknown }): OutreachCallerContext {
+  return {
+    uid: request.auth && typeof request.auth.uid === 'string' ? request.auth.uid : null,
+    // Resolved inside the transaction from admin_users; never taken from the client.
+    adminDoc: null,
+    appCheckVerified: !!request.app,
+  };
+}
+
+export const outreachDraftCommand = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const caller = outreachCaller(request);
+  const data = (request.data || {}) as Record<string, unknown>;
+  const op = data.op;
+  const now = outreachNow();
+
+  try {
+    if (op === 'create') {
+      return await outreachStore.createDraft({
+        caller, draftId: data.draftId, content: data.content,
+        jurisdiction: data.jurisdiction, expiresAt: data.expiresAt ?? null,
+        commandId: data.commandId, now,
+      });
+    }
+    if (op === 'assign') {
+      return await outreachStore.assignReviewer({
+        caller, draftId: data.draftId, expectedVersion: data.expectedVersion,
+        reviewerUid: data.reviewerUid, commandId: data.commandId, now,
+      });
+    }
+    if (op === 'transition') {
+      return await outreachStore.transition({
+        caller, draftId: data.draftId, expectedVersion: data.expectedVersion,
+        requestedState: data.requestedState, content: data.content,
+        commandId: data.commandId, now,
+      });
+    }
+    return { ok: false, code: 'payload_rejected', replayed: false, draftId: null, state: null, version: null, receiptId: null };
+  } catch (error: any) {
+    // The underlying message is logged server-side and NEVER returned: a store error
+    // string can carry document paths and field values.
+    logger.error('🧾 Outreach draft command failed:', error);
+    return { ok: false, code: 'internal_error', replayed: false, draftId: null, state: null, version: null, receiptId: null };
+  }
+});
+
+/** Read-only projection for the Admin surface. Carries no identity but the caller's own. */
+export const listOutreachDrafts = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  try {
+    const limit = typeof (request.data || {}).limit === 'number' ? (request.data as any).limit : 50;
+    return await outreachStore.listDrafts(outreachCaller(request), limit);
+  } catch (error: any) {
+    logger.error('🧾 Outreach draft listing failed:', error);
+    return { ok: false, code: 'internal_error', rows: [] };
   }
 });
