@@ -451,6 +451,7 @@ import BookingOperationsReportV2 from './BookingOperationsReportV2';
 import BookingProviderPublicationV2 from './BookingProviderPublicationV2';
 import EnterpriseReporting from './enterprise/EnterpriseReporting';
 import BillingBoundary from './enterprise/BillingBoundary';
+import EnterprisePartnerSupport from './enterpriseSupport/EnterprisePartnerSupport';
 
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
 
@@ -465,7 +466,7 @@ interface PartnerDashboardProps {
 
 export default function EnterpriseDashboard({ partnerData }: PartnerDashboardProps) {
   // 🔥 Added 'teesheet' to the allowed state literal
-  const [activeTab, setActiveTab] = useState<'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm' | 'org' | 'venues' | 'staff' | 'reporting' | 'billing'>('teesheet');
+  const [activeTab, setActiveTab] = useState<'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm' | 'org' | 'venues' | 'staff' | 'reporting' | 'billing' | 'support'>('teesheet');
   const [liveTier, setLiveTier] = useState<string>(partnerData?.tier || 'basic_operator');
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -602,6 +603,9 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         </button>
 
         <div style={styles.sectionHeader}>ACCOUNT</div>
+        <button style={{...styles.navBtn, ...(activeTab === 'support' ? styles.activeBtn : {})}} onClick={() => setActiveTab('support')}>
+          🛟 Partner Support
+        </button>
         <button style={{...styles.navBtn, ...(activeTab === 'billing' ? styles.activeBtn : {})}} onClick={() => setActiveTab('billing')}>
           🧾 Billing Overview
         </button>
@@ -629,6 +633,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'staff' && <StaffRoles partnerUid={authUid} />}
         {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
         {activeTab === 'billing' && <BillingBoundary partnerUid={authUid} />}
+        {activeTab === 'support' && <EnterprisePartnerSupport />}
       </div>
     </div>
   );

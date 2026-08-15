@@ -1,0 +1,14 @@
+import fs from "node:fs";import assert from "node:assert/strict";
+const read=p=>fs.readFileSync(new URL(`../${p}`,import.meta.url),"utf8");
+const ui=read("src/components/B2B/enterpriseSupport/EnterprisePartnerSupport.tsx"),service=read("src/components/B2B/enterpriseSupport/enterprisePartnerSupportService.ts"),copy=read("src/i18n/partner/enterprisePartnerSupport.ts"),journey=read("src/components/B2B/PartnerApplicationJourney.tsx"),dashboard=read("src/components/B2B/EnterpriseDashboard.tsx");
+let checks=0;const ok=(v,m)=>{assert.ok(v,m);checks++};
+for(const callable of ["getEnterprisePartnerSupportV1","createEnterpriseSupportDraftV1","attachEnterpriseSupportEvidenceV1","submitEnterpriseSupportRequestV1","replyEnterpriseSupportRequestV1","withdrawEnterpriseSupportRequestV1","reopenEnterpriseSupportRequestV1","closeEnterpriseSupportRequestV1"])ok(service.includes(callable),`missing ${callable}`);
+for(const locale of ["en","th","ko","ja","zh","es","fr","de"])ok(copy.includes(`${locale}:`),`missing ${locale}`);
+for(const type of ["onboarding_help","course_profile_correction","trial_question","member_management_help","tournament_support","booking_coordination","commission_clarification","technical_issue","general_support"])ok(copy.includes(type),`missing ${type}`);
+for(const status of ["draft","submitted","acknowledged","needs_information","under_review","resolved","closed","withdrawn"])ok(service.includes(`"${status}"`),`missing ${status}`);
+ok(ui.includes('"assertive"')&&ui.includes('role="alert"')&&ui.includes("minHeight:48"),"accessible states/controls missing");ok(ui.includes("adminCommandStatus")===false&&service.includes('adminCommandStatus:"unavailable"'),"admin boundary missing");ok(journey.includes("<EnterprisePartnerSupport />"),"onboarding mount missing");ok(dashboard.includes("activeTab === 'support'"),"dashboard mount missing");ok(!service.includes("collection(")&&!service.includes("addDoc("),"direct datastore write found");
+for(const group of ["requestTypes","statuses","evidenceTypes"])ok(copy.includes(`${group}:`),`missing structured ${group} copy`);
+ok(copy.includes('language:"ภาษา"')&&copy.includes('language:"언어"')&&copy.includes('language:"言語"')&&copy.includes('language:"语言"')&&copy.includes('language:"Idioma"')&&copy.includes('language:"Langue"')&&copy.includes('language:"Sprache"'),"localized language labels incomplete");
+ok(ui.includes("copy.statuses[r.status]")&&ui.includes("copy.evidenceTypes[x]")&&ui.includes("copy.representative")&&ui.includes("copy.admin"),"mounted structured labels are not localized");
+ok(!ui.includes('>Language<')&&!ui.includes('aria-label="Support language"'),"raw English language label remains mounted");
+console.log(`Enterprise partner support UI verification passed (${checks}/${checks}).`);
