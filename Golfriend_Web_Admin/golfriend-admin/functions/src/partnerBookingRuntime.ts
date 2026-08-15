@@ -55,7 +55,7 @@ function command(r: any) {
     throw new HttpsError("invalid-argument", "Command invalid.");
   }
 }
-async function bookingScope(id: string): Promise<PartnerBookingScope> {
+export async function bookingScope(id: string): Promise<PartnerBookingScope> {
   const bindings=await db.collection("enterprise_authority_bindings").doc(id).collection("memberships").limit(101).get(),courses = await db.collection("enterprise_courses").limit(201).get();
   try {
     if(bindings.empty||bindings.size>100||bindings.docs.some(x=>!activeAuthorityBinding(x.data())))throw new BookingScopeError("BOOKING_BINDING_UNAVAILABLE");
@@ -72,7 +72,7 @@ function activeAuthorityBinding(value:any){const millis=(candidate:any)=>candida
 async function exactBookingAuthority(caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){const course=await db.collection("enterprise_courses").doc(courseId).get();if(!course.exists)throw new HttpsError("permission-denied","Booking unavailable.");const value=course.data()||{};try{const decision=await resolveEnterpriseBookingCourseAuthority(caller,String(value.organizationId||""),String(value.propertyId||""),String(value.courseId||course.id),mode);if(decision.membershipId!==scope.membershipId||decision.organizationId!==scope.organizationId||decision.role!==scope.role||!scope.courseIds.includes(decision.courseId))throw new Error("SCOPE_CHANGED");return decision}catch{throw new HttpsError("permission-denied","Booking unavailable.")}}
 const confirmationPayload=(action:string,data:any)=>({action,...(action==="alternative"?{alternativeSlotId:String(data?.alternativeSlotId||""),message:String(data?.message||"").trim().slice(0,500)}:{})});
 const confirmationBinding=(caller:string,decision:any,booking:any,action:any,data:any):BookingConfirmationBinding=>Object.freeze({actorUid:caller,membershipId:decision.membershipId,organizationId:decision.organizationId,propertyId:decision.propertyId,courseId:decision.courseId,bookingId:String(booking.bookingId),action,revision:Number(booking.version),payloadDigest:bookingConfirmationPayloadDigest(confirmationPayload(action,data)),authorityVersion:decision.sourceVersion});
-async function transactionBookingAuthority(tx:admin.firestore.Transaction,caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){
+export async function transactionBookingAuthority(tx:admin.firestore.Transaction,caller:string,scope:PartnerBookingScope,courseId:string,mode:"read"|"mutate"){
  const membershipRef=db.collection("enterprise_authority_memberships").doc(scope.membershipId),organizationRef=db.collection("enterprise_organizations").doc(scope.organizationId),courseRef=db.collection("enterprise_courses").doc(courseId),bindingQuery=db.collection("enterprise_authority_bindings").doc(caller).collection("memberships").where("membershipId","==",scope.membershipId).limit(2);
  const[membership,organization,course,binding]=await Promise.all([tx.get(membershipRef),tx.get(organizationRef),tx.get(courseRef),tx.get(bindingQuery)]);
  if(!membership.exists||!organization.exists||!course.exists||binding.size!==1||!activeAuthorityBinding(binding.docs[0].data()))throw new HttpsError("permission-denied","Booking unavailable.");
