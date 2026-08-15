@@ -23,9 +23,15 @@ import {
   buildPendingBookingOperation,
   buildUnsuccessfulBookingOperation,
   assertPendingBookingOperationClaim,
+  bookingMessageDigest,
+  bookingMessageOperationId,
+  bookingOperationId,
+  bookingRequestDigest,
+  bookingRequestOperationId,
   cancelledBookedCount,
   operationResponse,
   replayCompletedBookingOperation,
+  expirePendingBookingOperation,
   validateBookingOperationRequest,
 } from "./partnerBookingReplay.js";
 if (!admin.apps.length) admin.initializeApp();
@@ -163,6 +169,8 @@ export const requestPlayBookingV2 = onCall(
     const memberUid = uid(r),
       cmd = command(r),
       slotId = String(r.data?.slotId || "");
+    if (Object.keys(r.data || {}).some((key) => !["commandId", "slotId"].includes(key)))
+      throw new HttpsError("invalid-argument", "Booking request fields invalid.");
     try {
       assertNonFinancial(r.data);
     } catch {
@@ -173,13 +181,33 @@ export const requestPlayBookingV2 = onCall(
     }
     const slotRef = db.collection("tee_time_slots").doc(slotId),
       id = `booking_${slotId}_${memberUid}`,
-      ref = db.collection("bookings").doc(id);
+      ref = db.collection("bookings").doc(id),
+      requestDigest = bookingRequestDigest({ memberUid, slotId, commandId: cmd }),
+      operationRef = db.collection("play_booking_request_operations")
+        .doc(bookingRequestOperationId(memberUid, cmd));
     return db.runTransaction(async (tx) => {
-      const [slot, current, user] = await Promise.all([
+      const [slot, current, user, priorOperation] = await Promise.all([
         tx.get(slotRef),
         tx.get(ref),
         tx.get(db.collection("users").doc(memberUid)),
+        tx.get(operationRef),
       ]);
+      if (priorOperation.exists) {
+        const prior = priorOperation.data();
+        if (prior?.requestDigest !== requestDigest || prior?.memberUid !== memberUid ||
+            prior?.slotId !== slotId || prior?.commandId !== cmd)
+          throw new HttpsError("already-exists", "BOOKING_REQUEST_COMMAND_REUSE_CONFLICT");
+        if (prior?.state !== "completed" || prior?.immutable !== true ||
+            prior?.bookingId !== id || prior?.status !== "pending" ||
+            prior?.version !== 1 || prior?.receiptId !== bookingReceiptId(id, cmd) ||
+            !["queued", "PROVIDER_UNCONFIGURED"].includes(prior?.notificationStatus))
+          throw new HttpsError("failed-precondition", "BOOKING_REQUEST_AMBIGUOUS");
+        return {
+          success: true, bookingId: prior.bookingId, status: prior.status,
+          version: prior.version, receiptId: prior.receiptId,
+          notificationStatus: prior.notificationStatus,
+        };
+      }
       if (
         !slot.exists ||
         slot.data()?.status !== "open" ||
@@ -190,20 +218,15 @@ export const requestPlayBookingV2 = onCall(
           "Approved provider availability required.",
         );
       if (current.exists) {
-        if (current.data()?.commandId === cmd)
-          return {
-            success: true,
-            bookingId: id,
-            status: current.data()?.status,
-            restarted: true,
-          };
         throw new HttpsError("already-exists", "Booking exists.");
       }
       const booked = Number(slot.data()?.bookedCount || 0),
         capacity = Number(slot.data()?.capacity || 0);
       if (booked >= capacity)
         throw new HttpsError("resource-exhausted", "Availability full.");
-      const receiptId = bookingReceiptId(id, cmd);
+      const receiptId = bookingReceiptId(id, cmd),
+        notificationStatus = notifier.value() ? "queued" : "PROVIDER_UNCONFIGURED",
+        result = { bookingId: id, status: "pending", version: 1, receiptId, notificationStatus };
       tx.update(slotRef, { bookedCount: booked + 1, updatedAt: now() });
       tx.create(ref, {
         schema: BOOKING_SCHEMA,
@@ -224,22 +247,27 @@ export const requestPlayBookingV2 = onCall(
         createdAt: now(),
       });
       tx.create(db.collection("play_booking_audits").doc(receiptId), {
-        receiptId,
-        bookingId: id,
+        ...result,
+        schema: "golfriend.play-booking-request-receipt.v1",
+        state: "completed",
+        requestDigest,
+        memberUid,
+        slotId,
+        commandId: cmd,
         kind: "requested",
         actorRole: "member",
+        immutable: true,
         createdAt: now(),
+      });
+      tx.create(operationRef, {
+        ...result,
+        schema: "golfriend.play-booking-request-operation.v1",
+        state: "completed", requestDigest, memberUid, slotId, commandId: cmd,
+        immutable: true, createdAt: now(),
       });
       return {
         success: true,
-        bookingId: id,
-        status: "pending",
-        version: 1,
-        receiptId,
-        restarted: false,
-        notificationStatus: notifier.value()
-          ? "queued"
-          : "PROVIDER_UNCONFIGURED",
+        ...result,
       };
     });
   },
@@ -302,6 +330,24 @@ export const managePlayBookingV2 = onCall(
           courseClaim.data()?.status !== "active")
         throw new HttpsError("permission-denied", "Active claimed course required.");
       if (receipt.exists) {
+        if (receipt.data()?.state === "pending") {
+          try {
+            const ambiguous = expirePendingBookingOperation(receipt.data(), request, Date.now());
+            tx.set(receiptRef, { ...ambiguous, actorRole: scope.role, updatedAt: now() });
+            tx.update(ref, { [`operationLocks.${action}`]: {
+              operationId: ambiguous.operationId,
+              state: "ambiguous",
+              reason: ambiguous.reason,
+            } });
+            return { operationFailed: "OPERATION_AMBIGUOUS" };
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : "OPERATION_PENDING";
+            throw new HttpsError(
+              reason === "COMMAND_REUSE_CONFLICT" ? "already-exists" : "failed-precondition",
+              reason,
+            );
+          }
+        }
         try {
           return { response: operationResponse(
             replayCompletedBookingOperation(receipt.data(), request),
@@ -315,11 +361,23 @@ export const managePlayBookingV2 = onCall(
           throw new HttpsError("failed-precondition", reason);
         }
       }
+      const operationId = bookingOperationId(request),
+        actionLock = booking.data()?.operationLocks?.[action];
+      if (actionLock?.state === "pending" || actionLock?.state === "ambiguous")
+        throw new HttpsError(
+          "failed-precondition",
+          actionLock.state === "ambiguous" ? "OPERATION_AMBIGUOUS" : "OPERATION_PENDING",
+        );
       tx.create(receiptRef, {
         ...buildPendingBookingOperation(request, attemptToken, Date.now()),
         actorRole: scope.role,
         createdAt: now(),
       });
+      tx.update(ref, { [`operationLocks.${action}`]: {
+        operationId,
+        state: "pending",
+        receiptId,
+      } });
       return { claimed: true };
     });
     if ("response" in claimResult) return claimResult.response;
@@ -399,6 +457,7 @@ export const managePlayBookingV2 = onCall(
           actorRole: scope.role,
           createdAt: now(),
         });
+        tx.update(ref, { [`operationLocks.${action}`]: admin.firestore.FieldValue.delete() });
         return { operationFailed: "TRANSITION_DENIED" };
       }
       let next: number;
@@ -410,6 +469,7 @@ export const managePlayBookingV2 = onCall(
           actorRole: scope.role,
           createdAt: now(),
         });
+        tx.update(ref, { [`operationLocks.${action}`]: admin.firestore.FieldValue.delete() });
         return { operationFailed: "VERSION_CONFLICT" };
       }
       const previousStatus = String(booking.data()?.status),
@@ -437,6 +497,7 @@ export const managePlayBookingV2 = onCall(
             actorRole: scope.role,
             createdAt: now(),
           });
+          tx.update(ref, { [`operationLocks.${action}`]: admin.firestore.FieldValue.delete() });
           return { operationFailed: "ALTERNATIVE_SLOT_UNAVAILABLE" };
         }
       }
@@ -452,7 +513,12 @@ export const managePlayBookingV2 = onCall(
             actorRole: scope.role,
             createdAt: now(),
           });
-          return { operationFailed: "BOOKING_SLOT_BINDING_INVALID" };
+          tx.update(ref, { [`operationLocks.${action}`]: {
+            operationId: bookingOperationId(request),
+            state: "ambiguous",
+            reason: "BOOKING_SLOT_BINDING_INVALID",
+          } });
+          return { operationFailed: "OPERATION_AMBIGUOUS" };
         }
         tx.update(slotRef, {
           bookedCount: cancelledBookedCount(slot.data()?.bookedCount || 0),
@@ -465,6 +531,7 @@ export const managePlayBookingV2 = onCall(
         version: next,
         alternative: request.alternative,
         updatedAt: now(),
+        [`operationLocks.${action}`]: admin.firestore.FieldValue.delete(),
       });
       const operation = buildCompletedBookingOperation({
         request,
@@ -505,9 +572,11 @@ export const sendPlayBookingMessageV2 = onCall(
         .trim()
         .slice(0, 2000),
       booking = await db.collection("bookings").doc(id).get();
+    if (Object.keys(r.data || {}).some((key) => !["bookingId", "commandId", "message"].includes(key)))
+      throw new HttpsError("invalid-argument", "Booking message fields invalid.");
     if (!booking.exists || !text)
       throw new HttpsError("invalid-argument", "Booking message invalid.");
-    let role = "member";
+    let role = "member", staffScope: PartnerBookingScope | null = null;
     if (booking.data()?.memberUid !== caller) {
       const scope = await bookingScope(caller);
       if (
@@ -518,23 +587,55 @@ export const sendPlayBookingMessageV2 = onCall(
       )
         throw new HttpsError("permission-denied", "Message denied.");
       role = scope.role;
+      staffScope = scope;
     }
-    const messageId = bookingMessageId(id, cmd);
-    await db
-      .collection("bookings")
-      .doc(id)
-      .collection("messages")
-      .doc(messageId)
-      .create({ messageId, senderRole: role, message: text, createdAt: now() })
-      .catch((e: any) => {
-        if (e?.code !== 6) throw e;
+    const messageId = bookingMessageId(id, cmd),
+      digest = bookingMessageDigest({ actorUid: caller, bookingId: id, commandId: cmd, message: text }),
+      operationRef = db.collection("play_booking_message_operations")
+        .doc(bookingMessageOperationId(caller, cmd)),
+      messageRef = db.collection("bookings").doc(id).collection("messages").doc(messageId),
+      bookingRef = db.collection("bookings").doc(id);
+    return db.runTransaction(async (tx) => {
+      const [currentBooking, priorOperation, priorMessage] = await Promise.all([
+        tx.get(bookingRef), tx.get(operationRef), tx.get(messageRef),
+      ]);
+      if (!currentBooking.exists ||
+          (staffScope
+            ? currentBooking.data()?.organizationId !== staffScope.organizationId ||
+              !staffScope.courseIds.includes(String(currentBooking.data()?.courseId))
+            : currentBooking.data()?.memberUid !== caller))
+        throw new HttpsError("permission-denied", "Message denied.");
+      if (priorOperation.exists) {
+        const prior = priorOperation.data();
+        if (prior?.requestDigest !== digest || prior?.actorUid !== caller ||
+            prior?.bookingId !== id || prior?.commandId !== cmd)
+          throw new HttpsError("already-exists", "BOOKING_MESSAGE_COMMAND_REUSE_CONFLICT");
+        if (prior?.state !== "completed" || prior?.immutable !== true ||
+            prior?.schema !== "golfriend.play-booking-message-operation.v1" ||
+            prior?.messageId !== messageId || !priorMessage.exists ||
+            priorMessage.data()?.requestDigest !== digest ||
+            priorMessage.data()?.actorUid !== caller ||
+            priorMessage.data()?.message !== text ||
+            !["queued", "PROVIDER_UNCONFIGURED"].includes(prior?.notificationStatus))
+          throw new HttpsError("failed-precondition", "BOOKING_MESSAGE_AMBIGUOUS");
+        return { success: true, messageId, notificationStatus: prior.notificationStatus };
+      }
+      if (priorMessage.exists)
+        throw new HttpsError("already-exists", "BOOKING_MESSAGE_COMMAND_REUSE_CONFLICT");
+      const notificationStatus = notifier.value() ? "queued" : "PROVIDER_UNCONFIGURED";
+      tx.create(messageRef, {
+        messageId, senderRole: role, actorUid: caller, requestDigest: digest,
+        message: text, createdAt: now(),
       });
-    await db.collection("bookings").doc(id).update({ lastMessageAt: now() });
-    return {
-      success: true,
-      messageId,
-      notificationStatus: notifier.value() ? "queued" : "PROVIDER_UNCONFIGURED",
-    };
+      tx.create(operationRef, {
+        schema: "golfriend.play-booking-message-operation.v1",
+        state: "completed", actorUid: caller, bookingId: id, commandId: cmd,
+        requestDigest: digest, messageId, notificationStatus,
+        immutable: true, createdAt: now(),
+      });
+      tx.update(bookingRef, { lastMessageAt: now() });
+      return { success: true, messageId, notificationStatus };
+    });
   },
 );
 export const getPlayBookingsPortalV2 = onCall(

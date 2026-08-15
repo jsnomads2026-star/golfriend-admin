@@ -64,6 +64,12 @@ const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const ID = /^[A-Za-z0-9_-]{1,200}$/;
 const CONFIRMATION = /^[A-Za-z0-9_-]{16,200}$/;
+const NOTIFICATION = new Set(["queued", "PROVIDER_UNCONFIGURED"]);
+const TRANSITIONS: Record<BookingOperationAction, Record<string, string>> = {
+  confirm: { pending: "confirmed", alternative_proposed: "confirmed" },
+  alternative: { pending: "alternative_proposed" },
+  cancel: { pending: "cancelled", alternative_proposed: "cancelled", confirmed: "cancelled" },
+};
 
 export function bookingOperationId(input: Pick<BookingOperationRequest,
   "actorUid" | "bookingId" | "action" | "commandId">) {
@@ -231,6 +237,23 @@ export function assertPendingBookingOperationClaim(
     throw new Error("OPERATION_CLAIM_MISMATCH");
 }
 
+export function expirePendingBookingOperation(
+  stored: unknown,
+  request: BookingOperationRequest,
+  nowMs: number,
+) {
+  const value = stored as Partial<UnsuccessfulBookingOperation> | null;
+  if (!value || value.state !== "pending" ||
+      !Number.isSafeInteger(nowMs) ||
+      !Number.isSafeInteger(value.leaseExpiresAtMs) ||
+      Number(value.leaseExpiresAtMs) > nowMs)
+    throw new Error("OPERATION_PENDING");
+  if (value.operationId !== bookingOperationId(request) ||
+      value.requestDigest !== bookingOperationRequestDigest(request))
+    throw new Error("COMMAND_REUSE_CONFLICT");
+  return buildUnsuccessfulBookingOperation(request, "ambiguous", "PENDING_LEASE_EXPIRED");
+}
+
 export function replayCompletedBookingOperation(
   stored: unknown,
   request: BookingOperationRequest,
@@ -254,7 +277,18 @@ export function replayCompletedBookingOperation(
   }
   if (!Number.isInteger(value.previousVersion) ||
       value.version !== Number(value.previousVersion) + 1 ||
-      !value.receiptId || !value.status || value.immutable !== true)
+      value.previousVersion !== request.expectedVersion ||
+      TRANSITIONS[request.action]?.[String(value.previousStatus)] !== value.status ||
+      value.receiptId !== `pbr_${hash(`${request.bookingId}|${request.commandId}`).slice(0, 32)}` ||
+      !NOTIFICATION.has(String(value.notificationStatus)) ||
+      !ID.test(String(value.slotId || "")) ||
+      value.slotMutationApplied !== (request.action === "cancel") ||
+      value.confirmationTokenDigest !== (request.confirmationToken ? hash(request.confirmationToken) : null) ||
+      (request.alternative
+        ? value.alternative?.slotId !== request.alternative.slotId ||
+          value.alternative?.messageDigest !== hash(request.alternative.message)
+        : value.alternative !== null) ||
+      value.immutable !== true)
     throw new Error("OPERATION_AMBIGUOUS");
   return value as CompletedBookingOperation;
 }
@@ -276,3 +310,12 @@ export function cancelledBookedCount(current: unknown) {
     throw new Error("SLOT_COUNT_INVALID");
   return Math.max(0, count - 1);
 }
+
+export const bookingRequestDigest = (input: { memberUid: string; slotId: string; commandId: string }) =>
+  hash(JSON.stringify(input));
+export const bookingMessageDigest = (input: { actorUid: string; bookingId: string; commandId: string; message: string }) =>
+  hash(JSON.stringify(input));
+export const bookingRequestOperationId = (memberUid: string, commandId: string) =>
+  `pbq_${hash(`${memberUid}|${commandId}`).slice(0, 40)}`;
+export const bookingMessageOperationId = (actorUid: string, commandId: string) =>
+  `pbx_${hash(`${actorUid}|${commandId}`).slice(0, 40)}`;

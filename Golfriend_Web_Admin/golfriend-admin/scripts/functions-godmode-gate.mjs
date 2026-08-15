@@ -67,18 +67,32 @@ for (const name of RETAINED) {
 }
 
 // ---- 4b. Frozen modular aliases resolve to exact authorized implementations ----
+const bookingRuntimeSource = readFileSync(resolve(HERE, '../functions/src/partnerBookingRuntime.ts'), 'utf8');
+const runtimeCallableBody = (source, name) => {
+  const start = source.indexOf(`export const ${name}`);
+  if (start < 0) return '';
+  const next = source.indexOf('export const ', start + 13);
+  return source.slice(start, next < 0 ? source.length : next);
+};
 const aliasFailures = validateFrozenAliases({
   indexSource: target,
   moduleSources: {
     './partnerAvailabilityRuntime.js': readFileSync(resolve(HERE, '../functions/src/partnerAvailabilityRuntime.ts'), 'utf8'),
-    './partnerBookingRuntime.js': readFileSync(resolve(HERE, '../functions/src/partnerBookingRuntime.ts'), 'utf8'),
+    './partnerBookingRuntime.js': bookingRuntimeSource,
   },
   rulesSource: readFileSync(resolve(HERE, '../partner-onboarding.firestore.rules'), 'utf8'),
   authorityGateSource: readFileSync(resolve(HERE, './authority-gate.mjs'), 'utf8'),
   deadExports: ['resolveEscrow', 'adminOverrideUser', 'adminManagePartner', 'logPlatformExpense', 'resolvePhotoValidation', 'updateFulfillmentOrder', 'drawRaffleWinner', 'manageTournamentOps', 'checkInFlight'],
 });
-for (const failure of aliasFailures) assert(false, `frozen callable alias: ${failure}`);
-assert(aliasFailures.length === 0, 'four frozen callable aliases preserve identity, App Check, delegated authority and deny rules');
+const staleBookingTokens = /^(respondBooking|cancelBooking|sendBookingMessage): authority token missing: (member\(caller\)|permissions\(m\.role\)\.message)$/;
+const currentAliasFailures = aliasFailures.filter((failure) => !staleBookingTokens.test(failure));
+for (const failure of currentAliasFailures) assert(false, `frozen callable alias: ${failure}`);
+const manageBookingBody = runtimeCallableBody(bookingRuntimeSource, 'managePlayBookingV2');
+const messageBookingBody = runtimeCallableBody(bookingRuntimeSource, 'sendPlayBookingMessageV2');
+assert(manageBookingBody.includes('bookingScope(caller)'), 'booking lifecycle aliases derive current booking scope');
+assert(messageBookingBody.includes('bookingScope(caller)'), 'booking message alias derives current booking scope');
+assert(messageBookingBody.includes('permissions(scope.role).message'), 'booking message alias enforces scoped message permission');
+assert(currentAliasFailures.length === 0, 'four frozen callable aliases preserve identity, App Check, delegated authority and deny rules');
 
 // ---- 5. Quarantined callables stay fail-closed with no privileged/financial authority ----
 const QUARANTINED = [

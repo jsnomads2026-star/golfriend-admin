@@ -28,7 +28,10 @@ t("cancellation", () => assert.match(domain, /cancelled/));
 t("completion", () => assert.match(domain, /completed/));
 t("messages", () => assert.match(runtime, /sendPlayBookingMessageV2/));
 t("versions", () => assert.match(runtime, /version\(/));
-t("idempotent request", () => assert.match(runtime, /restarted:\s*true/));
+t("idempotent request", () => {
+  assert.match(runtime, /play_booking_request_operations/);
+  assert.match(runtime, /BOOKING_REQUEST_COMMAND_REUSE_CONFLICT/);
+});
 t("immutable operation receipts", () => {
   assert.match(runtime, /replayCompletedBookingOperation/);
   assert.match(runtime, /tx\.create\(receiptRef/);
@@ -47,6 +50,22 @@ t("same-command replay binding", () => {
 t("ambiguous operation fails closed", () => {
   assert.match(replay, /OPERATION_PENDING/);
   assert.match(replay, /OPERATION_AMBIGUOUS/);
+});
+t("pending expiry and booking action lock", () => {
+  assert.match(runtime, /expirePendingBookingOperation/);
+  assert.match(runtime, /operationLocks\.\$\{action\}/);
+  assert.match(runtime, /OPERATION_AMBIGUOUS/);
+});
+t("request exact immutable replay", () => {
+  assert.match(runtime, /play_booking_request_operations/);
+  assert.match(runtime, /prior\?\.receiptId !== bookingReceiptId/);
+  assert.match(runtime, /BOOKING_REQUEST_COMMAND_REUSE_CONFLICT/);
+});
+t("message actor payload replay", () => {
+  assert.match(runtime, /bookingMessageDigest/);
+  assert.match(runtime, /play_booking_message_operations/);
+  assert.match(runtime, /BOOKING_MESSAGE_COMMAND_REUSE_CONFLICT/);
+  assert.ok(runtime.indexOf("if (priorOperation.exists)", runtime.indexOf("sendPlayBookingMessageV2")) < runtime.indexOf("lastMessageAt: now()", runtime.indexOf("sendPlayBookingMessageV2")));
 });
 t("cancel slot binding", () =>
   assert.match(runtime, /BOOKING_SLOT_BINDING_INVALID/),
