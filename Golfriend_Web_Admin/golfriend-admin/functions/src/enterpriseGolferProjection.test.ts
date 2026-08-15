@@ -5,6 +5,7 @@ import {join} from "node:path";
 import {
   GOLFER_LINK_DATA_CATEGORIES,
   minimumGolferLink,
+  publicGolferLinkState,
   rejectGolferAuthorityFields,
 } from "./enterpriseOperationsDomain.js";
 
@@ -50,4 +51,13 @@ test("expired acceptance is auditable but explicitly unsuccessful", () => {
   assert.match(runtime, /status:"rejected"/);
   assert.match(runtime, /return\{success:false,receiptId:rid,state:"expired"/);
   assert.match(runtime, /consentVersion:next,linkId:id,receiptId:rid/);
+});
+
+test("canonical revoked state translates to the actor-specific App contract", () => {
+  assert.equal(publicGolferLinkState("revoked", "verified_golfer"), "revoked_by_golfer");
+  assert.equal(publicGolferLinkState("revoked", "verified_course_staff"), "revoked_by_staff");
+  assert.equal(publicGolferLinkState("accepted", "verified_golfer"), "accepted");
+  const runtime = readFileSync(join(process.cwd(), "src", "enterpriseOperationsRuntime.ts"), "utf8");
+  assert.match(runtime, /state:publicGolferLinkState\(cmd\.data\(\)\?\.state,"verified_golfer"\)/);
+  assert.match(runtime, /state:publicGolferLinkState\(state,"verified_golfer"\)/);
 });
