@@ -1,6 +1,6 @@
-export const PLAY_BOOKING_MESSAGE_DRAFT_TYPES=Object.freeze(['request_received','alternative_proposed','booking_confirmed','booking_declined','booking_changed','booking_cancelled','booking_expired','tee_time_reminder','course_message']);
+export const PLAY_BOOKING_MESSAGE_DRAFT_TYPES=Object.freeze(['request_received','information_needed','alternative_proposed','confirmed','declined','cancellation_received','cancellation_accepted','cancellation_declined','manual_support_required']);
 const TYPES=new Set(PLAY_BOOKING_MESSAGE_DRAFT_TYPES),LOCALES=new Set(['en','th','ko','ja','zh','es','fr','de']),STATUSES=new Set(['pending','changed','confirmed','rejected','cancelled','expired']);
-const TYPE_STATUS=Object.freeze({request_received:['pending'],alternative_proposed:['changed'],booking_confirmed:['confirmed'],booking_declined:['rejected'],booking_changed:['changed'],booking_cancelled:['cancelled'],booking_expired:['expired'],tee_time_reminder:['confirmed'],course_message:['pending','changed','confirmed']});
+const TYPE_STATUS=Object.freeze({request_received:['pending'],information_needed:['pending'],alternative_proposed:['changed'],confirmed:['confirmed'],declined:['rejected'],cancellation_received:['pending','changed','confirmed'],cancellation_accepted:['cancelled'],cancellation_declined:['pending','changed','confirmed'],manual_support_required:['pending','changed','confirmed','rejected','cancelled','expired']});
 const ID=/^[A-Za-z0-9][A-Za-z0-9:_-]{1,159}$/,DATE=/^\d{4}-\d{2}-\d{2}$/,TIME=/^([01]\d|2[0-3]):[0-5]\d$/,ZONE=/^(UTC|[A-Za-z_]+\/[A-Za-z0-9_+.-]+)$/;
 const PRIVATE=/(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|(?:\+?\d[\s().-]*){7,}|https?:\/\/)/i;
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
