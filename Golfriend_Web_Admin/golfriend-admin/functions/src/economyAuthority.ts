@@ -179,6 +179,7 @@ export const settleEconomyAction = onCall({ memory: "256MiB" }, async (request) 
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       };
       tx.create(ledgerRef, entry);
+      tx.create(walletRef.collection("entries").doc(ledgerRef.id), entry);
       tx.set(walletRef, {
         uid,
         balanceTees: balanceAfter,
@@ -190,4 +191,140 @@ export const settleEconomyAction = onCall({ memory: "256MiB" }, async (request) 
   } catch (error) {
     return asHttpsError(error);
   }
+});
+
+
+export const getEconomyWallet = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Authentication required.");
+  const uid = request.auth.uid;
+  const requestedUid = typeof request.data?.uid === "string" ? request.data.uid : uid;
+  if (requestedUid !== uid) await requireDirector(uid);
+
+  const walletRef = WALLETS.doc(requestedUid);
+  const [wallet, entries] = await Promise.all([
+    walletRef.get(),
+    walletRef.collection("entries").orderBy("createdAt", "desc").limit(50).get(),
+  ]);
+  return {
+    uid: requestedUid,
+    balanceTees: wallet.exists ? Number(wallet.data()?.balanceTees ?? 0) : 0,
+    entries: entries.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+  };
+});
+
+export const refundEconomyTransaction = onCall({ memory: "256MiB" }, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Authentication required.");
+  await requireDirector(request.auth.uid);
+
+  try {
+    const originalLedgerId = typeof request.data?.ledgerId === "string" ? request.data.ledgerId : "";
+    const reason = typeof request.data?.reason === "string" ? request.data.reason.trim() : "";
+    if (!originalLedgerId || reason.length < 8 || reason.length > 500) throw new Error("INVALID_REFUND_REQUEST");
+
+    const originalRef = LEDGER.doc(originalLedgerId);
+    const refundRef = LEDGER.doc(`refund_${originalLedgerId}`);
+    const auditRef = db.collection("economy_refund_audit").doc(originalLedgerId);
+
+    return await db.runTransaction(async (tx) => {
+      const original = await tx.get(originalRef);
+      if (!original.exists) throw new HttpsError("not-found", "ECONOMY_TRANSACTION_NOT_FOUND");
+      const originalData = original.data()!;
+      if (typeof originalData.uid !== "string" || Number(originalData.netTees) >= 0) {
+        throw new HttpsError("failed-precondition", "TRANSACTION_NOT_REFUNDABLE");
+      }
+
+      const walletRef = WALLETS.doc(originalData.uid);
+      const [existingRefund, wallet] = await Promise.all([tx.get(refundRef), tx.get(walletRef)]);
+      if (existingRefund.exists) return { success: true, replay: true, ...existingRefund.data() };
+
+      const refundTees = Math.abs(Number(originalData.netTees));
+      const balanceBefore = wallet.exists ? Number(wallet.data()?.balanceTees ?? 0) : 0;
+      if (!Number.isSafeInteger(balanceBefore) || balanceBefore < 0) throw new HttpsError("data-loss", "INVALID_WALLET_BALANCE");
+      const balanceAfter = balanceBefore + refundTees;
+      const entry = {
+        uid: originalData.uid,
+        type: "REFUND",
+        actionId: originalData.actionId,
+        originalLedgerId,
+        rateVersion: originalData.rateVersion,
+        debitTees: 0,
+        rewardTees: refundTees,
+        netTees: refundTees,
+        balanceBefore,
+        balanceAfter,
+        revenueUsd: -Number(originalData.revenueUsd ?? 0),
+        directCostUsd: 0,
+        marginUsd: -Number(originalData.marginUsd ?? 0),
+        reason,
+        actorUid: request.auth!.uid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      tx.create(refundRef, entry);
+      tx.create(walletRef.collection("entries").doc(refundRef.id), entry);
+      tx.create(auditRef, {
+        originalLedgerId,
+        refundLedgerId: refundRef.id,
+        uid: originalData.uid,
+        refundTees,
+        reason,
+        actorUid: request.auth!.uid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.set(walletRef, {
+        uid: originalData.uid,
+        balanceTees: balanceAfter,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastLedgerId: refundRef.id,
+      }, { merge: true });
+      return { success: true, replay: false, ...entry, createdAt: new Date().toISOString() };
+    });
+  } catch (error) {
+    return asHttpsError(error);
+  }
+});
+
+export const getEconomyProfitability = onCall({ memory: "256MiB", timeoutSeconds: 60 }, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Authentication required.");
+  await requireDirector(request.auth.uid);
+
+  const sinceRaw = typeof request.data?.since === "string" ? request.data.since : "";
+  const sinceDate = sinceRaw ? new Date(sinceRaw) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(sinceDate.getTime())) throw new HttpsError("invalid-argument", "INVALID_SINCE");
+
+  const snapshot = await LEDGER.where("createdAt", ">=", admin.firestore.Timestamp.fromDate(sinceDate))
+    .orderBy("createdAt", "desc")
+    .limit(5000)
+    .get();
+
+  const byAction: Record<string, { transactions: number; debitTees: number; rewardTees: number; revenueUsd: number; directCostUsd: number; marginUsd: number }> = {};
+  for (const doc of snapshot.docs) {
+    const row = doc.data();
+    const actionId = typeof row.actionId === "string" ? row.actionId : "unknown";
+    const bucket = byAction[actionId] ?? { transactions: 0, debitTees: 0, rewardTees: 0, revenueUsd: 0, directCostUsd: 0, marginUsd: 0 };
+    bucket.transactions += 1;
+    bucket.debitTees += Number(row.debitTees ?? 0);
+    bucket.rewardTees += Number(row.rewardTees ?? 0);
+    bucket.revenueUsd += Number(row.revenueUsd ?? 0);
+    bucket.directCostUsd += Number(row.directCostUsd ?? 0);
+    bucket.marginUsd += Number(row.marginUsd ?? 0);
+    byAction[actionId] = bucket;
+  }
+
+  const totals = Object.values(byAction).reduce((sum, row) => ({
+    transactions: sum.transactions + row.transactions,
+    debitTees: sum.debitTees + row.debitTees,
+    rewardTees: sum.rewardTees + row.rewardTees,
+    revenueUsd: sum.revenueUsd + row.revenueUsd,
+    directCostUsd: sum.directCostUsd + row.directCostUsd,
+    marginUsd: sum.marginUsd + row.marginUsd,
+  }), { transactions: 0, debitTees: 0, rewardTees: 0, revenueUsd: 0, directCostUsd: 0, marginUsd: 0 });
+
+  return {
+    since: sinceDate.toISOString(),
+    capped: snapshot.size === 5000,
+    totals,
+    byAction: Object.entries(byAction)
+      .map(([actionId, values]) => ({ actionId, ...values }))
+      .sort((a, b) => b.revenueUsd - a.revenueUsd),
+  };
 });
