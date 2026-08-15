@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import {
   quoteRate,
+  refundableTees,
   validateIdempotencyKey,
   validateRateCard,
   type AuthoritativeEconomyRate,
@@ -237,7 +238,7 @@ export const refundEconomyTransaction = onCall({ memory: "256MiB" }, async (requ
       const [existingRefund, wallet] = await Promise.all([tx.get(refundRef), tx.get(walletRef)]);
       if (existingRefund.exists) return { success: true, replay: true, ...existingRefund.data() };
 
-      const refundTees = Math.abs(Number(originalData.netTees));
+      const refundTees = refundableTees(originalData.netTees);
       const balanceBefore = wallet.exists ? Number(wallet.data()?.balanceTees ?? 0) : 0;
       if (!Number.isSafeInteger(balanceBefore) || balanceBefore < 0) throw new HttpsError("data-loss", "INVALID_WALLET_BALANCE");
       const balanceAfter = balanceBefore + refundTees;
