@@ -91,6 +91,10 @@ t("alternative slot authority binding", () => {
 t("notification unavailable", () =>
   assert.match(runtime, /PROVIDER_UNCONFIGURED/),
 );
+t("ambiguous operation exposes only its opaque recovery reference", () => {
+  assert.match(runtime, /reason === "OPERATION_AMBIGUOUS" \? \{ operationId: bookingOperationId\(request\) \} : undefined/);
+  assert.match(runtime, /\{ operationId: String\(actionLock\.operationId \|\| ""\) \}/);
+});
 t("financial fields denied", () => assert.match(runtime, /assertNonFinancial/));
 t("legacy exports reconciled", () => {
   assert.match(index, /managePlayBookingV2 as respondBooking/);

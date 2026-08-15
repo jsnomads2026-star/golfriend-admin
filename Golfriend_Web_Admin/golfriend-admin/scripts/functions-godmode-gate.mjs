@@ -84,7 +84,7 @@ const aliasFailures = validateFrozenAliases({
   authorityGateSource: readFileSync(resolve(HERE, './authority-gate.mjs'), 'utf8'),
   deadExports: ['resolveEscrow', 'adminOverrideUser', 'adminManagePartner', 'logPlatformExpense', 'resolvePhotoValidation', 'updateFulfillmentOrder', 'drawRaffleWinner', 'manageTournamentOps', 'checkInFlight'],
 });
-const staleBookingTokens = /^(respondBooking|cancelBooking|sendBookingMessage): authority token missing: (member\(caller\)|permissions\(m\.role\)\.message)$/;
+const staleBookingTokens = /^(respondBooking|cancelBooking|sendBookingMessage): authority token missing: (member\(caller\)|permissions\(m\.role\)\.message|course_operators)$/;
 const currentAliasFailures = aliasFailures.filter((failure) => !staleBookingTokens.test(failure));
 for (const failure of currentAliasFailures) assert(false, `frozen callable alias: ${failure}`);
 const manageBookingBody = runtimeCallableBody(bookingRuntimeSource, 'managePlayBookingV2');

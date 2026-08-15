@@ -328,6 +328,7 @@ export const managePlayBookingV2 = onCall(
         throw new HttpsError(
           "failed-precondition",
           actionLock.state === "ambiguous" ? "OPERATION_AMBIGUOUS" : "OPERATION_PENDING",
+          { operationId: String(actionLock.operationId || "") },
         );
       tx.create(receiptRef, {
         ...buildPendingBookingOperation(request, attemptToken, Date.now()),
@@ -348,6 +349,7 @@ export const managePlayBookingV2 = onCall(
       throw new HttpsError(
         reason === "VERSION_CONFLICT" ? "aborted" : "failed-precondition",
         reason,
+        reason === "OPERATION_AMBIGUOUS" ? { operationId: bookingOperationId(request) } : undefined,
       );
     }
     const outcome = await db.runTransaction(async (tx) => {
@@ -484,6 +486,7 @@ export const managePlayBookingV2 = onCall(
       throw new HttpsError(
         reason === "VERSION_CONFLICT" ? "aborted" : "failed-precondition",
         reason,
+        reason === "OPERATION_AMBIGUOUS" ? { operationId: bookingOperationId(request) } : undefined,
       );
     }
     return outcome;
