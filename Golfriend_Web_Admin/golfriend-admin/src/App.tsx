@@ -57,6 +57,7 @@ import V2PartnerApplications from './components/admin/v2/V2PartnerApplications';
 import V2PartnerAuthority from './components/admin/v2/V2PartnerAuthority';
 import V2EnterpriseMemberRequests from './components/admin/v2/V2EnterpriseMemberRequests';
 import V2SmallBusinessReview from './components/admin/v2/V2SmallBusinessReview';
+import V2SmallBusinessReadiness from './components/admin/v2/V2SmallBusinessReadiness';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -259,6 +260,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'partners' && <V2PartnerOperations />}
     {activeArea === 'partners' && <V2EnterpriseMemberRequests />}
     {activeArea === 'partners' && <V2SmallBusinessReview />}
+    {activeArea === 'partners' && <V2SmallBusinessReadiness />}
     {activeArea === 'partners' && <PartnerIngestion />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}
     {activeArea === 'advertising' && <SponsorDashboard />}
