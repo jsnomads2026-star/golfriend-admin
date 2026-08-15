@@ -1,7 +1,7 @@
 import *as admin from "firebase-admin";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {resolveEnterpriseCourseAuthority} from "./enterpriseAuthorityRuntime.js";
-import {ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, MEMBER_STATES, commandId, invitationTransition, memberDigest, minimumMember, minimumReceipt, minimumRequest, normalizeChange, normalizeInvitation, page, previewCsv, receiptId, scopeId, strictCommand, strictVersion} from "./enterpriseMemberManagementDomain.js";
+import {ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, MEMBER_STATES, commandId, invitationTransition, memberDigest, minimumMember, minimumReceipt, minimumRequest, normalizeChange, normalizeInvitation, page, previewCsv, receiptId, requireMemberChangeSource, scopeId, strictCommand, strictVersion} from "./enterpriseMemberManagementDomain.js";
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(), stamp = () => admin.firestore.FieldValue.serverTimestamp();
 const fail = (e: any): never => {if (e instanceof HttpsError) throw e;
@@ -56,6 +56,7 @@ if (member.exists && (m.organizationId !== s.scope.organizationId || m.propertyI
 if (action === "invitation" && member.exists) throw new HttpsError("already-exists", "Existing member requires conflict review.");
 if (action === "resend" && (!member.exists || !["awaiting_delivery_provider", "invited"].includes(m.state))) throw new HttpsError("failed-precondition", "Reminder unavailable.");
 if (action === "change" && (!member.exists || m.version !== (payload as any).currentMemberVersion)) throw new HttpsError("aborted", "STALE_MEMBER_VERSION");
+if (action === "change") {try {requireMemberChangeSource((payload as any).type,m.state)} catch {throw new HttpsError("failed-precondition","MEMBER_STATE_TRANSITION_DENIED")}}
 const expires = admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 86400000), status = action === "invitation" || action === "resend" ? "awaiting_delivery_provider" : "change_requested";
 tx.create(requestRef(s.sid, reqId), {schema: ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, requestId: reqId, action, ...payload, organizationId: s.scope.organizationId, propertyId: s.scope.propertyId, courseId: s.scope.courseId, representativeMembershipId: s.scope.membershipId, authoritySourceVersion: s.authority.sourceVersion, status, version: 1, commandDigest: digest, expiresAt: expires, createdAt: stamp(), immutableSubmission: true});
 tx.create(db.collection("enterprise_member_management_receipts").doc(rid), {schema: ENTERPRISE_MEMBER_MANAGEMENT_SCHEMA, receiptId: rid, requestId: reqId, action, status, organizationId: s.scope.organizationId, propertyId: s.scope.propertyId, courseId: s.scope.courseId, representativeMembershipId: s.scope.membershipId, locale: payload.locale, purpose: payload.purpose, commandDigest: digest, occurredAt: stamp(), immutable: true});
