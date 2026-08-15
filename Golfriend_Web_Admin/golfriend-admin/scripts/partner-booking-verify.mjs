@@ -19,6 +19,8 @@ t("eight App Check callables", () =>
   assert.equal((runtime.match(/enforceAppCheck:\s*true/g) || []).length, 8),
 );
 t("server confirmation and reconciliation",()=>{for(const name of["previewPlayBookingActionV2","getPlayBookingOperationV2","reconcilePlayBookingOperationV2"])assert.match(runtime,new RegExp(name));assert.match(runtime,/play_booking_confirmation_tokens/);assert.match(runtime,/play_booking_reconciliation_tokens/);assert.match(runtime,/transactionBookingAuthority/)});
+t("enterprise correlation intake is App Check protected and publisher fail closed",()=>{const source=r("functions/src/enterpriseBookingCorrelationRuntime.ts");assert.match(source,/intakeEnterpriseBookingCorrelationV2=onCall\(\{enforceAppCheck:true/);assert.match(source,/golfer_correlation_authority_unavailable/);assert.doesNotMatch(source,/collection\("play_bookings"\)/)});
+t("token recovery is App Check protected and uncommissioned without its signer",()=>{const source=r("functions/src/partnerBookingTokenRecoveryRuntime.ts");assert.match(source,/recoverPlayBookingConfirmationV2=onCall\(\{enforceAppCheck:true/);assert.match(source,/booking_token_recovery_authority_unavailable/)});
 t("derived delegated scope", () => assert.match(runtime, /bookingScope\(caller\)/));
 t("exact enterprise course authority", () => assert.match(runtime, /resolveEnterpriseBookingCourseAuthority/));
 t("privacy projection", () => assert.match(runtime, /safeBooking/));
