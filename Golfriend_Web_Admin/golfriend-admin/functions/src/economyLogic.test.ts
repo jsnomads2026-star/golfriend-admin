@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { quoteRate, validateIdempotencyKey, validateRateCard } from "./economyLogic.js";
+import { quoteRate, refundableTees, validateIdempotencyKey, validateRateCard } from "./economyLogic.js";
 
 const rates = validateRateCard([
   { id: "chat.summary", section: "Chat", label: "Thread summary", mode: "fixed", tees: 3, directCostUsd: 0.04, rewardTees: 0, active: true },
@@ -24,5 +24,8 @@ assert.throws(() => validateIdempotencyKey("../unsafe"), /INVALID_IDEMPOTENCY_KE
 assert.throws(() => validateRateCard([rates[0], rates[0]]), /DUPLICATE_RATE_ID/);
 assert.throws(() => validateRateCard([{ ...rates[0], mode: "free", tees: 1 }]), /FREE_RATE_MUST_COST_ZERO/);
 assert.throws(() => quoteRate({ ...rates[0], active: false }, "v1", 0.10), /RATE_INACTIVE/);
+assert.equal(refundableTees(-25), 25);
+assert.throws(() => refundableTees(0), /TRANSACTION_NOT_REFUNDABLE/);
+assert.throws(() => refundableTees(1), /TRANSACTION_NOT_REFUNDABLE/);
 
 console.log("economyLogic: all assertions passed");
