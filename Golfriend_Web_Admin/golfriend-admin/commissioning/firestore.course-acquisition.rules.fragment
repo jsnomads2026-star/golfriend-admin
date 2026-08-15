@@ -1,0 +1,16 @@
+// course-acquisition-rules.v1
+// Merge this fragment into the deployment-owned canonical ruleset at the exact
+// base recorded in course-acquisition.config.json. Never deploy as a standalone
+// ruleset; the verifier rejects an unintegrated target.
+match /golf_api_quota/{document=**} { allow read, write: if false; }
+match /golf_api_quota_receipts/{document=**} { allow read, write: if false; }
+match /golf_api_quota_overrides/{document=**} { allow read, write: if false; }
+match /course_acquisition_candidates/{document=**} { allow read, write: if false; }
+match /course_provider_attempts/{document=**} { allow read, write: if false; }
+match /course_provider_evidence/{document=**} { allow read, write: if false; }
+match /course_acquisition_reviews/{document=**} { allow read, write: if false; }
+match /course_publication_receipts/{document=**} { allow read, write: if false; }
+match /course_correction_requests/{document=**} { allow read, write: if false; }
+// Canonical course mutation remains server-callable only. Preserve the existing
+// canonical public read projection from the owning ruleset; never add client write.
+match /courses/{courseId} { allow write: if false; }

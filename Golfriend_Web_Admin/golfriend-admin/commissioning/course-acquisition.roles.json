@@ -1,0 +1,13 @@
+{
+  "schema": "golfriend.course-acquisition-role-manifest.v1",
+  "roles": [
+    {"role":"course_catalogue_viewer","permissions":["dashboard.read","planner.preview"],"assignment":"REQUIRED_OPERATOR_ASSIGNMENT"},
+    {"role":"course_acquisition_operator","permissions":["dashboard.read","planner.preview","candidate.acquire"],"assignment":"REQUIRED_OPERATOR_ASSIGNMENT"},
+    {"role":"course_catalogue_reviewer","permissions":["dashboard.read","candidate.review","candidate.reject","candidate.request_evidence"],"assignment":"REQUIRED_OPERATOR_ASSIGNMENT"},
+    {"role":"course_catalogue_approver","permissions":["dashboard.read","canonical.publish"],"assignment":"REQUIRED_DISTINCT_OPERATOR_ASSIGNMENT"},
+    {"role":"course_quota_override_approver","permissions":["dashboard.read","quota.override.approve","quota.reconcile"],"assignment":"REQUIRED_DISTINCT_OPERATOR_ASSIGNMENT"}
+  ],
+  "separationOfDuties":{"reviewerMustDifferFromApprover":true,"overrideApproverMustDifferFromOperator":true},
+  "callableOwners":{"security":"REQUIRED_SECURITY_OWNER","functions":"REQUIRED_BACKEND_OWNER","sharedProviderConsumers":"REQUIRED_SHARED_PROVIDER_OWNER","firestoreRules":"REQUIRED_FIRESTORE_OWNER","adminUi":"REQUIRED_ADMIN_APP_OWNER","incidentRollback":"REQUIRED_INCIDENT_OWNER"},
+  "revocation":{"procedure":["Set admin_users status to Suspended using the approved identity authority.","Remove the acquisition role assignment.","Revoke open override approvals for the actor.","Review immutable command receipts for in-flight work.","Do not delete audit evidence."],"sla":"OPERATOR_MUST_ASSIGN"}
+}

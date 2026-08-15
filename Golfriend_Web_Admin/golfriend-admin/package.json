@@ -37,6 +37,7 @@
     "verify:e6-user-analytics": "node scripts/e6-country-user-analytics-verify.mjs",
     "verify:e6-tee-analytics": "node scripts/e6-tee-economy-analytics-verify.mjs",
     "verify:course-acquisition": "node scripts/course-acquisition-verify.mjs",
+    "verify:course-acquisition-commissioning": "node scripts/course-acquisition-config.test.mjs && node scripts/course-acquisition-deployment.test.mjs && node scripts/verify-course-acquisition-artifacts.test.mjs && node scripts/course-acquisition-rules.test.mjs && node scripts/course-acquisition-commissioning-verify.mjs && node scripts/course-acquisition-secret-scan.mjs",
     "verify:marketing-library": "node scripts/marketing-library-verify.mjs",
     "verify:partner-operations": "node scripts/partner-operations-verify.mjs",
     "verify:reports-foundation": "node scripts/reports-foundation-verify.mjs",

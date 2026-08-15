@@ -1,0 +1,12 @@
+{
+  "schema":"golfriend.course-acquisition-deployment.v1",
+  "projectId":"REQUIRED_PROJECT_ID",
+  "environment":"REQUIRED_ENVIRONMENT",
+  "integratedRules":{"repository":"golfriend-pl001-integration","repositoryPath":"REQUIRED_INTEGRATED_RULES_REPOSITORY_PATH","commit":"REQUIRED_INTEGRATED_RULES_COMMIT","path":"REQUIRED_INTEGRATED_RULES_PATH","sha256":"REQUIRED_INTEGRATED_RULES_SHA256","firebaseConfig":"REQUIRED_INTEGRATED_FIREBASE_CONFIG"},
+  "rollbackRules":{"repositoryPath":"REQUIRED_PRIOR_RULES_REPOSITORY_PATH","commit":"REQUIRED_PRIOR_RULES_COMMIT","path":"REQUIRED_PRIOR_RULES_PATH","sha256":"REQUIRED_PRIOR_RULES_SHA256","firebaseConfig":"REQUIRED_PRIOR_FIREBASE_CONFIG"},
+  "functions":{"sourcePath":"REQUIRED_CURRENT_FUNCTIONS_SOURCE","sourceCommit":"REQUIRED_CURRENT_FUNCTIONS_COMMIT","priorSourcePath":"REQUIRED_PRIOR_FUNCTIONS_SOURCE","priorSourceCommit":"REQUIRED_PRIOR_FUNCTIONS_COMMIT"},
+  "secretVersions":{"current":"REQUIRED_CURRENT_SECRET_VERSION","previous":"REQUIRED_PREVIOUS_SECRET_VERSION"},
+  "sharedSecretConsumers":["acquireCourseCandidates","nightlyCourseHealer","syncCoursesFromProvider"],
+  "sharedSecretOwner":"REQUIRED_SHARED_PROVIDER_SECRET_OWNER",
+  "evidenceOwner":"REQUIRED_DEPLOYMENT_EVIDENCE_OWNER"
+}

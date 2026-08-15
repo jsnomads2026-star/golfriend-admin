@@ -1,0 +1,61 @@
+{
+  "schema": "golfriend.course-acquisition-commissioning.v1",
+  "enabled": false,
+  "environment": "REPLACE_WITH_ENVIRONMENT",
+  "functions": {
+    "region": "asia-southeast1",
+    "runtime": "nodejs20",
+    "memory": "512MiB",
+    "timeoutSeconds": 120
+  },
+  "secret": {
+    "name": "GOLF_API_KEY",
+    "provider": "google-secret-manager",
+    "minimumBytes": 24
+  },
+  "quota": {
+    "schema": "golfriend.golf-api-quota.v2",
+    "defaultMonthlyBudget": 500,
+    "futureMonthlyBudget": 100,
+    "dailyLimit": 25,
+    "weeklyLimit": 100,
+    "emergencyReserve": 25,
+    "reservationTtlMinutes": 15,
+    "maxOverrideCalls": 10,
+    "maxOverridesPerMonth": 2,
+    "rollover": "no_carry",
+    "resetTimezone": "UTC"
+  },
+  "roles": {
+    "viewer": "course_catalogue_viewer",
+    "operator": "course_acquisition_operator",
+    "reviewer": "course_catalogue_reviewer",
+    "approver": "course_catalogue_approver",
+    "overrideApprover": "course_quota_override_approver",
+    "portalPartnerStatus": "active_partner"
+  },
+  "firestore": {
+    "rulesVersion": "course-acquisition-rules.v1",
+    "ownerRepository": "golfriend-pl001-integration",
+    "ownerRelativePath": "firestore.rules",
+    "canonicalRulesBaseCommit": "8f90c182c577fc7afb35c448725800d04a2b20e2",
+    "requiredCollections": [
+      "golf_api_quota",
+      "golf_api_quota_receipts",
+      "golf_api_quota_overrides",
+      "course_acquisition_candidates",
+      "course_provider_attempts",
+      "course_provider_evidence",
+      "course_acquisition_reviews",
+      "course_publication_receipts",
+      "course_correction_requests"
+    ]
+  },
+  "operatorAssignments": {
+    "viewer": "REQUIRED_OPERATOR_ASSIGNMENT",
+    "operator": "REQUIRED_OPERATOR_ASSIGNMENT",
+    "reviewer": "REQUIRED_OPERATOR_ASSIGNMENT",
+    "approver": "REQUIRED_DISTINCT_OPERATOR_ASSIGNMENT",
+    "overrideApprover": "REQUIRED_DISTINCT_OPERATOR_ASSIGNMENT"
+  }
+}

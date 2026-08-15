@@ -1,0 +1,12 @@
+{
+  "schema":"golfriend.course-acquisition-rules-cases.v1",
+  "cases":[
+    {"principal":"unauthenticated","collection":"course_acquisition_candidates","read":false,"write":false},
+    {"principal":"member","collection":"course_acquisition_candidates","read":false,"write":false},
+    {"principal":"portal_partner","collection":"course_correction_requests","read":false,"write":false,"note":"callable-only submission"},
+    {"principal":"admin_client","collection":"course_acquisition_reviews","read":false,"write":false,"note":"callable-only review"},
+    {"principal":"admin_client","collection":"courses","write":false},
+    {"principal":"portal_partner","collection":"courses","write":false},
+    {"principal":"missing_claims","collection":"golf_api_quota","read":false,"write":false}
+  ]
+}

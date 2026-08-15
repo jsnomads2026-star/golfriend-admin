@@ -1,0 +1,6 @@
+import {readConfig} from './course-acquisition-config.mjs';
+const args=process.argv.slice(2),configPath=args.find(x=>!x.startsWith('--')),dateArg=args.filter(x=>!x.startsWith('--'))[1],policy=args.includes('--future')?'future':'default',config=readConfig(configPath||undefined,{allowPlaceholders:true}),at=dateArg?new Date(dateArg):new Date();
+if(!Number.isFinite(at.getTime()))throw Error('DATE_INVALID');
+const month=at.toISOString().slice(0,7),day=at.toISOString().slice(0,10),d=new Date(Date.UTC(at.getUTCFullYear(),at.getUTCMonth(),at.getUTCDate()));d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));const y=new Date(Date.UTC(d.getUTCFullYear(),0,1)),week=`${d.getUTCFullYear()}-W${String(Math.ceil((((d.getTime()-y.getTime())/86400000)+1)/7)).padStart(2,'0')}`,q=config.quota,budget=policy==='future'?q.futureMonthlyBudget:q.defaultMonthlyBudget;
+if(q.weeklyLimit>budget||q.emergencyReserve>=budget)throw Error('QUOTA_POLICY_INVALID');
+console.log(JSON.stringify({schema:q.schema,enabled:false,month,configuredBudget:budget,emergencyReserve:q.emergencyReserve,reserved:0,completed:0,failed:0,released:0,dailyLimit:q.dailyLimit,weeklyLimit:q.weeklyLimit,daily:{key:day,used:0},weekly:{key:week,used:0},maxOverrideCalls:q.maxOverrideCalls,maxOverridesPerMonth:q.maxOverridesPerMonth,overridesUsed:0,reservationTtlMinutes:q.reservationTtlMinutes,version:1},null,2));
