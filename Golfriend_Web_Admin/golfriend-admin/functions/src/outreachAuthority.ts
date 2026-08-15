@@ -107,10 +107,16 @@ export interface PersistedDraft {
  * a reviewable act.
  */
 export const TRANSITION_EDGES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  draft_created: Object.freeze(["reviewer_assigned", "previewed", "revoked", "expired"]),
-  reviewer_assigned: Object.freeze(["previewed", "approved", "rejected", "changes_requested", "revoked", "expired"]),
+  // `reviewer_assigned` is deliberately NOT a target of any plain transition: it is reached
+  // only through assignReviewer, which is the command that actually records a reviewer.
+  // Allowing it here let a caller set the state with a null reviewer, so the record and its
+  // permanent receipt both attested an assignment that never happened.
+  draft_created: Object.freeze(["previewed", "revoked", "expired"]),
+  // A reviewer must PREVIEW before approving. Listing `approved` here made `previewed` a
+  // label nothing required passing through — a human approval nobody had to look at.
+  reviewer_assigned: Object.freeze(["previewed", "rejected", "changes_requested", "revoked", "expired"]),
   previewed: Object.freeze(["approved", "rejected", "changes_requested", "revoked", "expired"]),
-  changes_requested: Object.freeze(["reviewer_assigned", "previewed", "revoked", "expired"]),
+  changes_requested: Object.freeze(["previewed", "revoked", "expired"]),
   // An approval or rejection is final for that draft: reopening it would let a reviewer
   // launder a second decision through the same record and the same digest.
   approved: Object.freeze(["revoked", "expired"]),
@@ -328,7 +334,14 @@ export function decideTransition(input: TransitionInput): Decision {
 
   // An expiry that nothing enforces is worse than no expiry at all. Only the transition
   // that RECORDS the expiry is permitted once the deadline has passed.
-  const pastDeadline = !!record.expiresAt && isValidExpiry(record.expiresAt) && now > record.expiresAt;
+  // An UNPARSEABLE stored expiry is treated as PASSED, not as absent. Reading it as
+  // "not yet expired" fails OPEN twice over: the draft becomes immortal AND can never be
+  // closed as expired. Records written before expiry validation existed accepted any
+  // string, so "never" is exactly the legacy value at risk — and "never" sorts after every
+  // digit, so a raw comparison would report it as not yet reached, forever.
+  const hasExpiry = typeof record.expiresAt === "string" && record.expiresAt !== "";
+  const unparseableExpiry = hasExpiry && !isValidExpiry(record.expiresAt);
+  const pastDeadline = hasExpiry && (unparseableExpiry || now > (record.expiresAt as string));
   if (pastDeadline && requestedState !== "expired") return refuse("draft_expired");
   // `expired` is terminal, so without this it would be a revocation any staff member could
   // perform — the exact outcome the Director-only revoke gate exists to prevent. Recording
@@ -419,7 +432,11 @@ export function sendability(args: {
   if (!record) return { sendable: false, reason: "draft_not_found" };
   if (legalHold === null) return { sendable: false, reason: "legal_hold_unknown" };
   if (legalHold) return { sendable: false, reason: "legal_hold_active" };
-  if (record.expiresAt && now > record.expiresAt) return { sendable: false, reason: "draft_expired" };
+  // Same rule as decideTransition: an unparseable expiry counts as passed. Two places that
+  // disagree about whether a draft is expired is a bug waiting to be exploited.
+  if (record.expiresAt && (!isValidExpiry(record.expiresAt) || now > record.expiresAt)) {
+    return { sendable: false, reason: "draft_expired" };
+  }
   if (TERMINAL_STATES.indexOf(record.state) !== -1) return { sendable: false, reason: "draft_terminal" };
   if (record.state !== "approved") return { sendable: false, reason: "invalid_state" };
   if (!jurisdictionApproved) return { sendable: false, reason: "jurisdiction_not_approved" };

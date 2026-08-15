@@ -35,7 +35,7 @@ const director = (uid: string): CallerContext =>
   ({ uid, adminDoc: { role: "Director", status: "Active" }, appCheckVerified: true });
 
 const draft = (over: Partial<PersistedDraft> = {}): PersistedDraft => ({
-  draftId: "d1", state: "reviewer_assigned", version: 2,
+  draftId: "d1", state: "previewed", version: 2,
   content: CONTENT, contentDigest: DIGEST, digestAlgorithm: "sha-256",
   createdByKey: "author-uid", assignedReviewerKey: "reviewer-uid",
   jurisdiction: "TH", expiresAt: null, ...over,
@@ -185,6 +185,17 @@ check("transition graph", () => {
   // Every declared edge is genuinely permitted, so the refusals above are the graph and
   // not a function that refuses everything.
   assert.equal(move(staff("reviewer-uid"), { state: "previewed" }).ok, true);
+  // Approval REQUIRES a preview. Leaving `reviewer_assigned -> approved` in the graph
+  // made `previewed` a label nothing had to pass through — a human approval that nobody
+  // was required to look at.
+  assert.equal(move(staff("reviewer-uid"), { state: "reviewer_assigned" }).code, "invalid_state", "approval must not skip the preview");
+  assert.equal(move(staff("reviewer-uid"), { state: "reviewer_assigned" }, { requestedState: "previewed" }).ok, true);
+  // `reviewer_assigned` is reachable ONLY through assignReviewer, never through a plain
+  // transition — otherwise a caller could set the state with no reviewer recorded, and
+  // the record and its permanent receipt would both attest an assignment that never was.
+  for (const from of PERSISTED_STATES) {
+    assert.equal((TRANSITION_EDGES[from] ?? []).includes("reviewer_assigned"), false, from);
+  }
   assert.equal(move(staff("reviewer-uid"), {}, { requestedState: "rejected" }).ok, true);
   assert.equal(move(staff("reviewer-uid"), {}, { requestedState: "changes_requested" }).ok, true);
   // Every state has an entry; a state with no edges is terminal by construction.
@@ -209,9 +220,14 @@ check("expired is not a backdoor revoke", () => {
   assert.equal(isValidExpiry(""), false);
   assert.equal(isValidExpiry(null), false);
   assert.equal(isValidExpiry("2026-08-14T00:00:00.000Z"), true);
-  // "never" sorts after every digit, so a string compare would report it as NOT passed and
-  // the draft would live forever. It is refused at creation and ignored here.
-  assert.equal(move(staff("reviewer-uid"), { expiresAt: "never" }).ok, true, "a malformed expiry must not silently expire a draft either");
+  // An UNPARSEABLE stored expiry counts as PASSED, not as absent. The previous version of
+  // this block asserted the opposite and so LOCKED IN a fail-open: "never" sorts after
+  // every digit, so a raw comparison reports it as not yet reached — forever — and the
+  // draft could neither expire nor be closed as expired.
+  for (const malformed of ["never", "9999-99-99T00:00:00.000Z", "2026-08-14T00:00:00Z", "0"]) {
+    assert.equal(move(staff("reviewer-uid"), { expiresAt: malformed }).code, "draft_expired", malformed);
+    assert.equal(move(staff("reviewer-uid"), { expiresAt: malformed }, { requestedState: "expired" }).ok, true, malformed + " must still be closable");
+  }
 });
 
 // --- 7. DIGEST BINDING IS MANDATORY -------------------------------------------------

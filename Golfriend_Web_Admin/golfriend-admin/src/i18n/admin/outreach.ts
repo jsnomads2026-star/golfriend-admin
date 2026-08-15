@@ -27,7 +27,7 @@ export type OutreachKey =
   | 'reviewer.none' | 'reviewer.you' | 'reviewer.assigned' | 'creator.you'
   | 'jurisdiction.approved' | 'jurisdiction.unapproved' | 'expires.none'
   | 'sendable.no' | 'notice.noTransmission' | 'notice.serverAuthority'
-  | 'action.assign' | 'action.approve' | 'action.reject' | 'action.requestChanges'
+  | 'action.assign' | 'action.preview' | 'action.approve' | 'action.reject' | 'action.requestChanges'
   | 'action.revoke' | 'action.markExpired'
   | 'err.unauthenticated' | 'err.app_check_required' | 'err.not_admin' | 'err.insufficient_role'
   | 'err.payload_rejected' | 'err.content_rejected' | 'err.draft_not_found' | 'err.duplicate_draft'
@@ -76,6 +76,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': 'Nothing is sent from this screen. No email is transmitted and no course is contacted.',
     'notice.serverAuthority': 'Approval requires a different person than the author, verified on the server.',
     'action.assign': 'Assign reviewer',
+    'action.preview': "Mark previewed",
     'action.approve': 'Approve',
     'action.reject': 'Reject',
     'action.requestChanges': 'Request changes',
@@ -144,6 +145,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': 'หน้าจอนี้ไม่ส่งอะไรทั้งสิ้น ไม่มีการส่งอีเมลและไม่มีการติดต่อสนามกอล์ฟ',
     'notice.serverAuthority': 'การอนุมัติต้องใช้บุคคลอื่นที่ไม่ใช่ผู้เขียน โดยตรวจสอบบนเซิร์ฟเวอร์',
     'action.assign': 'มอบหมายผู้ตรวจสอบ',
+    'action.preview': "ทำเครื่องหมายว่าดูแล้ว",
     'action.approve': 'อนุมัติ',
     'action.reject': 'ปฏิเสธ',
     'action.requestChanges': 'ขอให้แก้ไข',
@@ -212,6 +214,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': '이 화면에서는 아무것도 발송되지 않습니다. 이메일을 보내지 않으며 골프장에 연락하지 않습니다.',
     'notice.serverAuthority': '승인은 작성자가 아닌 다른 사람이 해야 하며, 서버에서 확인합니다.',
     'action.assign': '검토자 지정',
+    'action.preview': "검토함으로 표시",
     'action.approve': '승인',
     'action.reject': '거부',
     'action.requestChanges': '수정 요청',
@@ -280,6 +283,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': 'この画面からは何も送信されません。メールは送信せず、ゴルフ場にも連絡しません。',
     'notice.serverAuthority': '承認は作成者以外が行う必要があり、サーバーで検証されます。',
     'action.assign': 'レビュー担当者を割り当て',
+    'action.preview': "プレビュー済みにする",
     'action.approve': '承認',
     'action.reject': '却下',
     'action.requestChanges': '修正を依頼',
@@ -348,6 +352,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': '此页面不发送任何内容。不会发送邮件，也不会联系球场。',
     'notice.serverAuthority': '批准必须由作者以外的人完成，并在服务器上验证。',
     'action.assign': '指定审核人',
+    'action.preview': "标记为已预览",
     'action.approve': '批准',
     'action.reject': '拒绝',
     'action.requestChanges': '要求修改',
@@ -416,6 +421,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': 'Desde esta pantalla no se envía nada. No se transmite ningún correo ni se contacta con ningún campo.',
     'notice.serverAuthority': 'La aprobación requiere una persona distinta del autor, verificada en el servidor.',
     'action.assign': 'Asignar revisor',
+    'action.preview': "Marcar como previsualizado",
     'action.approve': 'Aprobar',
     'action.reject': 'Rechazar',
     'action.requestChanges': 'Solicitar cambios',
@@ -484,6 +490,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': 'Rien n’est envoyé depuis cet écran. Aucun e-mail n’est transmis et aucun parcours n’est contacté.',
     'notice.serverAuthority': 'La validation exige une personne autre que l’auteur, vérifiée sur le serveur.',
     'action.assign': 'Désigner un relecteur',
+    'action.preview': "Marquer comme prévisualisé",
     'action.approve': 'Valider',
     'action.reject': 'Refuser',
     'action.requestChanges': 'Demander des modifications',
@@ -552,6 +559,7 @@ export const outreachDict: LocaleDict<OutreachKey> = {
     'notice.noTransmission': 'Von diesem Bildschirm wird nichts versendet. Es wird keine E-Mail übertragen und kein Golfplatz kontaktiert.',
     'notice.serverAuthority': 'Die Freigabe erfordert eine andere Person als die verfassende und wird auf dem Server geprüft.',
     'action.assign': 'Prüfer zuweisen',
+    'action.preview': "Als geprüft markieren",
     'action.approve': 'Freigeben',
     'action.reject': 'Ablehnen',
     'action.requestChanges': 'Änderungen anfordern',

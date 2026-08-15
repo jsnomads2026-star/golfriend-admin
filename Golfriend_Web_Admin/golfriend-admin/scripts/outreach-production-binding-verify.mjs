@@ -164,7 +164,13 @@ const assigned = await boundStore.assignReviewer({ caller: ctx('author-x'), draf
 assert.equal(assigned.ok, true, `assignment failed: ${assigned.code}`);
 
 // EXACTLY the shape the component builds — nothing added, nothing helpfully filled in.
-const uiPayload = { op: 'transition', draftId: 'uid1', expectedVersion: 2, requestedState: 'approved', commandId: 'ui-c' };
+// The reviewer must PREVIEW first: the server graph has no reviewer_assigned -> approved
+// edge, so this walks the UI's real sequence rather than a shortcut the component cannot
+// take. If the UI ever loses its preview button, the approve step below stops succeeding.
+const previewed = await boundStore.transition({ caller: ctx('reviewer-x'), draftId: 'uid1', expectedVersion: 2, requestedState: 'previewed', commandId: 'ui-pv', now: at });
+assert.equal(previewed.ok, true, `the UI cannot preview: ${previewed.code}`);
+assert.ok(uiSource.includes("send(row, 'previewed')"), 'the UI offers no preview action, so no reviewer could ever reach an approval');
+const uiPayload = { op: 'transition', draftId: 'uid1', expectedVersion: 3, requestedState: 'approved', commandId: 'ui-c' };
 assert.deepEqual([...uiKeys].sort(), Object.keys(uiPayload).sort(), 'the UI payload shape drifted from the shape this check exercises');
 const approved = await boundStore.transition({ caller: ctx('reviewer-x'), draftId: uiPayload.draftId, expectedVersion: uiPayload.expectedVersion, requestedState: uiPayload.requestedState, commandId: uiPayload.commandId, now: at });
 assert.equal(approved.ok, true, `THE MOUNTED UI CANNOT APPROVE: the component's own payload was refused with '${approved.code}'`);
@@ -173,13 +179,21 @@ ok("the component's own command payload succeeds against the real store");
 
 // The reviewer can also read what they are approving: an approval surface that cannot
 // display the draft is not a human approval.
-fake.data.set('admin_users/reader-x', { role: 'Ops', status: 'Active' });
-const listed = await boundStore.listDrafts(ctx('reader-x'));
+// The ASSIGNED REVIEWER must be able to read what they are approving.
+const listed = await boundStore.listDrafts(ctx('reviewer-x'));
 assert.equal(listed.ok, true);
-assert.equal(listed.rows[0].subject, BASE.subject, 'the projection does not carry the subject a reviewer must read');
-assert.equal(listed.rows[0].body, BASE.body, 'the projection does not carry the body a reviewer must read');
+assert.equal(listed.rows[0].subject, BASE.subject, 'the reviewer cannot read the subject they are approving');
+assert.equal(listed.rows[0].body, BASE.body, 'the reviewer cannot read the body they are approving');
 assert.equal(listed.rows[0].sendable, false);
-ok('the approval projection carries the content a reviewer must read, and remains not sendable');
+// An UNRELATED staff member sees the row but NOT the free text. Persisting the content
+// created that exposure; scoping it is what keeps the projection honest about carrying no
+// one else's information.
+fake.data.set('admin_users/reader-x', { role: 'Ops', status: 'Active' });
+const outsider = await boundStore.listDrafts(ctx('reader-x'));
+assert.equal(outsider.rows[0].subject, null, 'an unrelated staff member received the draft subject');
+assert.equal(outsider.rows[0].body, null, 'an unrelated staff member received the draft body');
+assert.equal(outsider.rows[0].state, 'approved', 'the row itself must still be visible');
+ok('draft content reaches the creator and assigned reviewer only, and nothing is sendable');
 
 // ---- 4. The callable boundary, checked against the source -------------------------
 const index = readFileSync(resolve(FUNCTIONS, 'src/index.ts'), 'utf8');

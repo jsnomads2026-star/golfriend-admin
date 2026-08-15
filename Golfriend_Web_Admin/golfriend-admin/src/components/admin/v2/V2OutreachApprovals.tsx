@@ -166,6 +166,14 @@ export default function V2OutreachApprovals({
                     <td className="out-actions">
                       {/* Offered only to the assigned reviewer — but the SERVER is what
                           enforces it. Hiding the button is convenience, not a control. */}
+                      {/* A reviewer must PREVIEW before approving: the server graph has no
+                          reviewer_assigned -> approved edge, so an approval nobody looked at
+                          is refused rather than merely discouraged. */}
+                      <button
+                        type="button"
+                        disabled={busy === row.draftId || !row.callerIsAssignedReviewer}
+                        onClick={() => void send(row, 'previewed')}
+                      >{t('action.preview')}</button>
                       <button
                         type="button"
                         disabled={busy === row.draftId || !row.callerIsAssignedReviewer}

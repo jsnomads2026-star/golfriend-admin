@@ -97,6 +97,35 @@ export function persistedShapeIsMinimal(value: unknown): { minimal: boolean; off
   return { minimal: offenders.length === 0, offendingFields: offenders };
 }
 
+/**
+ * Value-level personal-data screen for FREE TEXT.
+ *
+ * The canonical 16-field allowlist screens field NAMES. `subject` and `body` are free text
+ * up to 8192 characters each, so every item in NEVER_PERSISTED is trivially expressible
+ * inside them — an allowlist over names says nothing about what a name contains. Since the
+ * content is now persisted and shown to reviewers, the values have to be screened too.
+ *
+ * This is deliberately conservative and refuses rather than redacting: a redacted approval
+ * body would mean the reviewer approved text different from what was recorded.
+ */
+const PERSONAL_DATA_PATTERNS: readonly RegExp[] = Object.freeze([
+  /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,                 // email address
+  /(?:\+\d[\d\s().-]{7,}\d)|(?:\b0\d[\d\s().-]{7,}\d\b)/,           // international/local phone
+  /\b-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}\b/,                  // lat,long coordinate pair
+  /\b\d{1,3}(?:\.\d{1,3}){3}\b/,                                    // IPv4 address
+]);
+
+export function containsPersonalData(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  return PERSONAL_DATA_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+/** Screen every free-text value in caller content. */
+export function contentIsFreeOfPersonalData(content: unknown): boolean {
+  if (!content || typeof content !== "object") return true;
+  return !Object.values(content as Record<string, unknown>).some(containsPersonalData);
+}
+
 /** Read one string field out of persisted content, or null. Never throws on a bad shape. */
 function contentField(content: unknown, field: string): string | null {
   if (!content || typeof content !== "object" || Array.isArray(content)) return null;
@@ -293,6 +322,10 @@ export function createOutreachStore(db: Firestore): OutreachStore {
 
       const digest = outreachContentDigest(content);
       if (!digest.ok || !digest.digest) return fail("content_rejected");
+      // The allowlist screens field NAMES; this screens the free-text VALUES those names
+      // hold. Without it "body" is an unscreened 8KB channel for exactly the fields
+      // NEVER_PERSISTED lists, now that content is persisted and shown to reviewers.
+      if (!contentIsFreeOfPersonalData(content)) return fail("content_rejected");
 
       return guardedCommand(commandId, { op: "create", draftId, content, jurisdiction, expiresAt, actor: identityKey(caller.uid) }, async (tx, cid, fp) => {
         const adminDoc = await readAdminDoc(tx, db, caller.uid as string);
@@ -495,9 +528,13 @@ export function createOutreachStore(db: Firestore): OutreachStore {
           held = null;
         }
 
+        const isCreator = callerKey !== null && callerKey === record.createdByKey;
+        const isReviewer = callerKey !== null && callerKey === record.assignedReviewerKey;
+        const mayReadContent = isCreator || isReviewer;
         const send = sendability({ record, jurisdictionApproved: jurisdiction.approved, legalHold: held, now: new Date().toISOString() });
-        // The projection carries NO identity: the caller learns their OWN relationship to
-        // the draft and whether a reviewer exists, never who anyone else is.
+        // The projection names NO ONE: the caller learns their OWN relationship to the
+        // draft and whether a reviewer exists, never who anyone else is. Draft CONTENT is
+        // scoped separately, to the creator and the assigned reviewer only.
         rows.push({
           draftId: record.draftId,
           state: record.state,
@@ -506,11 +543,14 @@ export function createOutreachStore(db: Firestore): OutreachStore {
           jurisdictionApproved: jurisdiction.approved,
           legalHold: held,
           expiresAt: record.expiresAt,
-          subject: contentField(record.content, "subject"),
-          body: contentField(record.content, "body"),
+          // The content goes ONLY to the two people who need to read it. Before this,
+          // every active staff member received the body of every draft — a broadcast the
+          // surrounding comment claimed was not happening.
+          subject: mayReadContent ? contentField(record.content, "subject") : null,
+          body: mayReadContent ? contentField(record.content, "body") : null,
           hasAssignedReviewer: record.assignedReviewerKey !== null,
-          callerIsCreator: callerKey !== null && callerKey === record.createdByKey,
-          callerIsAssignedReviewer: callerKey !== null && callerKey === record.assignedReviewerKey,
+          callerIsCreator: isCreator,
+          callerIsAssignedReviewer: isReviewer,
           sendable: send.sendable,
           sendableReason: send.reason,
         });
