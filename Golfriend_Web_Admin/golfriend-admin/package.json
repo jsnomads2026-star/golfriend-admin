@@ -32,6 +32,7 @@
     "verify:enterprise-member-admin-locale": "node scripts/enterprise-member-admin-locale-verify.mjs",
     "verify:small-business-locale": "node scripts/small-business-locale-verify.mjs",
     "verify:small-business-surfaces": "node scripts/small-business-surfaces-verify.mjs",
+    "verify:small-business-monday-world": "node --test scripts/small-business-monday-world.test.mjs && node scripts/small-business-monday-world.mjs",
     "gate:i18n": "npm run test:i18n && npm run verify:enterprise-member-admin-locale",
     "gate:thai-journey": "node scripts/thai-journey-gate.mjs",
     "map:routes": "node scripts/route-capability-map.mjs",

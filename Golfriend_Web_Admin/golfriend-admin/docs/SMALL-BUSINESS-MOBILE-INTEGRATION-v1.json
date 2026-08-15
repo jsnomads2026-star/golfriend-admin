@@ -1,0 +1,13 @@
+{
+  "schema":"golfriend.small-business.mobile-integration.v1","version":1,
+  "authority":{"auth":true,"appCheck":true,"opaqueMemberBinding":true,"rawUid":false,"rawLocationPersisted":false},
+  "callables":{"list":"discoverSmallBusinessesV1","detail":"getSmallBusinessDetailV1","engagement":"recordSmallBusinessEngagementV1","inquiry":"prepareSmallBusinessInquiryV1"},
+  "navigation":{"origin":"/lounge","back":"/lounge","exit":"/lounge","acceptanceSideEffects":false},
+  "engagementKinds":["favorite","unfavorite","view"],
+  "states":["loading","current","empty","offline","unavailable","stale","error"],
+  "errors":["UNAUTHENTICATED","APP_CHECK_REQUIRED","FORBIDDEN","INVALID_ARGUMENT","STALE_VERSION","REPLAY_PAYLOAD_CHANGED","BUSINESS_SUSPENDED","LOCATION_PERMISSION_REQUIRED","OWNER_VALIDATION_REQUIRED","HANDOFF_NOT_COMMISSIONED","UNAVAILABLE"],
+  "replay":{"commandId":"stable per logical intent","expectedVersion":"required","samePayload":"return original result","changedPayload":"REPLAY_PAYLOAD_CHANGED"},
+  "privacy":{"cardAllowlist":["businessId","displayName","category","city","country","description","availability","partner","sponsored","disclosure","returnRoute"],"forbidden":["rawUid","contact","email","phone","rawCoordinates","memberProfile","providerCredential"]},
+  "proactiveCard":{"advisoryOnly":true,"partnerDisclosure":true,"sponsoredDisclosure":true,"purchase":false,"booking":false,"navigation":false,"personalDataTransmission":false,"externalHandoffRequires":["fresh_owner_validation","explicit_confirmation"]},
+  "localeKeys":["smallBusiness.discovery.title","smallBusiness.discovery.empty","smallBusiness.discovery.offline","smallBusiness.discovery.unavailable","smallBusiness.discovery.retry","smallBusiness.discovery.partnerDisclosure","smallBusiness.discovery.sponsoredDisclosure","smallBusiness.discovery.availabilityUnknown","smallBusiness.detail.favorite","smallBusiness.detail.unfavorite","smallBusiness.detail.inquiry","smallBusiness.detail.returnToLounge","smallBusiness.inquiry.ownerValidationRequired"]
+}

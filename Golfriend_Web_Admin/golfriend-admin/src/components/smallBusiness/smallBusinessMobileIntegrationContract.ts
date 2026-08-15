@@ -1,0 +1,10 @@
+import type {SmallBusinessLocale} from './smallBusinessModel';
+export const SMALL_BUSINESS_MOBILE_SCHEMA='golfriend.small-business.mobile-integration.v1' as const;
+export type MobileBusinessState='loading'|'current'|'empty'|'offline'|'unavailable'|'stale'|'error';
+export type MobileBusinessError='UNAUTHENTICATED'|'APP_CHECK_REQUIRED'|'FORBIDDEN'|'INVALID_ARGUMENT'|'STALE_VERSION'|'REPLAY_PAYLOAD_CHANGED'|'BUSINESS_SUSPENDED'|'LOCATION_PERMISSION_REQUIRED'|'OWNER_VALIDATION_REQUIRED'|'HANDOFF_NOT_COMMISSIONED'|'UNAVAILABLE';
+export type MobileBusinessCard={businessId:string;displayName:string;category:string;city:string;country:string;description:string;availability:'known'|'unknown';partner:boolean;sponsored:boolean;disclosure:string;returnRoute:'/lounge'};
+export type MobileBusinessProjection={schema:typeof SMALL_BUSINESS_MOBILE_SCHEMA;version:1;state:MobileBusinessState;locale:SmallBusinessLocale;items:MobileBusinessCard[];nextCursor?:string;rawLocationPersisted:false;returnRoute:'/lounge'};
+export type MobileBusinessCommand={commandId:string;expectedVersion:number;businessId:string;opaqueMemberBinding:string};
+export const SMALL_BUSINESS_MOBILE_CALLABLES={list:'discoverSmallBusinessesV1',detail:'getSmallBusinessDetailV1',engagement:'recordSmallBusinessEngagementV1',inquiry:'prepareSmallBusinessInquiryV1'} as const;
+export const SMALL_BUSINESS_MOBILE_NAVIGATION={origin:'/lounge',back:'/lounge',exit:'/lounge',acceptanceSideEffects:false,externalHandoffRequires:['fresh_owner_validation','explicit_confirmation']} as const;
+export const SMALL_BUSINESS_MOBILE_LOCALE_KEYS=['smallBusiness.discovery.title','smallBusiness.discovery.empty','smallBusiness.discovery.offline','smallBusiness.discovery.unavailable','smallBusiness.discovery.retry','smallBusiness.discovery.partnerDisclosure','smallBusiness.discovery.sponsoredDisclosure','smallBusiness.discovery.availabilityUnknown','smallBusiness.detail.favorite','smallBusiness.detail.unfavorite','smallBusiness.detail.inquiry','smallBusiness.detail.returnToLounge','smallBusiness.inquiry.ownerValidationRequired'] as const;

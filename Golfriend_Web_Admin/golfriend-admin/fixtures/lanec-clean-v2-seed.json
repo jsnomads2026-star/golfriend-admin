@@ -185,6 +185,33 @@
     ]
   },
 
+  "small_business_test_world": {
+    "schema": "golfriend.small-business.monday-world.v1",
+    "world": "synthetic_fixture",
+    "productionWrites": false,
+    "clock": "2026-08-17T02:00:00.000Z",
+    "identities": [
+      {"uid":"ex_sb_rep_mali","role":"representative","businessIds":["sb_cafe_siam","sb_restaurant_green","sb_draft","sb_changes","sb_incomplete"]},
+      {"uid":"ex_sb_admin_noah","role":"admin_reviewer","businessIds":[]},
+      {"uid":"ex_sb_cross_unauthorized","role":"none","businessIds":[]}
+    ],
+    "businesses": [
+      {"businessId":"sb_cafe_siam","category":"golf_cafe","status":"active","version":4,"representativeUid":"ex_sb_rep_mali","evidenceState":"complete","locations":[{"locationId":"loc_cafe_bangna","label":"Siam Golf Cafe Bangna"},{"locationId":"loc_cafe_sathorn","label":"Siam Golf Cafe Sathorn"}]},
+      {"businessId":"sb_restaurant_green","category":"restaurant","status":"active","version":2,"representativeUid":"ex_sb_rep_mali","evidenceState":"complete","locations":[{"locationId":"loc_green_ari","label":"Green Table Ari"}]},
+      {"businessId":"sb_draft","category":"coach","status":"draft","version":1,"representativeUid":"ex_sb_rep_mali","evidenceState":"complete","locations":[{"locationId":"loc_draft_01","label":"Draft Coaching Studio"}]},
+      {"businessId":"sb_changes","category":"fitter","status":"changes_requested","version":3,"representativeUid":"ex_sb_rep_mali","evidenceState":"complete","locations":[{"locationId":"loc_changes_01","label":"Precision Fit Lab"}]},
+      {"businessId":"sb_suspended","category":"repair_shop","status":"suspended","version":5,"representativeUid":"ex_sb_rep_suspended","evidenceState":"complete","locations":[{"locationId":"loc_suspended_01","label":"Suspended Repair Shop"}]},
+      {"businessId":"sb_incomplete","category":"retailer","status":"draft","version":1,"representativeUid":"ex_sb_rep_mali","evidenceState":"incomplete","locations":[{"locationId":"loc_incomplete_01","label":"Incomplete Retailer"}]}
+    ],
+    "subscriptionFacts": [
+      {"businessId":"sb_cafe_siam","planId":"sb_standard","state":"intent","providerEvidence":null,"golfriendRevenue":0},
+      {"businessId":"sb_restaurant_green","planId":"sb_standard","state":"provider_confirmed","providerEvidence":"provider_receipt_test_001","golfriendRevenue":1200},
+      {"businessId":"sb_changes","planId":"sb_standard","state":"provider_pending","providerEvidence":null,"golfriendRevenue":0}
+    ],
+    "reportingFacts": {"promotionGolfriendRevenue":0,"externalCourseCommission":2750,"externalCommissionIsGolfriendRevenue":false,"jhccTransmission":false},
+    "scenarios": ["onboarding","multi_location_setup","operating_hours_edit","location_rename_stable_id","canonical_id_replacement_denied","active_profile_correction","stale_concurrent_correction","plan_selection_intent","provider_confirmed_subscription","provider_failure_pending_subscription","promotion_draft_review_approval_suppression_expiry","dnc_frequency_enforcement","discovery_detail_favorite_view_inquiry","offline_edit_retry","double_submission","suspended_business_denial","admin_reporting","jhcc_prepare_no_transmission","promotion_zero_golfriend_revenue","external_commission_separate","eight_locale_expected_labels"]
+  },
+
   "exclusions": [
     "Fun Loop / Join / Lounge scenario sections are scenario invariants consumed by journey tests — NOT stored records here",
     "Master Album / private mobile media, chats — owned by Lane A/Lane B canonical seed",
