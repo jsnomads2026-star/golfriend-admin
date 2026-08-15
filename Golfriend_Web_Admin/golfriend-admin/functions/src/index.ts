@@ -2004,7 +2004,8 @@ export const outreachDraftCommand = onCall({ memory: "256MiB" }, async (request)
     if (op === 'transition') {
       return await outreachStore.transition({
         caller, draftId: data.draftId, expectedVersion: data.expectedVersion,
-        requestedState: data.requestedState, content: data.content,
+        requestedState: data.requestedState,
+        // No content: the server reads the persisted content and re-derives the digest.
         commandId: data.commandId, now,
       });
     }

@@ -85,12 +85,57 @@ export interface PersistedDraft {
   draftId: string;
   state: string;
   version: number;
+  /**
+   * The canonical content, PERSISTED. A digest with no retrievable content is useless
+   * twice over: no human can review what they are approving, and the digest can only ever
+   * be verified against something the caller sends — which makes the caller the source of
+   * truth for the very thing the digest exists to pin down.
+   */
+  content: unknown;
   contentDigest: string;
   digestAlgorithm: string;
   createdByKey: string | null;
   assignedReviewerKey: string | null;
   jurisdiction: string | null;
   expiresAt: string | null;
+}
+
+/**
+ * The permitted state graph. A flat "is this a known state" allowlist is not a workflow:
+ * without edges, `rejected -> approved` and `draft_created -> approved` are both legal and
+ * the `previewed` step is decorative. Edges are declared explicitly so that adding one is
+ * a reviewable act.
+ */
+export const TRANSITION_EDGES: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  draft_created: Object.freeze(["reviewer_assigned", "previewed", "revoked", "expired"]),
+  reviewer_assigned: Object.freeze(["previewed", "approved", "rejected", "changes_requested", "revoked", "expired"]),
+  previewed: Object.freeze(["approved", "rejected", "changes_requested", "revoked", "expired"]),
+  changes_requested: Object.freeze(["reviewer_assigned", "previewed", "revoked", "expired"]),
+  // An approval or rejection is final for that draft: reopening it would let a reviewer
+  // launder a second decision through the same record and the same digest.
+  approved: Object.freeze(["revoked", "expired"]),
+  rejected: Object.freeze(["revoked", "expired"]),
+  expired: Object.freeze([]),
+  revoked: Object.freeze([]),
+});
+
+/** States from which a reviewer may be assigned or re-assigned. */
+export const ASSIGNABLE_FROM: readonly string[] = Object.freeze([
+  "draft_created", "reviewer_assigned", "previewed", "changes_requested",
+]);
+
+/**
+ * Strict ISO-8601 UTC instant. `expiresAt` is compared with a string comparison against a
+ * server ISO timestamp, so a value in any other shape compares nonsensically: "never"
+ * sorts after every digit and the draft would never expire at all.
+ */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+export function isValidExpiry(value: unknown): boolean {
+  if (typeof value !== "string" || !ISO_INSTANT.test(value)) return false;
+  const parsed = Date.parse(value);
+  // Round-trip: rejects impossible dates such as month 13 or the 31st of February.
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 export interface CallerContext {
@@ -135,9 +180,14 @@ const allow = (toState: string, toVersion: number): Decision =>
  */
 export const APP_CHECK_ENFORCED = false;
 
-export function appCheckDecision(caller: CallerContext): Decision | null {
-  if (!APP_CHECK_ENFORCED) return null;
-  return caller.appCheckVerified ? null : refuse("app_check_required");
+/**
+ * `enforced` is a PARAMETER, defaulting to the declared constant, so the enforced branch is
+ * executed by the real function in tests rather than by a stub the test wrote itself. A
+ * stub proves only that the test file can return a string.
+ */
+export function appCheckDecision(caller: CallerContext, enforced: boolean = APP_CHECK_ENFORCED): Decision | null {
+  if (!enforced) return null;
+  return caller.appCheckVerified === true ? null : refuse("app_check_required");
 }
 
 /**
@@ -264,13 +314,26 @@ export function decideTransition(input: TransitionInput): Decision {
   const hold = legalHoldDecision(legalHold);
   if (hold) return hold;
 
+  // Terminal is reported before the graph so a closed draft says so, rather than giving the
+  // generic "that edge does not exist".
   if (TERMINAL_STATES.indexOf(record.state) !== -1) return refuse("draft_terminal");
+
+  // The edge must exist in the declared graph. Without this, every state is reachable from
+  // every other: `rejected -> approved` was legal, approval could skip reviewer assignment,
+  // and `previewed` was a label nothing required passing through.
+  const allowedTargets = TRANSITION_EDGES[record.state];
+  if (!allowedTargets || allowedTargets.indexOf(requestedState) === -1) {
+    return refuse("invalid_state");
+  }
 
   // An expiry that nothing enforces is worse than no expiry at all. Only the transition
   // that RECORDS the expiry is permitted once the deadline has passed.
-  if (record.expiresAt && now > record.expiresAt && requestedState !== "expired") {
-    return refuse("draft_expired");
-  }
+  const pastDeadline = !!record.expiresAt && isValidExpiry(record.expiresAt) && now > record.expiresAt;
+  if (pastDeadline && requestedState !== "expired") return refuse("draft_expired");
+  // `expired` is terminal, so without this it would be a revocation any staff member could
+  // perform — the exact outcome the Director-only revoke gate exists to prevent. Recording
+  // an expiry is only permitted once the deadline has ACTUALLY passed.
+  if (requestedState === "expired" && !pastDeadline) return refuse("invalid_state");
 
   const actorKey = identityKey(caller.uid);
   if (!actorKey) return refuse("unauthenticated");
@@ -314,6 +377,8 @@ export function decideAssignment(input: AssignmentInput): Decision {
   const { caller, record, expectedVersion, reviewerKey, legalHold } = input;
   const authz = authorizeCaller(caller);
   if (authz) return authz;
+  // A published surrogate may never be presented as an identity, at either end.
+  if (presentsSurrogate(caller.uid)) return refuse("payload_rejected");
   if (!record) return refuse("draft_not_found");
   if (typeof expectedVersion !== "number" || !Number.isInteger(expectedVersion)) {
     return refuse("version_required");
@@ -322,10 +387,19 @@ export function decideAssignment(input: AssignmentInput): Decision {
   const hold = legalHoldDecision(legalHold);
   if (hold) return hold;
   if (TERMINAL_STATES.indexOf(record.state) !== -1) return refuse("draft_terminal");
+  // Assignment is only meaningful before a decision. Permitting it from `approved` let a
+  // caller silently reopen a decided draft, regress its state and approve it again.
+  if (ASSIGNABLE_FROM.indexOf(record.state) === -1) return refuse("invalid_state");
   if (!reviewerKey) return refuse("not_admin");
-  // A creator may not be assigned as their own reviewer — the check that makes the later
-  // approval-time separation meaningful rather than a race to reassign.
+  // A creator may not be assigned as their own reviewer.
   if (reviewerKey === record.createdByKey) return refuse("separation_of_duties");
+  // NOR MAY THE CALLER NOMINATE THEMSELVES. Without this, separation of duties collapses to
+  // "not the original author": any other staff member could assign themselves as reviewer
+  // of someone else's draft and approve it alone, which is one person completing a
+  // two-person control.
+  const actorKey = identityKey(caller.uid);
+  if (!actorKey) return refuse("unauthenticated");
+  if (reviewerKey === actorKey) return refuse("separation_of_duties");
   return allow("reviewer_assigned", record.version + 1);
 }
 

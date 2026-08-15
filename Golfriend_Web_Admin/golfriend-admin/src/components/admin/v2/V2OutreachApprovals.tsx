@@ -42,7 +42,7 @@ export default function V2OutreachApprovals({
   const [rows, setRows] = useState<OutreachRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ code: string | null; replayed: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ code: string | null; replayed: boolean; state: string | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => transport.list(), [transport]);
@@ -77,7 +77,7 @@ export default function V2OutreachApprovals({
       requestedState,
       commandId: newCommandId(),
     });
-    setNotice({ code: outcome.code, replayed: outcome.replayed });
+    setNotice({ code: outcome.code, replayed: outcome.replayed, state: outcome.state });
     setBusy(null);
     // Re-read from the server rather than patching local state: the server is the only
     // place that knows what actually landed.
@@ -102,8 +102,11 @@ export default function V2OutreachApprovals({
         <button type="button" onClick={() => void reload()} disabled={loading}>{t('refresh')}</button>
         {notice && (
           <output className="out-result" data-ok={notice.code === null}>
+            {/* The SERVER's resulting state, not the action that was attempted. Reporting a
+                fixed "Approved" on every success would have announced an approval after a
+                reject or a revoke — in all eight locales. */}
             {notice.code === null
-              ? (notice.replayed ? t('replayed') : t('state.approved'))
+              ? `${notice.state && stateKey(notice.state) ? t(stateKey(notice.state) as OutreachKey) : (notice.state ?? '')}${notice.replayed ? ` · ${t('replayed')}` : ''}`
               : t(outreachErrorKey(notice.code))}
           </output>
         )}
@@ -134,7 +137,12 @@ export default function V2OutreachApprovals({
                 const key = stateKey(row.state);
                 return (
                   <tr key={row.draftId} data-state={row.state}>
-                    <td><b>{row.draftId}</b></td>
+                    <td>
+                      <b>{row.draftId}</b>
+                      {/* A human approval requires seeing what is being approved. */}
+                      <small>{row.subject ?? ""}</small>
+                      <small>{row.body ?? ""}</small>
+                    </td>
                     <td><b data-state={row.state}>{key ? t(key) : row.state}</b></td>
                     <td>{row.version}</td>
                     <td>
@@ -149,7 +157,10 @@ export default function V2OutreachApprovals({
                     <td>{row.expiresAt ?? t('expires.none')}</td>
                     <td data-hold={String(row.legalHold)}>{t(holdLabel(row.legalHold))}</td>
                     <td>
-                      <b>{t('sendable.no')}</b>
+                      {/* Driven by the server flag, not a constant. Hard-coding the
+                          negative fails closed today but would silently invert if
+                          transmission were ever enabled. */}
+                      <b>{row.sendable ? row.state : t('sendable.no')}</b>
                       <small>{t(outreachErrorKey(row.sendableReason))}</small>
                     </td>
                     <td className="out-actions">

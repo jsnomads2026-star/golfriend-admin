@@ -13,7 +13,7 @@
 // ==========================================
 import assert from "node:assert/strict";
 import { createOutreachStore, persistedShapeIsMinimal, receiptIdFor, snapshot, DRAFTS, RECEIPTS, COMMANDS, LEGAL_HOLDS } from "./outreachStore.js";
-import { outreachContentDigest } from "./outreachCanonical.js";
+import { CANONICAL_FIELDS, outreachContentDigest } from "./outreachCanonical.js";
 import type { CallerContext } from "./outreachAuthority.js";
 
 // ---------------------------------------------------------------- Firestore double ----
@@ -60,19 +60,39 @@ class FakeDb {
       const creates: Array<[string, Doc]> = [];
       const updates: Array<[string, Doc]> = [];
       const readGenerations = new Map<string, number>();
+      let wrote = false;
+      // Firestore REQUIRES all reads before all writes inside a transaction and throws
+      // otherwise. Without this the suite would pass code that fails on every real call.
+      const noReadsAfterWrites = () => {
+        if (wrote) throw new Error("Firestore transactions require all reads to be executed before all writes");
+      };
+      // The Admin SDK rejects `undefined` field values unless ignoreUndefinedProperties is
+      // set. Storing them silently would hide a real production write failure.
+      const rejectUndefined = (value: unknown, path: string): void => {
+        if (value === undefined) throw new Error(`Cannot use "undefined" as a Firestore value (${path})`);
+        if (Array.isArray(value)) { value.forEach((v, i) => rejectUndefined(v, `${path}[${i}]`)); return; }
+        if (value && typeof value === "object") {
+          for (const [k, v] of Object.entries(value as Record<string, unknown>)) rejectUndefined(v, `${path}.${k}`);
+        }
+      };
       const tx = {
         async get(ref: any) {
+          noReadsAfterWrites();
           readGenerations.set(ref.__path, db.generation.get(ref.__path) ?? 0);
           return db.snap(ref.__path, ref.__id);
         },
         create(ref: any, value: Doc) {
+          rejectUndefined(value, ref.__path);
           if (db.data.has(ref.__path) || creates.some(([p]) => p === ref.__path)) {
             throw new Error(`ALREADY_EXISTS: ${ref.__path}`);
           }
+          wrote = true;
           creates.push([ref.__path, value]);
         },
         update(ref: any, patch: Doc) {
+          rejectUndefined(patch, ref.__path);
           if (!db.data.has(ref.__path)) throw new Error(`NOT_FOUND: ${ref.__path}`);
+          wrote = true;
           updates.push([ref.__path, patch]);
         },
       };
@@ -159,7 +179,7 @@ await block("happy path", async () => {
 
   const approved = await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "c-approve", now: NOW,
+    requestedState: "approved", commandId: "c-approve", now: NOW,
   });
   assert.equal(approved.ok, true, approved.code ?? "");
   assert.equal(approved.state, "approved");
@@ -226,7 +246,7 @@ await block("self-approval", async () => {
   await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "a1", now: NOW });
   const self = await store.transition({
     caller: caller("author"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "a2", now: NOW,
+    requestedState: "approved", commandId: "a2", now: NOW,
   });
   assert.equal(self.code, "separation_of_duties");
   assert.equal(db.read(DRAFTS, "d1")?.state, "reviewer_assigned", "the refused approval left the state untouched");
@@ -234,7 +254,7 @@ await block("self-approval", async () => {
   // A staff member who is not the assigned reviewer also cannot approve.
   assert.equal((await store.transition({
     caller: caller("boss"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "a3", now: NOW,
+    requestedState: "approved", commandId: "a3", now: NOW,
   })).code, "separation_of_duties");
 });
 
@@ -245,14 +265,14 @@ await block("stale write", async () => {
   // The version moved to 2; a writer still holding 1 must lose.
   const stale = await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 1,
-    requestedState: "approved", content: CONTENT, commandId: "s2", now: NOW,
+    requestedState: "approved", commandId: "s2", now: NOW,
   });
   assert.equal(stale.code, "stale_write");
   assert.equal(db.read(DRAFTS, "d1")?.version, 2);
   // A missing version is refused, not defaulted.
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: undefined,
-    requestedState: "approved", content: CONTENT, commandId: "s3", now: NOW,
+    requestedState: "approved", commandId: "s3", now: NOW,
   })).code, "version_required");
 });
 
@@ -262,8 +282,8 @@ await block("concurrency", async () => {
   await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "k0", now: NOW });
   // Two DIFFERENT commands both believe the version is 2.
   const [a, b] = await Promise.all([
-    store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", content: CONTENT, commandId: "k1", now: NOW }),
-    store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "rejected", content: CONTENT, commandId: "k2", now: NOW }),
+    store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", commandId: "k1", now: NOW }),
+    store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "rejected", commandId: "k2", now: NOW }),
   ]);
   assert.equal([a.ok, b.ok].filter(Boolean).length, 1, "exactly one writer may take version 2 → 3");
   assert.equal(db.read(DRAFTS, "d1")?.version, 3);
@@ -271,8 +291,12 @@ await block("concurrency", async () => {
   // The conflict detector must actually have FIRED. Without this the block would pass just
   // as happily against a double that never detects contention.
   assert.ok(db.transactionRetries > 0, "the transaction conflict path was never exercised");
-  // The loser lost on the version compare-and-set after its retry re-read the record.
-  assert.equal((a.ok ? b : a).code, "stale_write");
+  // The loser lost after its retry re-read the record: either the version had moved
+  // (stale_write) or the winner left a state its target is unreachable from (invalid_state).
+  // Both are refusals; what must never happen is a second silent success.
+  const loser = a.ok ? b : a;
+  assert.equal(loser.ok, false);
+  assert.ok(["stale_write", "invalid_state"].includes(loser.code as string), loser.code as string);
 });
 
 // --- 7. REPLAY: SAME PAYLOAD REPLAYS, CHANGED PAYLOAD REFUSES -------------------------
@@ -295,31 +319,149 @@ await block("replay", async () => {
   assert.equal(db.read(DRAFTS, "d1")?.assignedReviewerKey, "reviewer", "the original assignment stands");
 
   // A transition replay behaves the same way, including a changed target state.
-  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", content: CONTENT, commandId: "r2", now: NOW });
-  const swapState = await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "rejected", content: CONTENT, commandId: "r2", now: NOW });
+  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", commandId: "r2", now: NOW });
+  const swapState = await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "rejected", commandId: "r2", now: NOW });
   assert.equal(swapState.code, "replay_payload_mismatch");
   assert.equal(db.read(DRAFTS, "d1")?.state, "approved");
   // A missing or non-opaque command id is refused: without one there is no replay safety.
   for (const bad of [undefined, null, "", "cmd with spaces", 7]) {
-    assert.equal((await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 3, requestedState: "revoked", content: CONTENT, commandId: bad, now: NOW })).code, "payload_rejected", String(bad));
+    assert.equal((await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 3, requestedState: "revoked", commandId: bad, now: NOW })).code, "payload_rejected", String(bad));
   }
 });
 
-// --- 8. OMITTED / CHANGED DIGEST BINDING ---------------------------------------------
+// --- 8. DIGEST BINDING IS AGAINST PERSISTED STATE -------------------------------------
+// The transition takes NO content from the caller. The server re-reads the stored content
+// and re-derives the digest, so the check is an integrity check on the record rather than a
+// comparison against whatever the caller chose to send. These cases tamper with the STORE
+// directly — the only way the content can now diverge from its digest.
 await block("digest binding", async () => {
   const { db, store } = await createdDraft();
   await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "d-a", now: NOW });
-  // Omitting content does not skip the check.
-  assert.equal((await store.transition({
+
+  // The UI's exact payload — no content key at all — must SUCCEED. A control that made the
+  // mounted feature unusable shipped once because no test ever sent the real payload.
+  const uiShaped = await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: undefined, commandId: "d-b", now: NOW,
-  })).code, "content_rejected");
-  // Changed content is refused.
-  assert.equal((await store.transition({
-    caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: { ...CONTENT, body: "Changed." }, commandId: "d-c", now: NOW,
+    requestedState: "approved", commandId: "d-ui", now: NOW,
+  });
+  assert.equal(uiShaped.ok, true, `the UI-shaped approve payload was refused: ${uiShaped.code}`);
+  assert.equal(uiShaped.state, "approved");
+
+  // Content edited behind the command path (a direct console write) is caught.
+  const tampered = await createdDraft("d2");
+  await tampered.store.assignReviewer({ caller: caller("author"), draftId: "d2", expectedVersion: 1, reviewerUid: "reviewer", commandId: "d-t1", now: NOW });
+  tampered.db.data.set(`${DRAFTS}/d2`, { ...tampered.db.read(DRAFTS, "d2")!, content: { ...CONTENT, body: "Substituted after approval was requested." } });
+  assert.equal((await tampered.store.transition({
+    caller: caller("reviewer"), draftId: "d2", expectedVersion: 2,
+    requestedState: "approved", commandId: "d-t2", now: NOW,
   })).code, "digest_mismatch");
-  assert.equal(db.read(DRAFTS, "d1")?.state, "reviewer_assigned");
+
+  // Content deleted behind the command path cannot be approved either: a digest with
+  // nothing to verify against would make the integrity claim vacuous.
+  const emptied = await createdDraft("d3");
+  await emptied.store.assignReviewer({ caller: caller("author"), draftId: "d3", expectedVersion: 1, reviewerUid: "reviewer", commandId: "d-e1", now: NOW });
+  const withoutContent = { ...emptied.db.read(DRAFTS, "d3")! };
+  delete withoutContent.content;
+  emptied.db.data.set(`${DRAFTS}/d3`, withoutContent);
+  assert.equal((await emptied.store.transition({
+    caller: caller("reviewer"), draftId: "d3", expectedVersion: 2,
+    requestedState: "approved", commandId: "d-e2", now: NOW,
+  })).code, "content_rejected");
+
+  // The digest itself is never rewritten by a transition.
+  assert.equal(db.read(DRAFTS, "d1")?.contentDigest, DIGEST);
+  void store;
+});
+
+// --- 8b. SELF-NOMINATION THROUGH THE REAL STORE ---------------------------------------
+// The attack the review found: any active staff member assigns THEMSELVES to another
+// person's draft and then approves it alone, completing a two-person control by themselves.
+await block("self-nomination", async () => {
+  const { db, store } = await createdDraft();
+  db.data.set("admin_users/mallory", { role: "Ops", status: "Active" });
+  const grab = await store.assignReviewer({
+    caller: caller("mallory"), draftId: "d1", expectedVersion: 1,
+    reviewerUid: "mallory", commandId: "m1", now: NOW,
+  });
+  assert.equal(grab.code, "separation_of_duties");
+  assert.equal(db.read(DRAFTS, "d1")?.assignedReviewerKey, null, "no reviewer was assigned");
+  assert.equal(db.read(DRAFTS, "d1")?.version, 1, "the refused grab did not burn a version");
+
+  // A decided draft cannot be reopened by reassigning it.
+  await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "m2", now: NOW });
+  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", commandId: "m3", now: NOW });
+  assert.equal((await store.assignReviewer({
+    caller: caller("author"), draftId: "d1", expectedVersion: 3,
+    reviewerUid: "mallory", commandId: "m4", now: NOW,
+  })).code, "invalid_state");
+  assert.equal(db.read(DRAFTS, "d1")?.state, "approved");
+});
+
+// --- 8c. THE TRANSITION GRAPH THROUGH THE REAL STORE -----------------------------------
+await block("transition graph", async () => {
+  const { db, store } = await createdDraft();
+  // Approval may not skip reviewer assignment.
+  assert.equal((await store.transition({
+    caller: caller("reviewer"), draftId: "d1", expectedVersion: 1,
+    requestedState: "approved", commandId: "g1", now: NOW,
+  })).code, "invalid_state");
+  await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "g2", now: NOW });
+  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "rejected", commandId: "g3", now: NOW });
+  // A rejected draft may not then be approved.
+  assert.equal((await store.transition({
+    caller: caller("reviewer"), draftId: "d1", expectedVersion: 3,
+    requestedState: "approved", commandId: "g4", now: NOW,
+  })).code, "invalid_state");
+  assert.equal(db.read(DRAFTS, "d1")?.state, "rejected");
+});
+
+// --- 8d. EXPIRY VALIDATION AT CREATION -------------------------------------------------
+// `expiresAt` is compared as a string, so a non-ISO value compares nonsensically: "never"
+// sorts after every digit and the draft would never expire.
+await block("expiry validation", async () => {
+  const { db, store } = seeded();
+  for (const bad of ["never", "2026-08-15T16:00:00+07:00", "0", "2026-02-31T00:00:00.000Z", "tomorrow", 12345]) {
+    db.data.set(`${LEGAL_HOLDS}/x1`, { active: false });
+    assert.equal((await store.createDraft({
+      caller: caller("author"), draftId: "x1", content: CONTENT, jurisdiction: "TH",
+      expiresAt: bad, commandId: `xv-${String(bad)}`, now: NOW,
+    })).code, "payload_rejected", String(bad));
+  }
+  // A well-formed instant is accepted, so the refusals above are validation and not a
+  // blanket rejection of every expiry.
+  db.data.set(`${LEGAL_HOLDS}/x2`, { active: false });
+  assert.equal((await store.createDraft({
+    caller: caller("author"), draftId: "x2", content: CONTENT, jurisdiction: "TH",
+    expiresAt: "2027-01-01T00:00:00.000Z", commandId: "xv-good", now: NOW,
+  })).ok, true);
+});
+
+// --- 8e. THE REPLAY LEDGER IS BOUND TO THE CALLER --------------------------------------
+// A ledger entry is a success response. Keyed on command id and payload alone, anyone who
+// learns a command id and reconstructs its payload is handed the original success without
+// the authority core ever running for them.
+await block("replay is caller-bound", async () => {
+  const { db, store } = await createdDraft("d5");
+  db.data.set("admin_users/mallory", { role: "Ops", status: "Active" });
+  const legitimate = await store.assignReviewer({
+    caller: caller("author"), draftId: "d5", expectedVersion: 1,
+    reviewerUid: "reviewer", commandId: "shared-id", now: NOW,
+  });
+  assert.equal(legitimate.ok, true);
+  // Mallory presents the SAME command id and the same visible arguments.
+  const stolen = await store.assignReviewer({
+    caller: caller("mallory"), draftId: "d5", expectedVersion: 1,
+    reviewerUid: "reviewer", commandId: "shared-id", now: NOW,
+  });
+  assert.equal(stolen.ok, false, "a different caller must not be served another caller's success");
+  assert.equal(stolen.code, "replay_payload_mismatch");
+  // The original caller still replays their own command correctly.
+  const own = await store.assignReviewer({
+    caller: caller("author"), draftId: "d5", expectedVersion: 1,
+    reviewerUid: "reviewer", commandId: "shared-id", now: NOW,
+  });
+  assert.equal(own.ok, true);
+  assert.equal(own.replayed, true);
 });
 
 // --- 9. RE-ENTRANCY VIA A GETTER ON CALLER CONTENT ------------------------------------
@@ -334,7 +476,7 @@ await block("re-entrancy", async () => {
   });
   const out = await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: hostile, commandId: "x1", now: NOW,
+    requestedState: "approved", commandId: "x1", now: NOW,
   });
   // The snapshot runs before any authority decision, so the getter fires at most once and
   // every later read sees the frozen value.
@@ -352,12 +494,12 @@ await block("expiry", async () => {
   // NOW is past the expiry.
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "e1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "e-c", now: NOW,
+    requestedState: "approved", commandId: "e-c", now: NOW,
   })).code, "draft_expired");
   // Recording the expiry is still permitted.
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "e1", expectedVersion: 2,
-    requestedState: "expired", content: CONTENT, commandId: "e-d", now: NOW,
+    requestedState: "expired", commandId: "e-d", now: NOW,
   })).ok, true);
   assert.equal(db.read(DRAFTS, "e1")?.state, "expired");
 });
@@ -368,17 +510,17 @@ await block("revocation", async () => {
   await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "v0", now: NOW });
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "revoked", content: CONTENT, commandId: "v1", now: NOW,
+    requestedState: "revoked", commandId: "v1", now: NOW,
   })).code, "insufficient_role");
   assert.equal((await store.transition({
     caller: caller("boss"), draftId: "d1", expectedVersion: 2,
-    requestedState: "revoked", content: CONTENT, commandId: "v2", now: NOW,
+    requestedState: "revoked", commandId: "v2", now: NOW,
   })).ok, true);
   assert.equal(db.read(DRAFTS, "d1")?.state, "revoked");
   // Nothing transitions out of a revoked draft — not even a Director.
   assert.equal((await store.transition({
     caller: caller("boss"), draftId: "d1", expectedVersion: 3,
-    requestedState: "approved", content: CONTENT, commandId: "v3", now: NOW,
+    requestedState: "approved", commandId: "v3", now: NOW,
   })).code, "draft_terminal");
 });
 
@@ -390,20 +532,20 @@ await block("legal hold", async () => {
   db.data.set(`${LEGAL_HOLDS}/d1`, { active: true });
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "h1", now: NOW,
+    requestedState: "approved", commandId: "h1", now: NOW,
   })).code, "legal_hold_active");
   // An AMBIGUOUS hold record is UNKNOWN, not "not held".
   db.data.set(`${LEGAL_HOLDS}/d1`, { active: "false" });
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "h2", now: NOW,
+    requestedState: "approved", commandId: "h2", now: NOW,
   })).code, "legal_hold_unknown");
   // A FAILING read is UNKNOWN. This is the case that must never degrade to "not held".
   db.data.set(`${LEGAL_HOLDS}/d1`, { active: false });
   db.failLegalHoldRead = true;
   assert.equal((await store.transition({
     caller: caller("reviewer"), draftId: "d1", expectedVersion: 2,
-    requestedState: "approved", content: CONTENT, commandId: "h3", now: NOW,
+    requestedState: "approved", commandId: "h3", now: NOW,
   })).code, "legal_hold_unknown");
   db.failLegalHoldRead = false;
   assert.equal(db.read(DRAFTS, "d1")?.state, "reviewer_assigned");
@@ -413,7 +555,7 @@ await block("legal hold", async () => {
 await block("listing", async () => {
   const { db, store } = await createdDraft();
   await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "l0", now: NOW });
-  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", content: CONTENT, commandId: "l1", now: NOW });
+  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", commandId: "l1", now: NOW });
 
   const listed = await store.listDrafts(caller("reviewer"));
   assert.equal(listed.ok, true);
@@ -469,6 +611,30 @@ await block("shape", async () => {
   })).code, "payload_rejected");
   assert.equal(snapshot(cyclic).ok, false);
   assert.equal(snapshot({ a: 1 }).ok, true);
+  // WHAT ACTUALLY KEEPS PERSONAL DATA OUT is the canonical 16-field ALLOWLIST, not the
+  // NEVER_PERSISTED denylist. Content carrying a forbidden field is refused at
+  // canonicalization with `unknown_field` — before any denylist runs. This asserts the
+  // real control and the real reason, because an assertion that merely checks "it was
+  // refused" would pass identically whether the denylist existed or not.
+  const privacy = seeded();
+  privacy.db.data.set(`${LEGAL_HOLDS}/p1`, { active: false });
+  for (const forbidden of ["memberName", "email", "phone", "location", "privateNotes"]) {
+    const leaky = await privacy.store.createDraft({
+      caller: caller("author"), draftId: "p1",
+      content: { ...CONTENT, [forbidden]: "Somchai P." },
+      jurisdiction: "TH", expiresAt: null, commandId: `p-${forbidden}`, now: NOW,
+    });
+    assert.equal(leaky.ok, false, forbidden);
+    assert.equal(leaky.code, "content_rejected", forbidden);
+    assert.equal(outreachContentDigest({ ...CONTENT, [forbidden]: "x" }).error, "unknown_field", forbidden);
+  }
+  assert.equal(privacy.db.countIn(DRAFTS), 0);
+  // And the allowlist and the denylist cannot overlap, so no canonical field is ever a
+  // forbidden one. This is the property that makes the allowlist sufficient on its own.
+  for (const field of CANONICAL_FIELDS) {
+    assert.equal(persistedShapeIsMinimal({ [field]: "value" }).minimal, true, field);
+  }
+  // The denylist still guards receipts, whose shape is assembled locally and can grow.
   assert.equal(persistedShapeIsMinimal({ email: "x@y.z" }).minimal, false);
   assert.equal(persistedShapeIsMinimal({ nested: { memberName: "x" } }).minimal, false);
   assert.equal(persistedShapeIsMinimal({ state: "approved", version: 1 }).minimal, true);
@@ -483,7 +649,7 @@ await block("shape", async () => {
 await block("receipts", async () => {
   const { db, store } = await createdDraft();
   await store.assignReviewer({ caller: caller("author"), draftId: "d1", expectedVersion: 1, reviewerUid: "reviewer", commandId: "p0", now: NOW });
-  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", content: CONTENT, commandId: "p1", now: NOW });
+  await store.transition({ caller: caller("reviewer"), draftId: "d1", expectedVersion: 2, requestedState: "approved", commandId: "p1", now: NOW });
   const receipts = [...db.data.entries()].filter(([k]) => k.startsWith(`${RECEIPTS}/`)).map(([, v]) => v);
   assert.equal(receipts.length, 3);
   // The chain is contiguous: every receipt's fromVersion is the previous toVersion.

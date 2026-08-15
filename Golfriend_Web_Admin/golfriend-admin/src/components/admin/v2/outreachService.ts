@@ -22,6 +22,9 @@ export interface OutreachRow {
   jurisdictionApproved: boolean;
   legalHold: boolean | null;
   expiresAt: string | null;
+  /** Subject and body, so a reviewer can read what they are being asked to approve. */
+  subject: string | null;
+  body: string | null;
   hasAssignedReviewer: boolean;
   callerIsCreator: boolean;
   callerIsAssignedReviewer: boolean;

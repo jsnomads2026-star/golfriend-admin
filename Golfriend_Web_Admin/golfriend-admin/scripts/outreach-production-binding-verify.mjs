@@ -117,6 +117,70 @@ assert.equal(client.sha256Hex('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a39
 assert.equal(server.sha256Hex(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
 ok('both implementations match the NIST SHA-256 vectors');
 
+
+// ---- 5. THE UI'S ACTUAL PAYLOAD MUST WORK ----------------------------------------
+// The whole mounted feature once shipped inert: every button returned content_rejected,
+// because the UI sent no `content` and the server demanded it. Every server test
+// hand-wrote a payload no caller ever sent, and a source-level regex could not see it.
+// So the payload is now EXTRACTED FROM THE COMPONENT and run through the real store.
+const uiSource = readFileSync(resolve(ROOT, 'src/components/admin/v2/V2OutreachApprovals.tsx'), 'utf8');
+const commandCall = uiSource.slice(uiSource.indexOf('transport.command({'), uiSource.indexOf('});', uiSource.indexOf('transport.command({')));
+const uiKeys = [...commandCall.matchAll(/^\s*([a-zA-Z]+)[,:]/gm)].map((m) => m[1]);
+assert.ok(uiKeys.includes('op') && uiKeys.includes('draftId') && uiKeys.includes('expectedVersion'), `could not parse the UI command payload: ${uiKeys.join(',')}`);
+
+const storeModule = await import(`file://${resolve(FUNCTIONS, 'lib/outreachStore.js')}`);
+const { createOutreachStore } = storeModule.default ?? storeModule;
+const fake = {
+  data: new Map(),
+  collection(name) {
+    const self = this;
+    return {
+      doc(id) { return { __path: `${name}/${id}`, __id: id, get: async () => ({ exists: self.data.has(`${name}/${id}`), id, data: () => self.data.get(`${name}/${id}`) }) }; },
+      limit(n) { return { get: async () => ({ docs: [...self.data.entries()].filter(([k]) => k.startsWith(name + '/')).slice(0, n).map(([k, v]) => ({ id: k.slice(name.length + 1), data: () => v })) }) }; },
+    };
+  },
+  async runTransaction(fn) {
+    const creates = []; const updates = [];
+    const tx = {
+      get: async (ref) => ({ exists: this.data.has(ref.__path), id: ref.__id, data: () => this.data.get(ref.__path) }),
+      create: (ref, value) => { if (this.data.has(ref.__path)) throw new Error('ALREADY_EXISTS'); creates.push([ref.__path, value]); },
+      update: (ref, patch) => updates.push([ref.__path, patch]),
+    };
+    const out = await fn(tx);
+    for (const [p, val] of creates) this.data.set(p, val);
+    for (const [p, patch] of updates) this.data.set(p, { ...this.data.get(p), ...patch });
+    return out;
+  },
+};
+fake.data.set('admin_users/author-x', { role: 'Ops', status: 'Active' });
+fake.data.set('admin_users/reviewer-x', { role: 'Ops', status: 'Active' });
+fake.data.set('enterprise_legal_holds/uid1', { active: false });
+const boundStore = createOutreachStore(fake);
+const ctx = (uid) => ({ uid, adminDoc: null, appCheckVerified: true });
+const at = '2026-08-15T09:00:00.000Z';
+const made = await boundStore.createDraft({ caller: ctx('author-x'), draftId: 'uid1', content: BASE, jurisdiction: 'TH', expiresAt: null, commandId: 'ui-a', now: at });
+assert.equal(made.ok, true, `draft creation failed: ${made.code}`);
+const assigned = await boundStore.assignReviewer({ caller: ctx('author-x'), draftId: 'uid1', expectedVersion: 1, reviewerUid: 'reviewer-x', commandId: 'ui-b', now: at });
+assert.equal(assigned.ok, true, `assignment failed: ${assigned.code}`);
+
+// EXACTLY the shape the component builds — nothing added, nothing helpfully filled in.
+const uiPayload = { op: 'transition', draftId: 'uid1', expectedVersion: 2, requestedState: 'approved', commandId: 'ui-c' };
+assert.deepEqual([...uiKeys].sort(), Object.keys(uiPayload).sort(), 'the UI payload shape drifted from the shape this check exercises');
+const approved = await boundStore.transition({ caller: ctx('reviewer-x'), draftId: uiPayload.draftId, expectedVersion: uiPayload.expectedVersion, requestedState: uiPayload.requestedState, commandId: uiPayload.commandId, now: at });
+assert.equal(approved.ok, true, `THE MOUNTED UI CANNOT APPROVE: the component's own payload was refused with '${approved.code}'`);
+assert.equal(approved.state, 'approved');
+ok("the component's own command payload succeeds against the real store");
+
+// The reviewer can also read what they are approving: an approval surface that cannot
+// display the draft is not a human approval.
+fake.data.set('admin_users/reader-x', { role: 'Ops', status: 'Active' });
+const listed = await boundStore.listDrafts(ctx('reader-x'));
+assert.equal(listed.ok, true);
+assert.equal(listed.rows[0].subject, BASE.subject, 'the projection does not carry the subject a reviewer must read');
+assert.equal(listed.rows[0].body, BASE.body, 'the projection does not carry the body a reviewer must read');
+assert.equal(listed.rows[0].sendable, false);
+ok('the approval projection carries the content a reviewer must read, and remains not sendable');
+
 // ---- 4. The callable boundary, checked against the source -------------------------
 const index = readFileSync(resolve(FUNCTIONS, 'src/index.ts'), 'utf8');
 const stripComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');

@@ -10,7 +10,8 @@
 // ==========================================
 import assert from "node:assert/strict";
 import {
-  APP_CHECK_ENFORCED, OUTREACH_ERROR_CODES, PERSISTED_STATES, TRANSMISSION_ENABLED,
+  APP_CHECK_ENFORCED, ASSIGNABLE_FROM, OUTREACH_ERROR_CODES, PERSISTED_STATES,
+  TRANSITION_EDGES, TRANSMISSION_ENABLED, isValidExpiry,
   appCheckDecision, authorizeCaller, decideAssignment, decideTransition, identityKey,
   isOpaqueId, jurisdictionDecision, legalHoldDecision, legalHoldState, presentsSurrogate,
   retentionDecision, sendability,
@@ -35,7 +36,7 @@ const director = (uid: string): CallerContext =>
 
 const draft = (over: Partial<PersistedDraft> = {}): PersistedDraft => ({
   draftId: "d1", state: "reviewer_assigned", version: 2,
-  contentDigest: DIGEST, digestAlgorithm: "sha-256",
+  content: CONTENT, contentDigest: DIGEST, digestAlgorithm: "sha-256",
   createdByKey: "author-uid", assignedReviewerKey: "reviewer-uid",
   jurisdiction: "TH", expiresAt: null, ...over,
 });
@@ -44,7 +45,8 @@ const NOW = "2026-08-15T09:00:00.000Z";
 const move = (caller: CallerContext, over: Partial<PersistedDraft> = {}, patch: Record<string, unknown> = {}) =>
   decideTransition({
     caller, record: draft(over), expectedVersion: 2, requestedState: "approved",
-    currentContent: CONTENT, now: NOW, legalHold: false, ...patch,
+    currentContent: ('content' in over ? over.content : CONTENT),
+    now: NOW, legalHold: false, ...patch,
   } as Parameters<typeof decideTransition>[0]);
 
 let checks = 0;
@@ -113,10 +115,15 @@ check("unicode identity", () => {
 check("forged reviewer reference", () => {
   for (const surrogate of ["actor-9f2a", "prospect-11", "contact-ab", "rcpt-3", "ref-0"]) {
     assert.equal(presentsSurrogate(surrogate), true, surrogate);
+    // A RESOLVABLE reviewer is supplied, so a refusal cannot come from the null-key check.
+    // The previous version of this block passed `reviewerKey: null`, so all five iterations
+    // asserted the same trivial fact and no surrogate guard was exercised at all.
     assert.equal(decideAssignment({
       caller: { uid: surrogate, adminDoc: { role: "Ops", status: "Active" }, appCheckVerified: true },
-      record: draft(), expectedVersion: 2, reviewerKey: null, legalHold: false,
-    }).code, "not_admin");
+      record: draft(), expectedVersion: 2, reviewerKey: "other-uid", legalHold: false,
+    }).code, "payload_rejected", surrogate);
+    // Same for a transition: a surrogate presented as the actor is refused.
+    assert.equal(move({ uid: surrogate, adminDoc: { role: "Ops", status: "Active" }, appCheckVerified: true }, { assignedReviewerKey: identityKey(surrogate) }).code, "payload_rejected", surrogate);
   }
   assert.equal(presentsSurrogate("actor_9f2a"), false);
   assert.equal(presentsSurrogate("real-person@example.com"), false);
@@ -125,6 +132,21 @@ check("forged reviewer reference", () => {
   // A creator cannot be assigned as their own reviewer.
   assert.equal(decideAssignment({ caller: staff("a"), record: draft(), expectedVersion: 2, reviewerKey: "author-uid", legalHold: false }).code, "separation_of_duties");
   assert.equal(decideAssignment({ caller: staff("a"), record: draft(), expectedVersion: 2, reviewerKey: "other-uid", legalHold: false }).ok, true);
+  // SELF-NOMINATION. Without this, separation of duties collapses to "not the original
+  // author": any other staff member could assign themselves to someone else's draft and
+  // approve it alone, completing a two-person control by themselves.
+  assert.equal(decideAssignment({ caller: staff("mallory"), record: draft(), expectedVersion: 2, reviewerKey: "mallory", legalHold: false }).code, "separation_of_duties");
+  for (const variant of ["MALLORY", " mallory "]) {
+    assert.equal(decideAssignment({ caller: staff(variant), record: draft(), expectedVersion: 2, reviewerKey: "mallory", legalHold: false }).code, "separation_of_duties", variant);
+  }
+  // Assignment is only meaningful before a decision: a decided draft cannot be reopened by
+  // reassigning it, which would let a second decision be laundered through one record.
+  for (const decided of ["approved", "rejected"]) {
+    assert.equal(decideAssignment({ caller: staff("a"), record: draft({ state: decided }), expectedVersion: 2, reviewerKey: "other-uid", legalHold: false }).code, "invalid_state", decided);
+  }
+  for (const open of ASSIGNABLE_FROM) {
+    assert.equal(decideAssignment({ caller: staff("a"), record: draft({ state: open }), expectedVersion: 2, reviewerKey: "other-uid", legalHold: false }).ok, true, open);
+  }
 });
 
 // --- 5. STALE WRITE / MISSING VERSION ----------------------------------------------
@@ -151,17 +173,61 @@ check("state allowlist", () => {
   assert.equal(move(director("reviewer-uid"), {}, { requestedState: "revoked" }).ok, true);
 });
 
+// --- 6b. THE TRANSITION GRAPH IS A GRAPH, NOT A SET OF LABELS -----------------------
+// A flat "is this a known state" allowlist is not a workflow: it makes every state
+// reachable from every other, so a rejected draft could be approved and `previewed` was
+// decorative.
+check("transition graph", () => {
+  assert.equal(move(staff("reviewer-uid"), { state: "rejected" }).code, "invalid_state", "a rejected draft must not become approved");
+  assert.equal(move(staff("reviewer-uid"), { state: "draft_created" }).code, "invalid_state", "approval must not skip reviewer assignment");
+  assert.equal(move(staff("reviewer-uid"), { state: "approved" }).code, "invalid_state", "a draft must not be approved twice");
+  assert.equal(move(staff("reviewer-uid"), { state: "changes_requested" }).code, "invalid_state");
+  // Every declared edge is genuinely permitted, so the refusals above are the graph and
+  // not a function that refuses everything.
+  assert.equal(move(staff("reviewer-uid"), { state: "previewed" }).ok, true);
+  assert.equal(move(staff("reviewer-uid"), {}, { requestedState: "rejected" }).ok, true);
+  assert.equal(move(staff("reviewer-uid"), {}, { requestedState: "changes_requested" }).ok, true);
+  // Every state has an entry; a state with no edges is terminal by construction.
+  for (const state of PERSISTED_STATES) assert.ok(Array.isArray(TRANSITION_EDGES[state]), state);
+  assert.deepEqual(TRANSITION_EDGES.revoked, []);
+  assert.deepEqual(TRANSITION_EDGES.expired, []);
+});
+
+// --- 6c. `expired` IS NOT A BACK-DOOR REVOCATION ------------------------------------
+// `expired` is terminal, so if any staff member could set it at will it would be a
+// revocation without the Director gate that revocation carefully requires.
+check("expired is not a backdoor revoke", () => {
+  assert.equal(move(staff("reviewer-uid"), {}, { requestedState: "expired" }).code, "invalid_state", "expiry may not be declared before the deadline");
+  assert.equal(move(director("reviewer-uid"), {}, { requestedState: "expired" }).code, "invalid_state", "not even a Director may expire a live draft");
+  // Once the deadline has genuinely passed, recording it is permitted.
+  assert.equal(move(staff("reviewer-uid"), { expiresAt: "2026-08-14T00:00:00.000Z" }, { requestedState: "expired" }).ok, true);
+  // A malformed expiry never counts as passed — otherwise "never" would expire everything.
+  assert.equal(isValidExpiry("never"), false);
+  assert.equal(isValidExpiry("2026-08-15T16:00:00+07:00"), false);
+  assert.equal(isValidExpiry("2026-02-31T00:00:00.000Z"), false);
+  assert.equal(isValidExpiry("2026-13-01T00:00:00.000Z"), false);
+  assert.equal(isValidExpiry(""), false);
+  assert.equal(isValidExpiry(null), false);
+  assert.equal(isValidExpiry("2026-08-14T00:00:00.000Z"), true);
+  // "never" sorts after every digit, so a string compare would report it as NOT passed and
+  // the draft would live forever. It is refused at creation and ignored here.
+  assert.equal(move(staff("reviewer-uid"), { expiresAt: "never" }).ok, true, "a malformed expiry must not silently expire a draft either");
+});
+
 // --- 7. DIGEST BINDING IS MANDATORY -------------------------------------------------
 // Omitting content must NOT skip the check. In the client-side twin the digest check was
 // conditional on the caller supplying content, so omitting it bypassed the whole control.
 check("digest binding", () => {
+  // A record whose stored content is missing or unusable cannot be approved: the digest
+  // has nothing to verify against, so the integrity claim would be vacuous.
   for (const omitted of [undefined, null, {}, "", 0]) {
-    assert.equal(move(staff("reviewer-uid"), {}, { currentContent: omitted }).code, "content_rejected", String(omitted));
+    assert.equal(move(staff("reviewer-uid"), { content: omitted }).code, "content_rejected", String(omitted));
   }
-  // Changed content is refused even though it canonicalizes perfectly well.
-  assert.equal(move(staff("reviewer-uid"), {}, { currentContent: { ...CONTENT, body: "Different." } }).code, "digest_mismatch");
+  // Stored content that no longer matches the recorded digest means the record was
+  // tampered with outside the command path. It is refused, not silently re-digested.
+  assert.equal(move(staff("reviewer-uid"), { content: { ...CONTENT, body: "Different." } }).code, "digest_mismatch");
   // A caller-supplied digest claim is not consulted; only the recomputed one is.
-  assert.equal(move(staff("reviewer-uid"), {}, { currentContent: { ...CONTENT, body: "Different." }, claimedDigest: DIGEST } as never).code, "digest_mismatch");
+  assert.equal(move(staff("reviewer-uid"), { content: { ...CONTENT, body: "Different." } }, { claimedDigest: DIGEST } as never).code, "digest_mismatch");
   assert.equal(move(staff("reviewer-uid"), { contentDigest: "sha-256:" + "0".repeat(64) }).code, "digest_mismatch");
   assert.equal(digestsEqual(DIGEST, DIGEST), true);
   assert.equal(digestsEqual(DIGEST, DIGEST.slice(0, -1) + "0"), false);
@@ -173,6 +239,7 @@ check("expiry", () => {
   const expired = { expiresAt: "2026-08-14T00:00:00.000Z" };
   assert.equal(move(staff("reviewer-uid"), expired).code, "draft_expired");
   // Only the transition that RECORDS the expiry is permitted past the deadline.
+  assert.equal(move(staff("reviewer-uid"), expired, { requestedState: "expired" }).ok, true);
   assert.equal(move(director("reviewer-uid"), expired, { requestedState: "expired" }).ok, true);
   // An expiry in the future does not block.
   assert.equal(move(staff("reviewer-uid"), { expiresAt: "2027-01-01T00:00:00.000Z" }).ok, true);
@@ -182,7 +249,8 @@ check("expiry", () => {
 check("revocation is terminal", () => {
   for (const terminal of ["revoked", "expired"]) {
     assert.equal(move(staff("reviewer-uid"), { state: terminal }).code, "draft_terminal", terminal);
-    assert.equal(move(director("reviewer-uid"), { state: terminal }, { requestedState: "revoked" }).code, "draft_terminal");
+    assert.equal(move(director("reviewer-uid"), { state: terminal }, { requestedState: "revoked" }).code, "draft_terminal", terminal);
+    assert.deepEqual(TRANSITION_EDGES[terminal], [], terminal);
   }
 });
 
@@ -254,10 +322,19 @@ check("retention", () => {
 // The enforced branch is still exercised so switching the constant is a proven change.
 check("app check", () => {
   assert.equal(APP_CHECK_ENFORCED, false, "flipping this on without provisioning App Check would reject every real request");
-  assert.equal(appCheckDecision({ uid: "u", adminDoc: null, appCheckVerified: false }), null);
-  const enforced = (verified: boolean) => (verified ? null : { code: "app_check_required" });
-  assert.equal(enforced(false)?.code, "app_check_required");
-  assert.equal(enforced(true), null);
+  // Not enforced: an unattested request passes.
+  assert.equal(appCheckDecision({ uid: "u", adminDoc: null, appCheckVerified: false }, false), null);
+  // ENFORCED: the real function's real branch, reached by injecting the flag. An earlier
+  // version of this block asserted on a stub defined in this file, which proved only that
+  // the test could return a string — rewriting the guard to `return null` broke nothing.
+  assert.equal(appCheckDecision({ uid: "u", adminDoc: null, appCheckVerified: false }, true)?.code, "app_check_required");
+  assert.equal(appCheckDecision({ uid: "u", adminDoc: null, appCheckVerified: true }, true), null);
+  // Anything other than a verified boolean true is unattested.
+  for (const bogus of ["true", 1, {}, null, undefined]) {
+    assert.equal(appCheckDecision({ uid: "u", adminDoc: null, appCheckVerified: bogus as never }, true)?.code, "app_check_required", String(bogus));
+  }
+  // And it gates BEFORE authorization, so an unattested admin is still refused.
+  assert.equal(appCheckDecision({ uid: "u", adminDoc: { role: "Director", status: "Active" }, appCheckVerified: false }, true)?.code, "app_check_required");
 });
 
 // --- 15. RE-ENTRANCY / GETTER ATTACK ------------------------------------------------
@@ -270,7 +347,7 @@ check("re-entrancy", () => {
     enumerable: true,
     get() { reads += 1; return reads === 1 ? CONTENT.body : "swapped after the digest"; },
   });
-  const outcome = move(staff("reviewer-uid"), {}, { currentContent: hostile });
+  const outcome = move(staff("reviewer-uid"), { content: hostile });
   // Either the digest saw the swapped value and refused, or it saw the honest value and
   // allowed — but the decision must be consistent with exactly one reading of the content.
   if (outcome.ok) assert.equal(reads <= 1, true, "the content must not be re-read after the digest decision");
@@ -310,8 +387,8 @@ check("error codes", () => {
   const emitted = [
     move(staff("author-uid")).code, move(staff("reviewer-uid"), {}, { expectedVersion: 9 }).code,
     move(staff("reviewer-uid"), {}, { legalHold: null }).code,
-    move(staff("reviewer-uid"), {}, { currentContent: null }).code,
-    move(staff("reviewer-uid"), { state: "revoked" }).code,
+    move(staff("reviewer-uid"), { content: null }).code,
+    move(staff("reviewer-uid"), { state: "revoked" }).code, move(staff("author-uid"), { state: "approved" }).code,
   ];
   for (const code of emitted) {
     assert.equal(typeof code, "string");

@@ -24,7 +24,7 @@
 // ==========================================
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 import {
-  decideAssignment, decideTransition, identityKey, isOpaqueId, jurisdictionDecision,
+  decideAssignment, decideTransition, identityKey, isOpaqueId, isValidExpiry, jurisdictionDecision,
   legalHoldState, presentsSurrogate, sendability,
   type CallerContext, type Decision, type PersistedDraft,
 } from "./outreachAuthority.js";
@@ -97,6 +97,13 @@ export function persistedShapeIsMinimal(value: unknown): { minimal: boolean; off
   return { minimal: offenders.length === 0, offendingFields: offenders };
 }
 
+/** Read one string field out of persisted content, or null. Never throws on a bad shape. */
+function contentField(content: unknown, field: string): string | null {
+  if (!content || typeof content !== "object" || Array.isArray(content)) return null;
+  const value = (content as Record<string, unknown>)[field];
+  return typeof value === "string" ? value : null;
+}
+
 function toPersistedDraft(draftId: string, data: Record<string, unknown> | undefined): PersistedDraft | null {
   if (!data) return null;
   const version = data.version;
@@ -111,6 +118,7 @@ function toPersistedDraft(draftId: string, data: Record<string, unknown> | undef
     draftId,
     state,
     version,
+    content: data.content,
     contentDigest: digest,
     digestAlgorithm: typeof data.digestAlgorithm === "string" ? data.digestAlgorithm : "",
     createdByKey: typeof data.createdByKey === "string" ? data.createdByKey : null,
@@ -159,7 +167,6 @@ export interface TransitionArgs {
   draftId: unknown;
   expectedVersion: unknown;
   requestedState: unknown;
-  content: unknown;
   commandId: unknown;
   now: string;
 }
@@ -172,6 +179,9 @@ export interface ListRow {
   jurisdictionApproved: boolean;
   legalHold: boolean | null;
   expiresAt: string | null;
+  /** Subject and body, so a human can review what they are being asked to approve. */
+  subject: string | null;
+  body: string | null;
   hasAssignedReviewer: boolean;
   callerIsCreator: boolean;
   callerIsAssignedReviewer: boolean;
@@ -256,6 +266,9 @@ export function createOutreachStore(db: Firestore): OutreachStore {
 
   /** Append an immutable receipt. `create` makes the append-only property structural. */
   function appendReceipt(tx: Transaction, receipt: Record<string, unknown>): void {
+    // A receipt is permanent and append-only, so a forbidden field reaching one could
+    // never be corrected by a later write. Screened for real, not by convention.
+    if (!persistedShapeIsMinimal(receipt).minimal) throw new Error("receipt shape is not minimal");
     tx.create(db.collection(RECEIPTS).doc(receipt.receiptId as string), receipt);
   }
 
@@ -270,14 +283,18 @@ export function createOutreachStore(db: Firestore): OutreachStore {
       if (!caller.uid) return fail("unauthenticated");
       if (!isOpaqueId(draftId)) return fail("payload_rejected");
       if (presentsSurrogate(caller.uid)) return fail("payload_rejected");
-      if (expiresAt !== null && expiresAt !== undefined && typeof expiresAt !== "string") {
+      // An expiry is compared as a STRING against a server ISO instant, so any other
+      // shape compares nonsensically: "never" sorts after every digit and the draft would
+      // never expire. Accepting only a strict ISO-8601 UTC instant is what makes the
+      // comparison in the authority core mean what it says.
+      if (expiresAt !== null && expiresAt !== undefined && !isValidExpiry(expiresAt)) {
         return fail("payload_rejected");
       }
 
       const digest = outreachContentDigest(content);
       if (!digest.ok || !digest.digest) return fail("content_rejected");
 
-      return guardedCommand(commandId, { op: "create", draftId, content, jurisdiction, expiresAt }, async (tx, cid, fp) => {
+      return guardedCommand(commandId, { op: "create", draftId, content, jurisdiction, expiresAt, actor: identityKey(caller.uid) }, async (tx, cid, fp) => {
         const adminDoc = await readAdminDoc(tx, db, caller.uid as string);
         const resolved: CallerContext = { ...caller, adminDoc };
         if (!isActiveStaff(adminDoc)) return fail("not_admin");
@@ -296,6 +313,10 @@ export function createOutreachStore(db: Firestore): OutreachStore {
           draftId: draftId as string,
           state: "draft_created",
           version: 1,
+          // The canonical content is PERSISTED. A digest with no retrievable content
+          // cannot be reviewed by a human and can only ever be verified against
+          // something the caller supplies, which defeats the point of pinning it.
+          content,
           contentDigest: digest.digest,
           digestAlgorithm: "sha-256",
           createdByKey: identityKey(caller.uid),
@@ -305,8 +326,13 @@ export function createOutreachStore(db: Firestore): OutreachStore {
           createdAt: now,
           updatedAt: now,
         };
-        const minimal = persistedShapeIsMinimal(record);
-        if (!minimal.minimal) return fail("payload_rejected");
+        // NOTE: there is deliberately no persistedShapeIsMinimal() call on the content or
+        // the record here. It would be dead code. Canonicalization already enforces a
+        // 16-field ALLOWLIST, and the record envelope is a fixed set of hard-coded keys —
+        // so neither can ever contain a forbidden field, and the guard could never fail.
+        // An allowlist is the stronger control; a denylist layered on top of it would only
+        // look like a second one. The guard is applied where shape can actually vary: the
+        // receipt, in appendReceipt().
 
         const receiptId = receiptIdFor({ draftId: draftId as string, fromVersion: 0, toVersion: 1, toState: "draft_created", commandId: cid });
         const result: StoreResult = {
@@ -333,7 +359,7 @@ export function createOutreachStore(db: Firestore): OutreachStore {
       if (presentsSurrogate(reviewerUid) || presentsSurrogate(caller.uid)) return fail("payload_rejected");
       if (typeof reviewerUid !== "string" || reviewerUid.trim() === "") return fail("payload_rejected");
 
-      return guardedCommand(commandId, { op: "assign", draftId, expectedVersion, reviewerUid }, async (tx, cid, fp) => {
+      return guardedCommand(commandId, { op: "assign", draftId, expectedVersion, reviewerUid, actor: identityKey(caller.uid) }, async (tx, cid, fp) => {
         const adminDoc = await readAdminDoc(tx, db, caller.uid as string);
         const resolved: CallerContext = { ...caller, adminDoc };
 
@@ -380,16 +406,15 @@ export function createOutreachStore(db: Firestore): OutreachStore {
 
     async transition(args: TransitionArgs): Promise<StoreResult> {
       const { caller, draftId, expectedVersion, requestedState, commandId, now } = args;
-      const snapped = snapshot(args.content);
-      if (!snapped.ok) return fail("payload_rejected");
-      const content = snapped.value;
-
       if (!caller.uid) return fail("unauthenticated");
       if (!isOpaqueId(draftId)) return fail("payload_rejected");
+      if (presentsSurrogate(caller.uid)) return fail("payload_rejected");
 
       return guardedCommand(
         commandId,
-        { op: "transition", draftId, expectedVersion, requestedState, content },
+        // The replay fingerprint is bound to the CALLER. Without the actor in it, anyone
+        // holding a known command id and payload is handed the original success response.
+        { op: "transition", draftId, expectedVersion, requestedState, actor: identityKey(caller.uid) },
         async (tx, cid, fp) => {
           const adminDoc = await readAdminDoc(tx, db, caller.uid as string);
           const resolved: CallerContext = { ...caller, adminDoc };
@@ -399,9 +424,13 @@ export function createOutreachStore(db: Firestore): OutreachStore {
           const record = toPersistedDraft(draftId as string, snap.exists ? (snap.data() as Record<string, unknown>) : undefined);
           const held = record ? await readLegalHold(tx, db, draftId as string) : null;
 
+          // The content is read from the PERSISTED record, not from the caller. This is
+          // what makes the digest check an integrity check on stored state rather than a
+          // comparison against whatever the caller chose to send — and it is why the UI
+          // needs no copy of the content to approve a draft.
           const decision: Decision = decideTransition({
             caller: resolved, record, expectedVersion, requestedState,
-            currentContent: content, now, legalHold: held,
+            currentContent: record ? record.content : undefined, now, legalHold: held,
           });
           if (!decision.ok || decision.toState === null || decision.toVersion === null) {
             return fail(decision.code ?? "internal_error");
@@ -441,14 +470,20 @@ export function createOutreachStore(db: Firestore): OutreachStore {
       const callerKey = identityKey(caller.uid);
       const snap = await db.collection(DRAFTS).limit(Math.min(Math.max(1, limit), 200)).get();
       const rows: ListRow[] = [];
+      const approvalCache = new Map<string, Record<string, unknown> | null>();
       for (const doc of snap.docs) {
         const record = toPersistedDraft(doc.id, doc.data() as Record<string, unknown>);
         if (!record) continue;
 
         let approvalDoc: Record<string, unknown> | null = null;
         if (record.jurisdiction) {
-          const j = await db.collection(JURISDICTION_APPROVALS).doc(record.jurisdiction).get();
-          approvalDoc = j.exists ? (j.data() as Record<string, unknown>) : null;
+          // Cached per DISTINCT jurisdiction: a page of 200 drafts from one country was
+          // otherwise 200 identical reads.
+          if (!approvalCache.has(record.jurisdiction)) {
+            const j = await db.collection(JURISDICTION_APPROVALS).doc(record.jurisdiction).get();
+            approvalCache.set(record.jurisdiction, j.exists ? (j.data() as Record<string, unknown>) : null);
+          }
+          approvalDoc = approvalCache.get(record.jurisdiction) ?? null;
         }
         const jurisdiction = jurisdictionDecision(record.jurisdiction, approvalDoc);
 
@@ -471,6 +506,8 @@ export function createOutreachStore(db: Firestore): OutreachStore {
           jurisdictionApproved: jurisdiction.approved,
           legalHold: held,
           expiresAt: record.expiresAt,
+          subject: contentField(record.content, "subject"),
+          body: contentField(record.content, "body"),
           hasAssignedReviewer: record.assignedReviewerKey !== null,
           callerIsCreator: callerKey !== null && callerKey === record.createdByKey,
           callerIsAssignedReviewer: callerKey !== null && callerKey === record.assignedReviewerKey,
