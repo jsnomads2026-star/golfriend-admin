@@ -7,8 +7,8 @@ import {
   commissionState,
   filterProspects,
   invoiceEligibility,
+  outboundProspect,
   PROSPECT_STAGES,
-  shareableProspect,
   type Prospect,
 } from "./courseAcquisitionModel.mjs";
 import {
@@ -58,6 +58,7 @@ export default function V2CourseAcquisition({
     [draft, setDraft] = useState<OutreachDraft | null>(null),
     [draftKind, setDraftKind] = useState("invitation"),
     [draftLocale, setDraftLocale] = useState("en"),
+    [includeRecipient, setIncludeRecipient] = useState(false),
     [copied, setCopied] = useState(false),
     [copyFailed, setCopyFailed] = useState(false);
   const detailRef = useDialogFocus(Boolean(selected), () => setSelected(null));
@@ -98,6 +99,7 @@ export default function V2CourseAcquisition({
     setDraft(null);
     setCopied(false);
     setCopyFailed(false);
+    setIncludeRecipient(false);
     setDraftLocale(coerceLocale(r.contactLocale));
   };
   const copy = async () => {
@@ -108,7 +110,7 @@ export default function V2CourseAcquisition({
           ? `${draft.subject}\n\n${draft.body}`
           : report
             ? opportunityToJson(report)
-            : JSON.stringify(shareableProspect(selected), null, 2),
+            : JSON.stringify(outboundProspect(selected), null, 2),
       );
       setCopied(true);
     } catch {
@@ -413,12 +415,22 @@ export default function V2CourseAcquisition({
                     locale: draftLocale,
                     prospect: selected,
                     report,
+                    includeRecipient,
                   }),
                 )
               }
             >
               Generate draft
             </button>
+            <label className="acq-recipient">
+              <input
+                type="checkbox"
+                checked={includeRecipient}
+                onChange={(e) => setIncludeRecipient(e.target.checked)}
+              />
+              Address the selected recipient by name (draft only, awaiting human
+              approval — never enters analytics or evidence)
+            </label>
           </div>
           {report && (
             <div className="acq-evidence">

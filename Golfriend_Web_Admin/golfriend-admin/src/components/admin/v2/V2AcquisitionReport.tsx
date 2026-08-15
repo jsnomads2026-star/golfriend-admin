@@ -244,13 +244,19 @@ export default function V2AcquisitionReport({
               ))}
             </ul>
             <div className="acqr-actions">
-              <button onClick={() => download(acquisitionReportToText(report), "txt")}>
+              <button
+                disabled={!report.validation.valid}
+                onClick={() => download(acquisitionReportToText(report), "txt")}
+              >
                 Download TXT
               </button>
-              <button onClick={() => download(acquisitionReportToCsv(report), "csv")}>
+              <button
+                disabled={!report.validation.valid}
+                onClick={() => download(acquisitionReportToCsv(report), "csv")}
+              >
                 Download CSV
               </button>
-              <button onClick={() => void copy()}>
+              <button disabled={!report.validation.valid} onClick={() => void copy()}>
                 {copyFailed
                   ? "Clipboard unavailable"
                   : copied

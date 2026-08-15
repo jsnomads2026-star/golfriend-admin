@@ -134,11 +134,13 @@ assert.ok(Object.isFrozen(report.validation));
 assert.ok(Object.isFrozen(report.analytics.courses[0]));
 assert.throws(() => { 'use strict'; report.analytics.courses[0].contactEmail = 'ops@leak.example'; });
 
-// An authorized contract flips delivery, and a failed screen still blocks it.
+// An approved authorization is necessary but NOT sufficient: transmission also needs a
+// mounted transmitter (Founder decision, 2026-08-15). No transmitter exists in this build.
 const withAuth = buildAcquisitionReport({ prospects, period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at, authorization: { approved: true, contractRef: 'JHCC-2026-01', effectiveFrom: '2026-08-01' } });
 assert.equal(withAuth.delivery.authorized, true);
-assert.equal(withAuth.delivery.deliverable, true);
 assert.equal(withAuth.delivery.transmitter, null, 'no transmitter may exist in this build');
+assert.equal(withAuth.delivery.transmitterMounted, false);
+assert.equal(withAuth.delivery.deliverable, false, 'authorization alone must never enable delivery');
 // Defence in depth. First layer: registry free text is redacted before it reaches the payload,
 // so a hostile course name never even gets to the screen (asserted above).
 assert.doesNotMatch(acquisitionReportToJson(buildAcquisitionReport({ prospects: [{ id: 'z', courseName: 'ops@leak.example', country: 'Thailand' }], period, generatedAt: '2026-08-15T00:00:00.000Z', evaluationDate: at })), /ops@leak\.example/);

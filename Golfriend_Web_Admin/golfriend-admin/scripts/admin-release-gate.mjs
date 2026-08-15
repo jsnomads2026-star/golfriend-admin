@@ -21,13 +21,18 @@ const run = (args) => {
 
 const expectedAreas = ['overview','courses','bookings','partners','marketing','advertising','exchange','reports'];
 const expectedLocales = ['en','th','ko','ja','zh','es','fr','de'];
-const expectedCapabilities = ['marketing.asset-storage','partners.request-intake','partners.decision-submit','courses.preview-apply','booking.report-ingest','advertising-oem.report-ingest','service-health.report-ingest','jhcc.report-transmit'];
+// The frozen eight, then the Founder-ratified acquisition capabilities (2026-08-15),
+// kept in lockstep with commissioning-readiness-verify. Appending must not reorder the eight.
+const frozenCapabilities = ['marketing.asset-storage','partners.request-intake','partners.decision-submit','courses.preview-apply','booking.report-ingest','advertising-oem.report-ingest','service-health.report-ingest','jhcc.report-transmit'];
+const expectedCapabilities = [...frozenCapabilities,'acquisition.prospect-registry','acquisition.opportunity-report','acquisition.analytics','acquisition.outreach-tracking'];
 assert.deepEqual(ADMIN_AREAS.map((area) => area.id), expectedAreas);
 assert.deepEqual(ADMIN_LOCALES, expectedLocales);
 assert.deepEqual(COMMISSIONING_LOCALES, expectedLocales);
 assert.deepEqual(REPORT_LOCALES, expectedLocales);
 assert.deepEqual(CAPABILITY_IDS, expectedCapabilities);
+assert.deepEqual(CAPABILITY_IDS.slice(0, 8), frozenCapabilities);
 assert.equal(new Set(CAPABILITY_IDS).size, CAPABILITY_IDS.length);
+assert.equal(COMMISSIONING_CONTRACTS.length, expectedCapabilities.length);
 assert.deepEqual(validateCommissioningRegistry(), []);
 assert.ok(COMMISSIONING_REGISTRY.every((entry) => entry.currentState !== 'commissioned'));
 assert.ok(COMMISSIONING_REGISTRY.every((entry) => entry.sourceEvidence && entry.explanation));

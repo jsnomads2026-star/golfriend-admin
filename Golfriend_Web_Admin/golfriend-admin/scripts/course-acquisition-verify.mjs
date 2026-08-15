@@ -9,6 +9,7 @@ import {
   ATTRIBUTION_LEVELS,
   COMMISSION_BEARING_STATES,
   CONTRACT_STATES,
+  MAX_COMMISSION_BPS,
   commissionState,
   containsPersonalData,
   conversionHandoff,
@@ -22,7 +23,9 @@ import {
   NOTE_VISIBILITIES,
   OUTREACH_CHANNELS,
   PROSPECT_STAGES,
-  shareableProspect,
+  outboundProspect,
+  safeIdentifier,
+  safeLabel,
   WITHHELD_FREE_TEXT,
 } from '../src/components/admin/v2/courseAcquisitionModel.mjs';
 
@@ -71,7 +74,16 @@ for (const state of ['none', 'declined', 'lapsed', 'pilot_proposed', 'agreement_
   assert.equal(contradicting.reason, 'contract_state_not_commission_bearing');
   assert.equal(invoiceEligibility({ contract: { ...effectiveContract, state } }, '2026-08-15').invoiceAllowed, false, `state "${state}" must not permit an invoice`);
 }
-for (const state of ['signed_pending_effective', 'pilot_active', 'effective']) assert.equal(commissionState({ ...effectiveContract, state }, '2026-08-15').effective, true, `state "${state}" must remain commission-bearing`);
+// A state recorded as PENDING effective cannot report an effective commission.
+assert.ok(!COMMISSION_BEARING_STATES.includes('signed_pending_effective'));
+assert.equal(commissionState({ ...effectiveContract, state: 'signed_pending_effective' }, '2026-08-15').reason, 'contract_state_not_commission_bearing');
+for (const state of COMMISSION_BEARING_STATES) assert.equal(commissionState({ ...effectiveContract, state }, '2026-08-15').effective, true, `state "${state}" must remain commission-bearing`);
+// A pilot that has run past its recorded end date no longer carries a commission.
+assert.equal(commissionState({ state: 'pilot_active', signed: true, effectiveFrom: '2019-01-01', activatedAt: '2019-01-01', pilotEndsAt: '2019-04-01', commissionBps: 300 }, '2026-08-15').reason, 'pilot_window_closed');
+assert.equal(commissionState({ state: 'pilot_active', signed: true, effectiveFrom: '2026-01-01', activatedAt: '2026-01-01', pilotEndsAt: '2026-12-31', commissionBps: 300 }, '2026-08-15').effective, true);
+// An impossible rate is not an agreed rate.
+assert.equal(commissionState({ ...effectiveContract, commissionBps: 0 }, '2026-08-15').reason, 'no_agreed_rate');
+assert.equal(commissionState({ ...effectiveContract, commissionBps: MAX_COMMISSION_BPS + 1 }, '2026-08-15').reason, 'implausible_rate');
 // Dates are validated as real calendar days, not merely ISO-shaped strings.
 for (const bad of ['0000-00-00', '2026-13-01', '2026-02-30', '2026-00-10']) {
   assert.equal(commissionState({ ...effectiveContract, effectiveFrom: bad }, '2026-08-15').reason, 'no_effective_date', `${bad} must not pass as an effective date`);
@@ -97,28 +109,43 @@ assert.equal(discloseMetric(9, 'unavailable').reason, 'source_unavailable');
 assert.equal(discloseMetric(null, 'authoritative').reason, 'not_recorded');
 assert.equal(discloseMetric(9, 'authoritative').value, 9);
 
-// --- shareable artifacts carry no internal field and no internal note -----
-const withSecrets = shareableProspect({ id: 'p3', courseName: 'Highland', contactEmail: 'ops@example.invalid', contactPhone: '+66000000', internalNotes: 'internal qualification', owner: 'Acquisition desk', history: [{ at: '2026-01-01', visibility: 'internal', summary: 'private note' }, { at: '2026-01-02', visibility: 'shareable', summary: 'meeting held' }] });
+// --- outbound artifacts carry no internal field and no internal note -----
+const withSecrets = outboundProspect({ id: 'p3', courseName: 'Highland', contactEmail: 'ops@example.invalid', contactPhone: '+66000000', internalNotes: 'internal qualification', owner: 'Acquisition desk', history: [{ at: '2026-01-01', visibility: 'internal', summary: 'private note' }, { at: '2026-01-02', visibility: 'shareable', summary: 'meeting held' }] });
 const serialized = JSON.stringify(withSecrets);
-for (const field of INTERNAL_ONLY_FIELDS) assert.ok(!Object.hasOwn(withSecrets, field), `shareable payload leaked ${field}`);
-assert.doesNotMatch(serialized, /ops@example\.invalid|\+66000000|internal qualification|private note|Acquisition desk/);
-assert.equal(withSecrets.history.length, 1);
-assert.equal(withSecrets.history[0].summary, 'meeting held');
+for (const field of INTERNAL_ONLY_FIELDS) assert.ok(!Object.hasOwn(withSecrets, field), `outbound payload leaked ${field}`);
+// Contact history becomes a count — no narrative at all, shareable-marked or not.
+assert.doesNotMatch(serialized, /ops@example\.invalid|\+66000000|internal qualification|private note|meeting held|Acquisition desk/);
+assert.equal(withSecrets.contactCount, 2);
 // Internal notes are withheld rather than silently dropped from the registry view.
 assert.equal(normalizeProspect({ history: [{ visibility: 'internal', summary: 'secret' }] }).history[0].summary, 'Internal note withheld');
-// Free text in ANY shareable field is screened, not just the fields we expected to be risky.
-for (const field of ['courseName', 'country', 'region', 'contactRole']) {
+// Free text in ANY outbound label is screened, not just the fields we expected to be risky.
+for (const field of ['courseName', 'country', 'region']) {
   for (const hostile of ['reach ops@course.example', 'call +66812345678', 'home 13.7563,100.5018', 'host 203.150.19.44', 'id 66812345678']) {
-    const screened = shareableProspect({ id: 'p9', [field]: hostile });
-    assert.equal(screened[field], WITHHELD_FREE_TEXT, `${field} leaked hostile free text: ${hostile}`);
+    const screened = outboundProspect({ id: 'p9', [field]: hostile });
+    assert.match(screened[field], /^Withheld — failed privacy screening \(ref-/, `${field} leaked hostile free text: ${hostile}`);
   }
 }
-// A shareable history summary is screened too, and the demand source is exposed only screened.
-assert.equal(shareableProspect({ id: 'p9', history: [{ visibility: 'shareable', summary: 'met ops@course.example' }] }).history[0].summary, WITHHELD_FREE_TEXT);
-assert.equal(shareableProspect({ id: 'p9', demand: { source: 'ledger for somchai@x.example' } }).demandSource, WITHHELD_FREE_TEXT);
-assert.equal(shareableProspect({ id: 'p9', demand: { source: 'Attributed booking ledger' } }).demandSource, 'Attributed booking ledger');
+// Identifiers are operator-typed too: screened and surrogated, never emitted raw.
+const surrogated = outboundProspect({ id: 'somchai@bangkok.example', courseId: 'call +66812345678' });
+assert.match(surrogated.prospectId, /^prospect-[0-9a-z]+$/);
+assert.match(surrogated.courseId, /^course-[0-9a-z]+$/);
+assert.doesNotMatch(JSON.stringify(surrogated), /somchai@bangkok\.example|\+66812345678/);
+// A clean identifier is preserved unchanged.
+assert.equal(outboundProspect({ id: 'preview-01', courseId: 'course-riverbend' }).courseId, 'course-riverbend');
+// Withholding must PRESERVE DISTINCTNESS: collapsing values into one constant would merge
+// separate buckets and can un-suppress an aggregate the minimum-count rule withheld.
+assert.notEqual(safeLabel('Thailand ops@a.example'), safeLabel('Japan ops@b.example'));
+assert.equal(safeLabel('Thailand ops@a.example'), safeLabel('Thailand ops@a.example'), 'surrogates must be stable');
+assert.notEqual(safeIdentifier('a@x.example'), safeIdentifier('b@x.example'));
 // The screen must not fire on ordinary business text or ISO dates.
-assert.equal(shareableProspect({ id: 'p9', courseName: 'Riverbend Golf Club' }).courseName, 'Riverbend Golf Club');
+assert.equal(outboundProspect({ id: 'p9', courseName: 'Riverbend Golf Club' }).courseName, 'Riverbend Golf Club');
+// Personal-data screening covers width/script variants, separators and unbounded digit runs.
+for (const hostile of ['4111111111111111', '081-234-5678', '(02) 123 4567', 'ops＠leak.example', 'ops (at) leak.example', '๐๘๑๒๓๔๕๖๗๘', '０８１２３４５６７８', 'LINE: @somchai_golf', '203.150.19.44', '66812345678901234']) {
+  assert.equal(containsPersonalData(hostile), true, `screen missed: ${hostile}`);
+}
+for (const benign of ['Riverbend Golf Club', 'Chonburi', 'Thailand', '2026-08-15', 'Hole 18', 'Course 2024']) {
+  assert.equal(containsPersonalData(benign), false, `screen false-positived on: ${benign}`);
+}
 assert.equal(containsPersonalData('2026-08-15'), false);
 assert.equal(containsPersonalData('2026-08-15T00:00:00.000Z'), false);
 assert.equal(containsPersonalData(66812345678), true, 'numeric values must be screened, not only strings');
