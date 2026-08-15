@@ -1,0 +1,11 @@
+{
+  "schema": "golfriend.enterprise-course-intake.rules-requirement.v1",
+  "deploymentChanged": false,
+  "collections": [
+    {"path":"enterprise_staff/{enterpriseUid}/members/{staffUid}","clientWrite":"deny","clientRead":"authenticated_enterprise_owner_exact_organization"},
+    {"path":"enterprise_staff_memberships/{staffUid}","clientRead":"deny","clientWrite":"deny"},
+    {"path":"enterprise_staff_grant_audits/{receiptId}","clientRead":"deny","clientWrite":"deny","immutable":true},
+    {"path":"enterprise_staff_removal_audits/{receiptId}","clientRead":"deny","clientWrite":"deny","immutable":true}
+  ],
+  "commissioningBlocker": "The owner of the deployed complete Firestore ruleset must incorporate and compile these requirements before production commissioning."
+}

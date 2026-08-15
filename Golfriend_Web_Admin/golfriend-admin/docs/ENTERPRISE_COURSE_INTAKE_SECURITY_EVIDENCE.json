@@ -1,0 +1,22 @@
+{
+  "schema": "golfriend.enterprise-course-intake.security-evidence.v1",
+  "startingSha": "e969008bc5fdaaff75f9982cd350f3b897f8b3f4",
+  "recordedAt": "2026-08-15",
+  "targetNative": true,
+  "historicalClaimsReused": false,
+  "verified": {
+    "courseIntake": {"coverage": 6, "identity": 8, "rules": 13, "security": 10, "locales": 15, "secrets": 3, "domain": 29},
+    "functionsRegression": 194,
+    "adminV2": "pass",
+    "portalBuildModules": 124,
+    "authorityGodModeCallableExportAccessibility": "pass",
+    "diffCheck": "pass"
+  },
+  "inheritedBaselineFailure": {
+    "command": "npm run gate:admin-release",
+    "reproducedAtUntouchedStartingSha": true,
+    "actualExtraRoutes": ["analytics", "tee-analytics"],
+    "guardModified": false
+  },
+  "externalEffects": {"deployments":0,"productionWrites":0,"providerCalls":0,"messages":0,"payments":0}
+}

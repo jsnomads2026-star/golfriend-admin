@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../../firebaseConfig';
+import {STAFF_REMOVAL_COPY,staffRemovalLocale} from './staffRemovalCopy';
 
 interface StaffMember {
   staffUid: string;
@@ -17,6 +18,7 @@ interface StaffMember {
   role: string;
   status?: string;
   invitedAt?: any;
+  membershipVersion?: number;
 }
 
 const ROLES = [
@@ -32,6 +34,9 @@ export default function StaffRoles({ partnerUid }: { partnerUid: string }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [isInviting, setIsInviting] = useState(false);
   const [note, setNote] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [removalReason,setRemovalReason]=useState('access_review');
+  const commandIds=useState(()=>new Map<string,string>())[0];
+  const removalCopy=STAFF_REMOVAL_COPY[staffRemovalLocale(navigator.language)];
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNote({ msg, type });
@@ -45,7 +50,7 @@ export default function StaffRoles({ partnerUid }: { partnerUid: string }) {
     const unsub = onSnapshot(col, (snap) => {
       setMembers(snap.docs.map((d) => {
         const m = d.data() as any;
-        return { staffUid: m.staffUid || d.id, email: m.email, role: m.role || 'venue_staff', status: m.status, invitedAt: m.invitedAt } as StaffMember;
+        return { staffUid: m.staffUid || d.id, email: m.email, role: m.role || 'venue_staff', status: m.status, invitedAt: m.invitedAt, membershipVersion:m.membershipVersion } as StaffMember;
       }));
     }, (err) => console.error('Staff roster sync error:', err));
     return () => unsub();
@@ -69,15 +74,18 @@ export default function StaffRoles({ partnerUid }: { partnerUid: string }) {
   };
 
   const remove = async (staffUid: string) => {
-    if (!window.confirm('Remove this staff member from your enterprise?')) return;
+    if (!window.confirm(removalCopy.confirm)) return;
     setBusyId(staffUid);
     try {
       const fn = httpsCallable(getFunctions(), 'manageEnterpriseStaff');
-      const res: any = await fn({ action: 'remove', staffUid });
+      const commandId=commandIds.get(staffUid)||`remove_${crypto.randomUUID().replaceAll('-','_')}`;
+      commandIds.set(staffUid,commandId);
+      const res: any = await fn({ action: 'remove', staffUid, reason:removalReason, commandId });
       if (!res?.data?.success) throw new Error('Removal was not accepted.');
-      notify('Staff member removed.', 'success');
+      commandIds.delete(staffUid);
+      notify(res.data.replayed?removalCopy.replayed:removalCopy.removed, 'success');
     } catch (e: any) {
-      notify(e?.message || 'Failed to remove staff.', 'error');
+      notify(e?.message || removalCopy.failed, 'error');
     } finally {
       setBusyId(null);
     }
@@ -113,6 +121,7 @@ export default function StaffRoles({ partnerUid }: { partnerUid: string }) {
 
       {/* ROSTER */}
       <div style={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px', padding: '20px' }}>
+        <label>{removalCopy.reason}<select value={removalReason} onChange={e=>setRemovalReason(e.target.value)} style={{...inputStyle,marginLeft:12}}>{Object.entries(removalCopy.reasons).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{ margin: 0, color: '#aaa', fontSize: '14px', textTransform: 'uppercase' }}>Enterprise Roster</h3>
           <span style={{ color: '#4CAF50', fontSize: '13px', fontWeight: 'bold' }}>{members.length} member{members.length === 1 ? '' : 's'}</span>
@@ -138,7 +147,7 @@ export default function StaffRoles({ partnerUid }: { partnerUid: string }) {
                       <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: m.status === 'active' ? 'rgba(76,175,80,0.12)' : 'rgba(255,193,7,0.12)', color: m.status === 'active' ? '#4CAF50' : '#FFC107' }}>{m.status || 'invited'}</span>
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      <button onClick={() => remove(m.staffUid)} disabled={busyId === m.staffUid} style={{ background: 'transparent', border: '1px solid #ff4444', color: '#ff4444', borderRadius: '4px', padding: '5px 12px', cursor: busyId === m.staffUid ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '12px' }}>Remove</button>
+                      <button onClick={() => remove(m.staffUid)} disabled={busyId === m.staffUid||m.status!=='active'||!Number.isInteger(m.membershipVersion)} style={{ background: 'transparent', border: '1px solid #ff4444', color: '#ff4444', borderRadius: '4px', padding: '5px 12px', cursor: busyId === m.staffUid ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '12px' }}>{removalCopy.remove}</button>
                     </td>
                   </tr>
                 ))}

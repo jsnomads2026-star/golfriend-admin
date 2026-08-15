@@ -23,7 +23,7 @@ export default function HRManagement() {
       // 🔥 Added 'as any' to satisfy strict typing on Firestore docs
       const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       
-      setStaff(allUsers.filter((u: any) => u.role !== 'Partner')); 
+      setStaff(allUsers.filter((u: any) => ['Director','Manager','Support'].includes(u.role) && ['Active','Suspended'].includes(u.status || 'Active')));
     });
     return () => unsubscribe();
   }, []);
