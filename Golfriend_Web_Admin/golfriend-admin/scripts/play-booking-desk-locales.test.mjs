@@ -57,3 +57,22 @@ test('operational copy covers statuses, actions, accessibility, recovery and ack
     'privacyBoundary', 'providerBoundary', 'referenceLabel', 'acknowledged', 'noChange',
   ]) assert.ok(PLAY_BOOKING_DESK.en[key], `missing required operational key ${key}`);
 });
+
+test('projection freshness and reconciliation copy is complete in every locale',()=>{
+  for(const key of ['projectionVersionLabel','projectionGeneratedAtLabel','projectionExpiresAtLabel','projectionFresh','projectionStale','statusSubmitted','statusUnderReview','statusCancellationRequested','statusCancellationAccepted','statusCancellationDeclined','operationPending','operationAmbiguous','manualReconciliationRequired','previewConfirmationTitle','previewConfirmationBody','recoveryStableReference','retrySameCommand']){
+    for(const locale of canonical)assert.ok(PLAY_BOOKING_DESK[locale][key]?.trim(),`missing ${locale}.${key}`);
+  }
+  assert.match(PLAY_BOOKING_DESK.en.operationPending,/Do not submit another command/i);
+  assert.match(PLAY_BOOKING_DESK.en.operationAmbiguous,/Do not claim success/i);
+  assert.match(PLAY_BOOKING_DESK.en.retrySameCommand,/same verified command reference/i);
+});
+
+test('draft communication labels cover exact types privacy and transmitter boundary',()=>{
+  for(const key of ['draftRequestReceived','draftInformationNeeded','draftAlternativeProposed','draftConfirmed','draftDeclined','draftCancellationReceived','draftCancellationAccepted','draftCancellationDeclined','draftManualSupportRequired','messageDraftOnly','messagePrivacyBoundary','messageAwaitingTransmitter']){
+    for(const locale of canonical)assert.ok(PLAY_BOOKING_DESK[locale][key]?.trim(),`missing ${locale}.${key}`);
+  }
+  assert.match(PLAY_BOOKING_DESK.en.messageDraftOnly,/Nothing has been sent/i);
+  assert.match(PLAY_BOOKING_DESK.en.messagePrivacyBoundary,/minimum booking details/i);
+  assert.match(PLAY_BOOKING_DESK.en.messageAwaitingTransmitter,/approved transmitter/i);
+  for(const locale of canonical)assert.doesNotMatch(Object.values(PLAY_BOOKING_DESK[locale]).join(' '),/(?:message was sent|successfully delivered|delivery confirmed|payment complete|invoice issued)/iu);
+});
