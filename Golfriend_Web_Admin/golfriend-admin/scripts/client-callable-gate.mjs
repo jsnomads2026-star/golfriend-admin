@@ -79,7 +79,7 @@ for (const comp of FORBIDDEN_COMPONENTS) {
 }
 
 // 3. Approved journey surfaces remain reachable (regression guard).
-const APPROVED = ['TeeTimeInventory', 'CourseAvailability', 'BookingRequests', 'BookingOversight', 'BookingAudit', 'HRManagement', 'CourseTeeSheet'];
+const APPROVED = ['TeeTimeInventory', 'CourseAvailability', 'PlayBookingLifecycleV2', 'BookingOversight', 'BookingAudit', 'HRManagement', 'CourseTeeSheet'];
 for (const comp of APPROVED) {
   const hit = [...reachable].find((f) => new RegExp(`[\\\\/]${comp}\\.(tsx|ts|jsx|js)$`).test(f));
   assert(!!hit, `approved journey surface '${comp}' remains reachable`);
