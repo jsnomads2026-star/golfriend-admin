@@ -15,11 +15,12 @@
 //   4. portal-visible media references — test-safe, supported type, resolves to owner
 //      (no provider/Golf API call, no production URL/credential);
 //   5. counts / invariants / financial-field & God-Mode & zero-V1 scans.
-// Emits SEED_CONFORMANCE_EVIDENCE.json + .md (missing/broken/unverified defect report).
+// Verifies SEED_CONFORMANCE_EVIDENCE.json + .md without mutating them. Evidence
+// generation is an explicit maintenance operation: `npm run update:seed-evidence`.
 // Local source verification only: no provider, no emulator, no network, no deploy.
 // Live Lane B rules/index byte-match is delegated to `npm run check:laneb` (LANEB_DIR).
 // ==========================================
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { resolveFirebaseTarget, findV1Leaks, V1_FORBIDDEN } from '../src/firebaseTarget.js';
@@ -38,6 +39,16 @@ const { isSlotBookable, statusAfter, seatDeltaFor, applySeatDelta, isNonFinancia
 const { classifyCourseSync, isValidCoordinate, isValidProviderId } = courseSync;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const updateEvidence = process.argv.includes('--update-evidence');
+const evidenceDirArg = process.argv.find((arg) => arg.startsWith('--evidence-dir='));
+const EVIDENCE_DIR = evidenceDirArg ? resolve(evidenceDirArg.slice('--evidence-dir='.length)) : resolve(HERE, '..');
+const JSON_EVIDENCE_PATH = resolve(EVIDENCE_DIR, 'SEED_CONFORMANCE_EVIDENCE.json');
+const MD_EVIDENCE_PATH = resolve(EVIDENCE_DIR, 'SEED_CONFORMANCE_EVIDENCE.md');
+const readEvidenceJson = () => {
+  if (!existsSync(JSON_EVIDENCE_PATH)) return null;
+  try { return JSON.parse(readFileSync(JSON_EVIDENCE_PATH, 'utf8')); } catch { return null; }
+};
+const committedEvidence = updateEvidence ? null : readEvidenceJson();
 const SEED = JSON.parse(readFileSync(resolve(HERE, '../fixtures/lanec-clean-v2-seed.json'), 'utf8'));
 
 const fails = [];   // Lane C-owned conformance failures (fail the gate)
@@ -390,7 +401,9 @@ const evidence = {
   issueRef: 'https://github.com/jsnomads2026-star/golfriend-app/issues/19#issuecomment-5248506512',
   fixture: 'fixtures/lanec-clean-v2-seed.json',
   manifestVersion: SEED.manifestVersion,
-  generated_at: new Date().toISOString(),
+  generated_at: updateEvidence
+    ? new Date().toISOString()
+    : committedEvidence?.generated_at ?? null,
   synthetic_target: { mode: 'v2-preview', projectId: target.projectId, v1_leaks: findV1Leaks(target).length },
   counts: actualCounts,
   expected_counts: SEED.expected.counts,
@@ -405,8 +418,6 @@ const evidence = {
   ],
   status: passed ? 'CONFORMANT' : 'DEFECTS_PRESENT',
 };
-writeFileSync(resolve(HERE, '../SEED_CONFORMANCE_EVIDENCE.json'), JSON.stringify(evidence, null, 2));
-
 const md = [
   '# Lane C — Clean-V2 Seed & Journey Conformance Evidence',
   '',
@@ -431,10 +442,26 @@ const md = [
   ...evidence.external_delegated.map((e) => `- \`${e.control}\` — ${e.note}`),
   '',
 ].join('\n');
-writeFileSync(resolve(HERE, '../SEED_CONFORMANCE_EVIDENCE.md'), md);
 
 if (fails.length) {
-  console.error(`\n❌ Lane C seed/journey conformance FAILED (${fails.length} Lane C-owned defect(s)). Evidence written.`);
+  console.error(`\n❌ Lane C seed/journey conformance FAILED (${fails.length} Lane C-owned defect(s)). Evidence was not changed.`);
   process.exit(1);
 }
-console.log(`\n✅ Lane C seed/journey conformance PASSED under synthetic v2-preview: authority + projections + journeys + media + invariants; zero V1. Evidence: SEED_CONFORMANCE_EVIDENCE.{json,md}.`);
+
+const json = JSON.stringify(evidence, null, 2);
+if (updateEvidence) {
+  writeFileSync(JSON_EVIDENCE_PATH, json);
+  writeFileSync(MD_EVIDENCE_PATH, md);
+  console.log(`\n✅ Lane C seed evidence regenerated explicitly: ${JSON_EVIDENCE_PATH} and ${MD_EVIDENCE_PATH}.`);
+} else {
+  const stale = [];
+  const committedMd = existsSync(MD_EVIDENCE_PATH) ? readFileSync(MD_EVIDENCE_PATH, 'utf8') : null;
+  if (committedEvidence == null || JSON.stringify(committedEvidence) !== JSON.stringify(evidence)) stale.push(JSON_EVIDENCE_PATH);
+  if (committedMd == null || committedMd.replace(/\r\n/g, '\n') !== md) stale.push(MD_EVIDENCE_PATH);
+  if (stale.length) {
+    console.error(`\n❌ Lane C seed evidence is stale or missing: ${stale.join(', ')}.`);
+    console.error('Run `npm run update:seed-evidence`, review the protected evidence diff, and commit it separately.');
+    process.exit(1);
+  }
+  console.log('\n✅ Lane C seed/journey conformance PASSED; committed evidence is current and verification made no changes.');
+}
