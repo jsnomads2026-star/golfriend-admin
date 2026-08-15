@@ -20,6 +20,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ZONE = /^(UTC|[A-Za-z_]+\/[A-Za-z0-9_+.-]+)$/;
 const NOTIFICATION = new Set(['queued', 'PROVIDER_UNCONFIGURED']);
+const COMPLETED_OUT_OF_QUEUE = Symbol('completed_out_of_active_queue');
 
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const exact = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.has(key));
@@ -75,7 +76,7 @@ function booking(value) {
   const rawStatus = value.status === 'alternative_proposed' ? 'changed' : value.status;
   const version = value.version;
   const memberDisplayName = bounded(value.memberDisplayName, 80);
-  if (!bookingId || !slotId || !courseId || !date || !DATE.test(date) || !time || !TIME.test(time) || !timeZone || !ZONE.test(timeZone) || !STATUSES.has(rawStatus) || !Number.isInteger(version) || version < 1 || !memberDisplayName) return null;
+  if (!bookingId || !slotId || !courseId || !date || !DATE.test(date) || !time || !TIME.test(time) || !timeZone || !ZONE.test(timeZone) || (!STATUSES.has(rawStatus) && rawStatus !== 'completed') || !Number.isInteger(version) || version < 1 || !memberDisplayName) return null;
   const providerFact = provider(value.provider);
   if (providerFact === undefined) return null;
   const courseName = value.courseName === undefined || value.courseName === null ? null : bounded(value.courseName, 120);
@@ -87,6 +88,7 @@ function booking(value) {
   const referenceFact = reference === undefined || reference === null ? null : id(reference);
   const lastMessageAt = value.lastMessageAt === undefined || value.lastMessageAt === null ? null : iso(value.lastMessageAt);
   if ((value.courseName != null && !courseName) || (terms != null && !termsFact) || (reference != null && !referenceFact) || (value.lastMessageAt != null && !lastMessageAt)) return null;
+  if (rawStatus === 'completed') return COMPLETED_OUT_OF_QUEUE;
   return freeze({
     bookingId, slotId, courseId, status: rawStatus, version, memberDisplayName,
     course: freeze({ courseId, name: courseName }),
@@ -110,8 +112,9 @@ export function parsePlayBookingDeskResponse(raw) {
   if (raw.schema !== RESPONSE_SCHEMA || raw.boundary !== BOUNDARY || !ROLES.has(raw.role) || typeof raw.notificationProviderConfigured !== 'boolean' || !Array.isArray(raw.bookings) || raw.bookings.length > 200) return unavailable('response_invalid');
   const allowed = permissions(raw.permissions, raw.role);
   if (!allowed) return unavailable('permissions_invalid');
-  const bookings = raw.bookings.map(booking);
-  if (bookings.some(item => item === null)) return unavailable('booking_projection_invalid');
+  const parsedBookings = raw.bookings.map(booking);
+  if (parsedBookings.some(item => item === null)) return unavailable('booking_projection_invalid');
+  const bookings = parsedBookings.filter(item => item !== COMPLETED_OUT_OF_QUEUE);
   const delegated = raw.role === 'course_staff' ? delegatedCourseIds(raw) : null;
   if (raw.role === 'course_staff' && (!delegated || bookings.some(item => !delegated.includes(item.courseId)))) {
     return freeze({ state: 'delegated_scope_unavailable', reason: 'delegated_scope_unproven', bookings: [] });

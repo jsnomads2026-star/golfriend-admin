@@ -26,7 +26,17 @@ test('maps authoritative alternative state to changed without exposing its messa
 test('accepts exact statuses and rejects all other lifecycle claims', () => {
   assert.deepEqual(PLAY_BOOKING_DESK_STATUSES, ['pending','confirmed','rejected','changed','cancelled','expired']);
   for (const status of PLAY_BOOKING_DESK_STATUSES) assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({status})]})).state, 'ready');
-  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({status:'completed'})]})).state, 'unavailable');
+  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({status:'unknown'})]})).state, 'unavailable');
+});
+
+test('validates completed records but excludes them from the active queue without played claims',()=>{
+  const result=parsePlayBookingDeskResponse(response({bookings:[booking({bookingId:'booking_done',status:'completed',version:8}),booking()]}));
+  assert.equal(result.state,'ready');
+  assert.deepEqual(result.bookings.map(item=>item.bookingId),['booking_1']);
+  assert.equal(JSON.stringify(result).includes('booking_done'),false);
+  assert.equal(JSON.stringify(result).includes('completed'),false);
+  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({status:'completed',memberUid:'private'})]})).state,'unavailable');
+  assert.equal(parsePlayBookingDeskResponse(response({bookings:[booking({status:'completed',version:0})]})).state,'unavailable');
 });
 
 test('projects optional provider course terms and reference only when valid', () => {
@@ -120,4 +130,4 @@ test('strictly binds message result to booking command and acknowledged facts',(
   assert.equal(parseBookingDeskMessageResult({...raw,unknown:true},expected).state,'unavailable');
 });
 
-console.log(`${passed}/13 play booking desk projection tests PASS`);
+console.log(`${passed}/14 play booking desk projection tests PASS`);
