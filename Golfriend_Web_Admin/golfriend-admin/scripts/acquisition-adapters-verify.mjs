@@ -176,13 +176,17 @@ assert.equal(converted.value.provisioningAuthority, 'staff');
 assert.doesNotMatch(JSON.stringify(converted), /active_partner/);
 
 // JHCC transmitter: all four conditions required, screen before confirmation.
-assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: null, confirmed: true, idempotencyKey: 'k' })).error.code, 'AUTHORIZATION_REQUIRED');
-assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: { approved: false, contractRef: 'x' }, confirmed: true, idempotencyKey: 'k' })).error.code, 'AUTHORIZATION_REQUIRED');
-assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true })).error.code, 'VALIDATION_FAILED');
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: null, confirmed: true, idempotencyKey: 'k', evaluationDate: at })).error.code, 'AUTHORIZATION_REQUIRED');
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: { approved: false, contractRef: 'x' }, confirmed: true, idempotencyKey: 'k', evaluationDate: at })).error.code, 'AUTHORIZATION_REQUIRED');
+// A malformed call reports a validation problem, not a fake authorization refusal.
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k' })).error.code, 'VALIDATION_FAILED');
+// An inherited `rejected` flag is not a decline — hasOwn discipline, as in resolveAdapter.
+assert.equal((await submitConversionHandoff({ 'acquisition.portal-conversion': { async submit() { return Object.assign(Object.create({ rejected: true }), { handoffId: 'H-1' }); } } }, { prospect: { id: 'p', stage: 'signed' }, idempotencyKey: 'k' })).value.handoffId, 'H-1');
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, evaluationDate: at })).error.code, 'VALIDATION_FAILED');
 // A payload carrying personal data is blocked BEFORE confirmation is even considered.
-assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: { ...jhcc, leak: 'ops@leak.example' }, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k' })).error.code, 'PRIVACY_SCREEN_FAILED');
-assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: { ...jhcc, memberId: 'm1' }, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k' })).error.code, 'PRIVACY_SCREEN_FAILED');
-assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: false, idempotencyKey: 'k' })).error.code, 'AUTHORIZATION_REQUIRED');
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: { ...jhcc, leak: 'ops@leak.example' }, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k', evaluationDate: at })).error.code, 'PRIVACY_SCREEN_FAILED');
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: { ...jhcc, memberId: 'm1' }, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k', evaluationDate: at })).error.code, 'PRIVACY_SCREEN_FAILED');
+assert.equal((await transmitJhccAcquisition(previewAdapters, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: false, idempotencyKey: 'k', evaluationDate: at })).error.code, 'AUTHORIZATION_REQUIRED');
 
 // === 7b. Gaps the first review found: malformed adapters, faults, bad transmitters ====
 // A non-null value is not an adapter. These must fail CLOSED, not reach the call site.
@@ -201,7 +205,7 @@ for (const [label, invocation] of [
   ['data-source', loadAcquisitionSource(throwing, {})],
   ['outreach', deliverOutreach(throwing, { draft: anonymous, recipientSelected: true, humanApproved: true })],
   ['conversion', submitConversionHandoff(throwing, { prospect: hostile, idempotencyKey: 'k' })],
-  ['transmitter', transmitJhccAcquisition(throwing, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k' })],
+  ['transmitter', transmitJhccAcquisition(throwing, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k', evaluationDate: at })],
 ]) {
   const settled = await invocation;
   assert.equal(settled.ok, false, `${label} did not contain the adapter fault`);
@@ -221,7 +225,7 @@ let serializations = 0;
 let transmitted = null;
 const unstable = { toJSON() { serializations += 1; return serializations === 1 ? { clean: true } : { email: 'leak@real.example', memberId: 'm_1' }; } };
 const capture = { 'acquisition.jhcc-transmitter': { async transmit(input) { transmitted = JSON.stringify(input.payload); return { receiptId: 'receipt-1' }; } } };
-const sent = await transmitJhccAcquisition(capture, { payload: unstable, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k' });
+const sent = await transmitJhccAcquisition(capture, { payload: unstable, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k', evaluationDate: at });
 assert.equal(sent.ok, true);
 assert.doesNotMatch(transmitted, /leak@real\.example|m_1/, 'the transmitter received unscreened content');
 assert.equal(transmitted, '{"clean":true}');
@@ -231,7 +235,7 @@ const smuggled = await submitConversionHandoff(hostileReturn, { prospect: hostil
 assert.equal(smuggled.value.handoffId, null, 'a non-string adapter identifier must be dropped');
 assert.doesNotMatch(JSON.stringify(smuggled), /active_partner|granted/);
 const hostileReceipt = { 'acquisition.jhcc-transmitter': { async transmit() { return { receiptId: { accepted: 'JHCC received' } }; } } };
-const claimed = await transmitJhccAcquisition(hostileReceipt, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k' });
+const claimed = await transmitJhccAcquisition(hostileReceipt, { payload: jhcc, authorization: JHCC_ACQUISITION_AUTHORIZATION, confirmed: true, idempotencyKey: 'k', evaluationDate: at });
 assert.equal(claimed.value.receiptId, null);
 assert.equal(claimed.value.acceptedByJhcc, false, 'acceptance may not be claimed without a real receipt identifier');
 // A blank or non-string contract reference is not an authorization.

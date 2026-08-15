@@ -25,7 +25,17 @@ import {
   type AcquisitionProvider,
   type AcquisitionSnapshot,
 } from "./courseAcquisitionProvider";
+import {
+  capabilityAvailability,
+  MOUNTED_CAPABILITIES,
+  runCapabilityCommand,
+  runConversionHandoff,
+} from "./acquisitionOperations.mjs";
+import { adapterStateLabel } from "./acquisitionAdapterStates.mjs";
+import { createReceiptLedger } from "./acquisitionReceipts.mjs";
+import { PRODUCTION_ACQUISITION_ADAPTERS } from "./previewAcquisitionAdapters.mjs";
 import { LOCALE_CODES, coerceLocale } from "../../../i18n/locales";
+import { useAdminLocale } from "./AdminLocaleContext";
 import "./V2CourseAcquisition.css";
 import { useDialogFocus } from "./useDialogFocus";
 const label = (v: string) =>
@@ -40,9 +50,15 @@ const today = () => {
 export default function V2CourseAcquisition({
   provider = localPreviewAcquisitionProvider,
   evaluationDate = today(),
+  // Production adapters are null. Mounting a real adapter is a separate approval, so this
+  // surface can never be configured into production work by a default.
+  adapters = PRODUCTION_ACQUISITION_ADAPTERS,
+  mode = "preview",
 }: {
   provider?: AcquisitionProvider;
   evaluationDate?: string;
+  adapters?: Record<string, unknown>;
+  mode?: "preview" | "production";
 }) {
   const [snap, setSnap] = useState<AcquisitionSnapshot | null>(null),
     [failed, setFailed] = useState(false),
@@ -60,7 +76,13 @@ export default function V2CourseAcquisition({
     [draftLocale, setDraftLocale] = useState("en"),
     [includeRecipient, setIncludeRecipient] = useState(false),
     [copied, setCopied] = useState(false),
-    [copyFailed, setCopyFailed] = useState(false);
+    [copyFailed, setCopyFailed] = useState(false),
+    [ledger] = useState(() => createReceiptLedger()),
+    [commandStates, setCommandStates] = useState<Record<string, any>>({}),
+    [announcement, setAnnouncement] = useState("");
+  // The panel speaks the ADMIN's language. `draftLocale` is the outreach draft's language and
+  // must not retranslate an unrelated part of the operator's screen.
+  const adminLocale = useAdminLocale();
   const detailRef = useDialogFocus(Boolean(selected), () => setSelected(null));
   useEffect(() => {
     void provider.load().then(setSnap, () => setFailed(true));
@@ -124,11 +146,49 @@ export default function V2CourseAcquisition({
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `golfriend-opportunity-${report.course.id}.txt`;
+    // A filename is a durable artifact no privacy screen covers downstream, so the identifier
+    // is reduced to a safe token rather than trusted.
+    const safeName = String(report.course.id ?? "prospect")
+      .replace(/[^A-Za-z0-9_-]/g, "-")
+      .slice(0, 48);
+    link.download = `golfriend-opportunity-${safeName}.txt`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+  const availability = capabilityAvailability(adapters);
+  const runCommand = async (capabilityId: string) => {
+    const outcome = await runCapabilityCommand({
+      capabilityId,
+      adapters,
+      ledger,
+      mode,
+      idempotencyKey: `${capabilityId}:${selected?.id ?? "none"}`,
+      issuedAt: new Date().toISOString(),
+      input: {
+        limit: 10,
+        prospect: selected,
+        draft,
+        recipientSelected: includeRecipient,
+        humanApproved: false,
+      },
+    });
+    setCommandStates((previous) => ({ ...previous, [capabilityId]: outcome }));
+    // The announcement carries the capability NAME, the state, the refusal reason and the
+    // receipt id. The receipt id changes per command, so a repeated run still announces
+    // instead of producing an identical text node that a screen reader would skip.
+    setAnnouncement(
+      [
+        label(capabilityId.replace("acquisition.", "")),
+        adapterStateLabel(outcome.state, adminLocale),
+        outcome.error ? outcome.error.message : "",
+        outcome.receipt ? `Receipt ${outcome.receipt.receiptId}` : "",
+        outcome.receipt?.replayed ? "replayed" : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
   };
   const eligibility = selected
     ? invoiceEligibility(selected, evaluationDate)
@@ -178,6 +238,77 @@ export default function V2CourseAcquisition({
         commission is effective without a signed, effective-dated agreement and
         verified activation.
       </p>
+      <section className="acq-adapters" aria-labelledby="acq-adapters-heading">
+        <h3 id="acq-adapters-heading">
+          Mounted capabilities ·{" "}
+          <span lang={adminLocale}>
+            {adapterStateLabel(
+              mode === "production" ? "modeProduction" : "modePreview",
+              adminLocale,
+            )}
+          </span>
+        </h3>
+        <p className="acq-adapter-note">
+          Production adapters are not mounted. A command here reaches only the
+          adapter that is configured; in preview nothing is sent, transmitted or
+          written, no course is contacted and no partner status is granted.
+        </p>
+        <div className="acq-adapter-grid">
+          {MOUNTED_CAPABILITIES.map(({ capabilityId }) => {
+            const mountState = availability.find(
+              (entry) => entry.capabilityId === capabilityId,
+            );
+            const outcome = commandStates[capabilityId];
+            const state = outcome ? outcome.state : mountState?.state;
+            return (
+              <article key={capabilityId} data-capability={capabilityId}>
+                <span id={`${capabilityId}-name`}>
+                  {label(capabilityId.replace("acquisition.", ""))}
+                </span>
+                <b
+                  id={`${capabilityId}-state`}
+                  data-state={state}
+                  lang={adminLocale}
+                >
+                  {adapterStateLabel(state, adminLocale)}
+                </b>
+                {outcome?.error && (
+                  <small>
+                    {outcome.error.code} · {outcome.error.message}
+                  </small>
+                )}
+                {outcome?.receipt && (
+                  <small>
+                    Receipt {outcome.receipt.receiptId} ·{" "}
+                    {outcome.receipt.previewOnly
+                      ? "preview only"
+                      : "production"}
+                    {outcome.receipt.replayed ? " · replayed" : ""}
+                  </small>
+                )}
+                <button
+                  type="button"
+                  disabled={!mountState?.mounted}
+                  aria-describedby={`${capabilityId}-state`}
+                  aria-label={`${
+                    mountState?.mounted
+                      ? "Run capability command"
+                      : "No adapter mounted"
+                  }: ${label(capabilityId.replace("acquisition.", ""))}`}
+                  onClick={() => void runCommand(capabilityId)}
+                >
+                  {mountState?.mounted
+                    ? "Run capability command"
+                    : "No adapter mounted"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+        <p className="acq-live" role="status" aria-live="polite">
+          {announcement || "No capability command has been run."}
+        </p>
+      </section>
       <section className="acq-grid">
         <main>
           <div className="acq-tools">
@@ -476,6 +607,28 @@ export default function V2CourseAcquisition({
           <div className="acq-actions">
             <button onClick={() => setHandoff(conversionHandoff(selected))}>
               Preview Portal onboarding handoff
+            </button>
+            <button
+              onClick={() =>
+                void runConversionHandoff({
+                  adapters,
+                  ledger,
+                  mode,
+                  idempotencyKey: `conversion:${selected.id}`,
+                  issuedAt: new Date().toISOString(),
+                  prospect: selected,
+                }).then((outcome) => {
+                  setCommandStates((previous) => ({
+                    ...previous,
+                    "acquisition.portal-conversion": outcome,
+                  }));
+                  setAnnouncement(
+                    `Portal conversion handoff · ${adapterStateLabel(outcome.state, adminLocale)}${outcome.error ? ` · ${outcome.error.message}` : ""}${outcome.receipt ? ` · Receipt ${outcome.receipt.receiptId}` : ""}`,
+                  );
+                })
+              }
+            >
+              Submit conversion handoff to adapter
             </button>
             <button onClick={() => void copy()}>
               {copyFailed

@@ -139,6 +139,13 @@ export default function V2AcquisitionReport({
         />
         <button onClick={generate}>Generate acquisition report</button>
       </div>
+      {/* A persistent live region: it exists before the first update, so a screen reader
+          reliably announces the delivery verdict when a report is generated. */}
+      <p className="acqr-live" role="status" aria-live="polite">
+        {report
+          ? `Deliverable: ${report.delivery.deliverable ? "yes" : "no"} · screen ${report.validation.valid ? "passed" : "blocked"} · authorization ${report.delivery.authorized ? "approved" : "not approved"} · transmitter ${report.delivery.transmitterMounted ? "mounted" : "not mounted"} · generated ${report.generatedAt}`
+          : "No report generated yet."}
+      </p>
       {!report ? (
         <div className="acqr-state">
           No report generated yet. Generation is local and deterministic.
@@ -236,6 +243,23 @@ export default function V2AcquisitionReport({
             <p>
               Delivery: {label(report.delivery.status)} ·{" "}
               {label(report.delivery.reason)}
+            </p>
+            <ul className="acqr-gate">
+              <li>
+                Privacy screen:{" "}
+                {report.validation.valid ? "passed" : "blocked"}
+              </li>
+              <li>
+                Authorization: {report.delivery.authorized ? "approved" : "not approved"}
+              </li>
+              <li>
+                Transmitter:{" "}
+                {report.delivery.transmitterMounted ? "mounted" : "not mounted"}
+              </li>
+            </ul>
+            <p>
+              Delivery requires all three conditions. An approved authorization
+              alone is never sufficient.
             </p>
             <p>{report.delivery.notice}</p>
             <ul>

@@ -81,7 +81,10 @@ export function buildJhccAcquisitionPayload(report,{opportunityReportsGenerated=
   return deepFreeze({schema:JHCC_TRANSMISSION_SCHEMA,version:1,generatedAt:report.generatedAt,period:{start:isoDay(report.period?.start),end:isoDay(report.period?.end)},scope:'aggregate_oversight_only',
     prospectCounts:{total:a.totals.prospects,commissionEffective:a.totals.commissionEffective,opportunityEvidenceOnly:a.totals.opportunityEvidenceOnly},
     prospectStatus:countBy('stage'),
-    countryCoverage:{countries:a.totals.countries,prospectsPerCountry:Object.fromEntries(a.countries.map((c)=>[c.country,c.prospects]))},
+    // Country names are unbounded operator free text and would become OBJECT KEYS, which is the
+    // one place a name could ride into an aggregate-only payload. JHCC gets the coverage
+    // DISTRIBUTION — how many countries and how the prospects spread across them — not the names.
+    countryCoverage:{countries:a.totals.countries,prospectsPerCountryDistribution:a.countries.map((c)=>c.prospects).sort((x,y)=>y-x)},
     courseCoverage:{coursesTracked:a.courses.length,coursesWithCourseId:a.courses.filter((c)=>c.courseId).length},
     opportunityReportCounts:{generated:Number.isInteger(opportunityReportsGenerated)&&opportunityReportsGenerated>=0?opportunityReportsGenerated:0},
     portalConversionStatus:countBy('contractState'),

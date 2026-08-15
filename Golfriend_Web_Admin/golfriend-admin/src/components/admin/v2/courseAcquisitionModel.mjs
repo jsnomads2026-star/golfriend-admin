@@ -143,7 +143,7 @@ export const OUTBOUND_PROHIBITED_FIELDS=Object.freeze([...INTERNAL_ONLY_FIELDS,'
  */
 export function outboundProspect(prospect){const p=normalizeProspect(prospect);const safe=safeLabel;
   // Identifiers are operator-typed too: they are screened and surrogated, never emitted raw.
-  return{prospectId:safeIdentifier(p.id,'prospect'),courseId:safeIdentifier(p.courseId,'course'),courseName:safe(p.courseName),country:safe(p.country),region:safe(p.region),stage:p.stage,contractState:p.contract.state,contractSigned:p.contract.signed,contractEffectiveFrom:p.contract.effectiveFrom,pilotEndsAt:p.contract.pilotEndsAt,contactLocale:p.contactLocale,demandAttribution:p.demand.attribution,contactCount:p.history.length,lastContactedAt:p.lastContactedAt,nextFollowUpAt:p.nextFollowUpAt};}
+  return Object.freeze({prospectId:safeIdentifier(p.id,'prospect'),courseId:safeIdentifier(p.courseId,'course'),courseName:safe(p.courseName),country:safe(p.country),region:safe(p.region),stage:p.stage,contractState:p.contract.state,contractSigned:p.contract.signed,contractEffectiveFrom:p.contract.effectiveFrom,pilotEndsAt:p.contract.pilotEndsAt,contactLocale:p.contactLocale,demandAttribution:p.demand.attribution,contactCount:p.history.length,lastContactedAt:p.lastContactedAt,nextFollowUpAt:p.nextFollowUpAt});}
 
 /**
  * The explicitly selected recipient/contact field for a FUTURE HUMAN-APPROVED message.
