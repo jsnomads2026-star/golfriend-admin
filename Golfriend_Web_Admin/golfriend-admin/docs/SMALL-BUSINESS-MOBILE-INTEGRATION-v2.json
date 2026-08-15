@@ -1,0 +1,73 @@
+{
+  "schema": "golfriend.small-business.mobile-integration.v2",
+  "version": 2,
+  "authority": {
+    "auth": true,
+    "appCheck": true,
+    "memberBinding": "server-derived opaque evidence",
+    "businessStatus": "active",
+    "profileAndLocationVersions": "server-authoritative",
+    "rawUid": false,
+    "rawLocationPersisted": false
+  },
+  "callables": {
+    "list": "discoverSmallBusinessesV2",
+    "detail": "getSmallBusinessDetailV2",
+    "engagement": "recordSmallBusinessEngagementV2",
+    "favorites": "listSmallBusinessFavoritesV2",
+    "recentViews": "listSmallBusinessRecentViewsV2",
+    "prepareInquiry": "prepareSmallBusinessInquiryV2",
+    "getInquiry": "getSmallBusinessInquiryV2",
+    "inquiryHistory": "listSmallBusinessInquiryHistoryV2",
+    "cancelInquiry": "cancelSmallBusinessInquiryV2"
+  },
+  "projection": {
+    "required": ["schema", "version", "state", "locale", "issuedAt", "freshUntil", "memberBinding", "authoritativeStatus"],
+    "businessEvidence": ["businessId", "profileVersion", "profileDigest"],
+    "locationEvidence": ["locationId", "locationVersion"],
+    "freshness": "Clients must reject expired, member-mismatched, schema-mismatched, status-mismatched, or version-mismatched projections."
+  },
+  "requests": {
+    "discovery": ["locale", "filter", "cursor", "limit"],
+    "detail": ["businessId", "expectedProfileVersion", "locale"],
+    "engagement": ["commandId", "businessId", "expectedProfileVersion", "locationId", "expectedLocationVersion", "kind", "payloadFingerprint"],
+    "favoriteReads": ["locale", "cursor", "limit"],
+    "recentReads": ["locale", "cursor", "limit"],
+    "prepareInquiry": ["commandId", "businessId", "expectedProfileVersion", "locationId", "expectedLocationVersion", "locale", "payloadFingerprint"],
+    "inquiryRead": ["inquiryId", "locale"],
+    "inquiryHistory": ["locale", "cursor", "limit"],
+    "cancelInquiry": ["commandId", "inquiryId", "expectedVersion", "payloadFingerprint"]
+  },
+  "engagementKinds": ["favorite", "unfavorite", "view"],
+  "inquiryStates": ["prepared", "awaiting_provider", "transmitted", "failed", "cancelled", "expired"],
+  "providerPolicy": {
+    "commissioned": false,
+    "reachableStates": ["prepared", "awaiting_provider", "cancelled", "expired"],
+    "transmittedRequires": "immutable approved-provider receipt",
+    "failedRequires": "authoritative provider evidence",
+    "transmission": false,
+    "contact": false
+  },
+  "errors": ["UNAUTHENTICATED", "APP_CHECK_REQUIRED", "FORBIDDEN", "INVALID_ARGUMENT", "STALE_VERSION", "REPLAY_PAYLOAD_CHANGED", "BUSINESS_UNAVAILABLE", "BUSINESS_SUSPENDED", "LOCATION_UNAVAILABLE", "MEMBER_BINDING_MISMATCH", "PROJECTION_EXPIRED", "INQUIRY_TRANSITION_DENIED", "HANDOFF_NOT_COMMISSIONED", "UNAVAILABLE"],
+  "replay": {
+    "commandId": "stable per logical operation",
+    "payloadFingerprint": "required and server-verified",
+    "samePayload": "return original result",
+    "changedPayload": "REPLAY_PAYLOAD_CHANGED"
+  },
+  "pagination": {
+    "opaque": true,
+    "bounded": true,
+    "scopeBound": true,
+    "filterBound": true,
+    "ordering": "deterministic server order"
+  },
+  "privacy": {
+    "businessAllowlist": ["businessId", "profileVersion", "profileDigest", "locationId", "locationVersion", "displayName", "category", "city", "country", "description", "availability", "partner", "sponsored", "disclosure", "authoritativeStatus", "returnRoute"],
+    "historyAllowlist": ["businessId", "savedProfileVersion", "currentProfileVersion", "locationId", "savedLocationVersion", "currentLocationVersion", "state", "issuedAt", "freshUntil"],
+    "forbidden": ["rawUid", "staff", "contact", "email", "phone", "rawCoordinates", "memberProfile", "privateEvidence", "providerCredential", "subscription", "correctionReview", "jhcc"]
+  },
+  "navigation": {"origin": "/lounge", "back": "/lounge", "exit": "/lounge", "acceptanceSideEffects": false},
+  "locales": ["en", "th", "ko", "ja", "zh", "es", "fr", "de"],
+  "localeKeys": ["smallBusiness.discovery.title", "smallBusiness.discovery.empty", "smallBusiness.discovery.offline", "smallBusiness.discovery.unavailable", "smallBusiness.discovery.retry", "smallBusiness.discovery.partnerDisclosure", "smallBusiness.discovery.sponsoredDisclosure", "smallBusiness.discovery.availabilityUnknown", "smallBusiness.detail.favorite", "smallBusiness.detail.unfavorite", "smallBusiness.detail.inquiry", "smallBusiness.detail.returnToLounge", "smallBusiness.inquiry.ownerValidationRequired", "smallBusiness.inquiry.prepared", "smallBusiness.inquiry.awaitingProvider", "smallBusiness.inquiry.cancelled", "smallBusiness.inquiry.expired", "smallBusiness.saved.unavailable"]
+}

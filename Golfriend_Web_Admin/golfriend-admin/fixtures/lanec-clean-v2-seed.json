@@ -186,7 +186,7 @@
   },
 
   "small_business_test_world": {
-    "schema": "golfriend.small-business.monday-world.v1",
+    "schema": "golfriend.small-business.monday-world.v2",
     "world": "synthetic_fixture",
     "productionWrites": false,
     "clock": "2026-08-17T02:00:00.000Z",
@@ -209,7 +209,21 @@
       {"businessId":"sb_changes","planId":"sb_standard","state":"provider_pending","providerEvidence":null,"golfriendRevenue":0}
     ],
     "reportingFacts": {"promotionGolfriendRevenue":0,"externalCourseCommission":2750,"externalCommissionIsGolfriendRevenue":false,"jhccTransmission":false},
-    "scenarios": ["onboarding","multi_location_setup","operating_hours_edit","location_rename_stable_id","canonical_id_replacement_denied","active_profile_correction","stale_concurrent_correction","plan_selection_intent","provider_confirmed_subscription","provider_failure_pending_subscription","promotion_draft_review_approval_suppression_expiry","dnc_frequency_enforcement","discovery_detail_favorite_view_inquiry","offline_edit_retry","double_submission","suspended_business_denial","admin_reporting","jhcc_prepare_no_transmission","promotion_zero_golfriend_revenue","external_commission_separate","eight_locale_expected_labels"]
+    "mobileProducerFacts": {
+      "contractSchema":"golfriend.small-business.mobile-integration.v2",
+      "profileVersions":{"businessId":"sb_cafe_siam","before":4,"after":5,"approvedDigestBefore":"sha256:fixture-profile-v4","approvedDigestAfter":"sha256:fixture-profile-v5"},
+      "locationVersions":{"loc_cafe_bangna":3,"loc_cafe_sathorn":2},
+      "categoryCases":{"exact":"golf_cafe","mismatch":"restaurant","hostile":["golf","Golf_Cafe","golf_cafe\u200b","","unknown_category"]},
+      "favorites":[{"member":"ex_sb_rep_mali","businessId":"sb_cafe_siam","savedProfileVersion":4,"currentProfileVersion":5,"state":"current"},{"member":"ex_sb_rep_mali","businessId":"sb_suspended","savedProfileVersion":5,"currentProfileVersion":5,"state":"tombstone"}],
+      "recentViews":[{"member":"ex_sb_rep_mali","businessId":"sb_restaurant_green","savedProfileVersion":2,"currentProfileVersion":2,"state":"current"}],
+      "inquiries":[{"inquiryId":"sbi_prepared","state":"prepared","version":1,"transmission":false},{"inquiryId":"sbi_awaiting","state":"awaiting_provider","version":2,"transmission":false},{"inquiryId":"sbi_cancelled","state":"cancelled","version":2,"transmission":false},{"inquiryId":"sbi_expired","state":"expired","version":2,"transmission":false}],
+      "replay":{"exact":"original_result","altered":"REPLAY_PAYLOAD_CHANGED"},
+      "memberSwitch":{"from":"ex_sb_rep_mali","to":"ex_sb_cross_unauthorized","result":"MEMBER_BINDING_MISMATCH"},
+      "locales":["en","th","ko","ja","zh","es","fr","de"],
+      "productionWrites":false,
+      "providerTransmission":false
+    },
+    "scenarios": ["onboarding","multi_location_setup","operating_hours_edit","location_rename_stable_id","canonical_id_replacement_denied","active_profile_correction","stale_concurrent_correction","plan_selection_intent","provider_confirmed_subscription","provider_failure_pending_subscription","promotion_draft_review_approval_suppression_expiry","dnc_frequency_enforcement","discovery_detail_favorite_view_inquiry","offline_edit_retry","double_submission","suspended_business_denial","admin_reporting","jhcc_prepare_no_transmission","promotion_zero_golfriend_revenue","external_commission_separate","eight_locale_expected_labels","corrected_profile_before_after","stale_profile_request","stale_location_request","exact_category_result","category_mismatch","hostile_category_filters","favorites_read","recent_views_read","suspended_saved_business_tombstone","known_id_suspension_attempt","prepared_inquiry","awaiting_provider_inquiry","cancelled_inquiry","expired_inquiry","fake_transmitted_attempt_denied","exact_mobile_replay","altered_mobile_replay_denied","member_switch_denied"]
   },
 
   "exclusions": [
