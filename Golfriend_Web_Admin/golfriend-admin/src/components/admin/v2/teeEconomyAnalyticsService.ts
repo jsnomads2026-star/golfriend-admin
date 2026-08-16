@@ -1,0 +1,2 @@
+import{httpsCallable}from'firebase/functions';import{functions}from'../../../firebaseConfig';
+export async function loadTeeEconomyAnalytics(startDate:string,endDate:string){const response=await httpsCallable(functions,'getTeeEconomyAnalytics')({startDate,endDate});const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.admin.tee-economy-analytics.v1')throw new Error('TEE_ANALYTICS_INVALID');return value;}

@@ -1,0 +1,40 @@
+name: E6 Admin verification
+on:
+  pull_request:
+    paths:
+      - 'Golfriend_Web_Admin/golfriend-admin/**'
+      - '.github/workflows/e6-admin-verification.yml'
+  push:
+    branches: [codex/golf-api-course-sync]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Golfriend_Web_Admin/golfriend-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            Golfriend_Web_Admin/golfriend-admin/package-lock.json
+            Golfriend_Web_Admin/golfriend-admin/functions/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm test
+        working-directory: Golfriend_Web_Admin/golfriend-admin/functions
+      - run: npm run verify:e6-course-growth
+      - run: npm run verify:e6-ingestion-admin
+      - run: npm run verify:e6-operations
+      - run: npm run verify:e6-user-analytics
+      - run: npm run verify:e6-tee-analytics
+      - run: npm run verify:course-operations
+      - run: npm run build
+      - run: git diff --check
+        working-directory: .

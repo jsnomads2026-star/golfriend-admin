@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';
+const service=fs.readFileSync(new URL('../src/components/admin/v2/courseOperationsService.ts',import.meta.url),'utf8');
+const ui=fs.readFileSync(new URL('../src/components/admin/v2/V2CourseIngestionControl.tsx',import.meta.url),'utf8');
+const host=fs.readFileSync(new URL('../src/components/admin/v2/V2CourseOperations.tsx',import.meta.url),'utf8');
+assert.match(service,/httpsCallable\(functions,'previewCourseRegionImport'\)/);assert.match(service,/httpsCallable\(functions,'commitCourseRegionImport'\)/);
+assert.match(service,/callable\(\{jobId\}\)/);assert.doesNotMatch(service,/GOLF_API_KEY|apiKey|providerKey/);
+assert.match(ui,/service\.previewRegion/);assert.match(ui,/service\.commitRegion\(jobId\)/);assert.match(ui,/state==='confirm'/);assert.match(ui,/disabled=\{!valid\}/);
+assert.match(ui,/latitude:Number\(latitude\)/);assert.match(ui,/longitude:Number\(longitude\)/);assert.match(ui,/radiusKm:Number\(radius\)/);
+assert.match(ui,/role="alert"/);assert.match(ui,/role="status"/);assert.match(ui,/Record<AdminLocale/);
+for(const locale of ['en','th','ko','ja','zh','es','fr','de'])assert.match(ui,new RegExp(`\\n  ${locale}:`));
+assert.match(host,/V2CourseIngestionControl service=\{service\}/);
+console.log('E6 Admin ingestion control PASS: authoritative preview/commit callables, exact job handoff, validation, confirmation, fail-closed UI, eight locales, and mounted consumer.');

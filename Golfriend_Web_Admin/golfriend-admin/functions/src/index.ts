@@ -32,6 +32,11 @@ export {getEnterpriseCourseMembersV1,getEnterpriseCourseMemberV1,createEnterpris
 export {getEnterpriseMemberRequestsAdminV1,getEnterpriseMemberRequestAdminV1,decideEnterpriseMemberRequestAdminV1,resolveEnterpriseMemberCsvConflictsAdminV1,prepareEnterpriseMemberDeliveryAdminV1,getEnterpriseMemberDeliveryOutboxAdminV1} from "./enterpriseMemberAdminRuntime.js";
 export {getEnterpriseMemberCommissioningAdminV1,proposeEnterpriseMemberDeliveryTemplateAdminV1,recordEnterpriseMemberTemplateApprovalAdminV1,activateEnterpriseMemberDeliveryTemplateAdminV1,rejectEnterpriseMemberDeliveryTemplateAdminV1,retireEnterpriseMemberDeliveryTemplateAdminV1,runEnterpriseMemberDeliveryDryRunAdminV1,validateEnterpriseMemberJHCCPortAdminV1} from "./enterpriseMemberCommissioningRuntime.js";
 export {getSmallBusinessPortalV1,saveSmallBusinessProfileV1,submitSmallBusinessProfileV1,submitSmallBusinessApplicationV1,withdrawSmallBusinessApplicationV1,getSmallBusinessProfileCorrectionV1,saveSmallBusinessProfileCorrectionV1,submitSmallBusinessProfileCorrectionV1,withdrawSmallBusinessProfileCorrectionV1,prepareSmallBusinessPromotionV1,createSmallBusinessSubscriptionIntentV1,discoverSmallBusinessesV1,getSmallBusinessDetailV1,recordSmallBusinessEngagementV1,prepareSmallBusinessInquiryV1,listSmallBusinessApplicationsAdminV1,getSmallBusinessApplicationAdminV1,decideSmallBusinessApplicationAdminV1,listSmallBusinessProfileCorrectionsAdminV1,getSmallBusinessProfileCorrectionAdminV1,decideSmallBusinessProfileCorrectionAdminV1,reviewSmallBusinessPromotionAdminV1,getSmallBusinessReportingAdminV1,prepareSmallBusinessJhccReportAdminV1} from "./smallBusinessRuntime.js";
+import {ENTERPRISE_ROLES, MEMBERSHIP_REGISTRY_COLLECTION, MEMBERSHIP_REGISTRY_VERSION, REMOVAL_REASONS, isCommandId, isEnterpriseRole, isRemovalReason, rejectSurplus, removalFingerprint} from "./enterpriseCourseIntakeSecurity.js";
+export {listCourseSyncReceipts, recoverExpiredCourseIngestionJobs, getCourseIngestionOperations, prepareCourseIngestionRetry} from "./courseIngestion.js";
+export {getCountryUserAnalytics} from "./countryUserAnalytics.js";
+export {getTeeEconomyAnalytics} from "./teeEconomyAnalytics.js";
+export {getCourseAcquisitionDashboard,previewCourseAcquisitionPlan,acquireCourseCandidates,decideCourseCandidate,publishCourseCandidate,submitCourseCorrectionRequest} from "./courseAcquisition.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -849,17 +854,21 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
 // it is server-owned: the client cannot self-assign roles or write the roster.
 // Only an ACTIVE ENTERPRISE partner may invite/remove staff on their own org.
 // Roster lives at enterprise_staff/{enterpriseUid}/members/{staffUid}.
-export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request) => {
+export const manageEnterpriseStaff = onCall({ memory: "256MiB", enforceAppCheck: true }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
 
   const callerUid = request.auth.uid;
-  const callerEmail = (request.auth.token?.email || "").toLowerCase();
-  const { action, email, staffUid, role } = request.data || {};
+  const callerEmail = request.auth.token?.email_verified === true ? String(request.auth.token?.email || "").toLowerCase() : "";
+  const payload = (request.data || {}) as Record<string, unknown>;
+  const { action, email, staffUid, role } = payload;
 
   if (action !== 'invite' && action !== 'remove') {
     throw new HttpsError('invalid-argument', 'action must be "invite" or "remove".');
+  }
+  try { rejectSurplus(payload, action); } catch {
+    throw new HttpsError('invalid-argument', 'The request contains undeclared authority fields.');
   }
 
   // Caller must be an ACTIVE ENTERPRISE partner (b2b_partners keyed by uid/email).
@@ -868,17 +877,19 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
     candidateIds.push(callerEmail);
     candidateIds.push(callerEmail.charAt(0).toUpperCase() + callerEmail.slice(1));
   }
-  let isEnterprisePartner = false;
+  let organizationId = '';
+  let authoritySource = '';
   for (const id of candidateIds) {
     const pSnap = await db.collection('b2b_partners').doc(id).get();
     const pData = pSnap.data();
     if (pSnap.exists && pData?.status === 'active_partner' &&
         (pData?.tier === 'enterprise' || pData?.tier === 'Enterprise')) {
-      isEnterprisePartner = true;
+      organizationId = String(pData.organizationId || '').trim();
+      authoritySource = id === callerUid ? 'auth_uid' : 'verified_email';
       break;
     }
   }
-  if (!isEnterprisePartner) {
+  if (!organizationId || !authoritySource) {
     throw new HttpsError('permission-denied', 'Only an active enterprise partner can manage staff.');
   }
 
@@ -887,12 +898,12 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
 
   try {
     if (action === 'invite') {
-      const cleanEmail = (email || "").toLowerCase().trim();
+      const cleanEmail = (typeof email === 'string' ? email : "").toLowerCase().trim();
       if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         throw new HttpsError('invalid-argument', 'A valid staff email is required.');
       }
-      const allowedRoles = ['manager', 'venue_staff', 'analyst'];
-      const cleanRole = allowedRoles.includes(role) ? role : 'venue_staff';
+      if (!isEnterpriseRole(role)) throw new HttpsError('invalid-argument', `role must be one of: ${ENTERPRISE_ROLES.join(', ')}.`);
+      const cleanRole = role;
 
       // Resolve an EXISTING Firebase Auth user; roles bind to a real uid.
       let staffRecord;
@@ -901,31 +912,52 @@ export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request
       } catch {
         throw new HttpsError('not-found', 'No Golfriend account exists for that email. Ask them to sign up first.');
       }
+      if (staffRecord.emailVerified !== true) throw new HttpsError('failed-precondition', 'The target account must have a verified email.');
       if (staffRecord.uid === callerUid) {
         throw new HttpsError('failed-precondition', 'You cannot add yourself as staff.');
       }
 
-      await membersCol.doc(staffRecord.uid).set({
-        staffUid: staffRecord.uid,
-        email: cleanEmail,
-        role: cleanRole,
-        status: 'active',
-        enterpriseUid: callerUid,
-        invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-        invitedBy: callerUid,
-      }, { merge: true });
-
-      logger.info(`🧑‍💼 Enterprise ${callerUid} added staff ${staffRecord.uid} (${cleanRole}).`);
-      return { success: true, staffUid: staffRecord.uid, role: cleanRole };
+      const memberRef=membersCol.doc(staffRecord.uid), registryRef=db.collection(MEMBERSHIP_REGISTRY_COLLECTION).doc(staffRecord.uid);
+      const result=await db.runTransaction(async tx=>{
+        const [current,registry]=await Promise.all([tx.get(memberRef),tx.get(registryRef)]);
+        const existing=registry.data()||{};
+        if(registry.exists&&existing.status==='active'&&(existing.enterpriseUid!==callerUid||existing.organizationId!==organizationId)) throw new HttpsError('already-exists','That account is active in another organization.');
+        const prior=current.data()||{};
+        if(current.exists&&prior.status==='active'&&prior.role===cleanRole&&prior.organizationId===organizationId) return {membershipVersion:Number(prior.membershipVersion)||1,replayed:true};
+        const membershipVersion=(Number(prior.membershipVersion)||0)+1;
+        const record={staffUid:staffRecord.uid,email:cleanEmail,role:cleanRole,status:'active',enterpriseUid:callerUid,organizationId,membershipVersion,registryVersion:MEMBERSHIP_REGISTRY_VERSION,invitedAt:admin.firestore.FieldValue.serverTimestamp(),invitedBy:callerUid};
+        tx.set(memberRef,record,{merge:true}); tx.set(registryRef,record,{merge:false});
+        tx.create(db.collection('enterprise_staff_grant_audits').doc(`${callerUid}__${staffRecord.uid}__${membershipVersion}`),{staffUid:staffRecord.uid,role:cleanRole,status:'active',enterpriseUid:callerUid,organizationId,membershipVersion,registryVersion:MEMBERSHIP_REGISTRY_VERSION,invitedBy:callerUid,authoritySource,immutable:true,createdAt:admin.firestore.FieldValue.serverTimestamp()});
+        return {membershipVersion,replayed:false};
+      });
+      return { success: true, staffUid: staffRecord.uid, role: cleanRole, ...result };
     }
 
     // action === 'remove'
-    if (!staffUid || typeof staffUid !== 'string') {
+    if (!staffUid || typeof staffUid !== 'string' || !staffUid.trim()) {
       throw new HttpsError('invalid-argument', 'A staffUid is required to remove a member.');
     }
-    await membersCol.doc(staffUid).delete();
-    logger.info(`🧑‍💼 Enterprise ${callerUid} removed staff ${staffUid}.`);
-    return { success: true, staffUid };
+    if(!isRemovalReason(payload.reason)) throw new HttpsError('invalid-argument',`reason must be one of: ${REMOVAL_REASONS.join(', ')}.`);
+    if(!isCommandId(payload.commandId)) throw new HttpsError('invalid-argument','commandId must be 8-64 safe characters.');
+    const reason=payload.reason,commandId=payload.commandId,targetRef=membersCol.doc(staffUid),registryRef=db.collection(MEMBERSHIP_REGISTRY_COLLECTION).doc(staffUid),auditRef=db.collection('enterprise_staff_removal_audits').doc(`${callerUid}__${staffUid}__${commandId}`);
+    const result=await db.runTransaction(async tx=>{
+      const [prior,current,registry]=await Promise.all([tx.get(auditRef),tx.get(targetRef),tx.get(registryRef)]);
+      if(prior.exists){const saved=prior.data()||{};const replay=removalFingerprint({enterpriseUid:callerUid,organizationId,staffUid,membershipVersion:Number(saved.membershipVersion),reason,commandId});if(saved.fingerprint!==replay)throw new HttpsError('already-exists','commandId was used for different removal content.');return {membershipVersion:Number(saved.membershipVersion),replayed:true};}
+      if(!current.exists||!registry.exists)throw new HttpsError('not-found','That account is not registered staff.');
+      const member=current.data()||{},binding=registry.data()||{};
+      if(member.enterpriseUid!==callerUid||member.organizationId!==organizationId||binding.enterpriseUid!==callerUid||binding.organizationId!==organizationId)throw new HttpsError('permission-denied','Membership is outside the authenticated organization.');
+      if(member.registryVersion!==MEMBERSHIP_REGISTRY_VERSION||binding.registryVersion!==MEMBERSHIP_REGISTRY_VERSION)throw new HttpsError('failed-precondition','Membership registry version is unavailable.');
+      const membershipVersion=Number(member.membershipVersion);
+      if(!Number.isInteger(membershipVersion)||membershipVersion<1||binding.membershipVersion!==membershipVersion)throw new HttpsError('failed-precondition','Membership version is inconsistent.');
+      if(member.status==='removed')throw new HttpsError('failed-precondition','Membership was already removed by another command.');
+      if(member.status!=='active'||!isEnterpriseRole(member.role))throw new HttpsError('failed-precondition','Membership authority is not active.');
+      const fingerprint=removalFingerprint({enterpriseUid:callerUid,organizationId,staffUid,membershipVersion,reason,commandId}),removedAt=admin.firestore.FieldValue.serverTimestamp();
+      tx.create(auditRef,{removalId:auditRef.id,commandId,fingerprint,enterpriseUid:callerUid,organizationId,staffUid,membershipVersion,removedRole:member.role,reason,actorUid:callerUid,authoritySource,removedAt,immutable:true});
+      const tombstone={status:'removed',previousRole:member.role,removedAt,removedBy:callerUid,removalCommandId:commandId,removalReason:reason,membershipVersion:membershipVersion+1,registryVersion:MEMBERSHIP_REGISTRY_VERSION};
+      tx.set(targetRef,tombstone,{merge:true});tx.set(registryRef,{...tombstone,staffUid,enterpriseUid:callerUid,organizationId},{merge:true});
+      return {membershipVersion:membershipVersion+1,replayed:false};
+    });
+    return {success:true,staffUid,...result};
   } catch (error: any) {
     if (error instanceof HttpsError) throw error;
     logger.error("🧑‍💼 Enterprise staff management failed:", error);

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=(path)=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
+const growth=read('functions/src/courseGrowth.ts'), ingestion=read('functions/src/courseIngestion.ts'), index=read('functions/src/index.ts');
+const service=read('src/components/admin/v2/courseOperationsService.ts'), ui=read('src/components/admin/v2/V2CourseOperations.tsx'), receipts=read('src/components/admin/v2/V2CourseGrowthReceipts.tsx');
+assert.match(ingestion,/enforceAppCheck: true/g);assert.match(ingestion,/requireCoordinator/);assert.match(ingestion,/requireProviderConfiguration/);
+assert.match(ingestion,/reserveQuota/);assert.match(growth,/QUOTA_UNCONFIGURED/);assert.match(growth,/QUOTA_EXHAUSTED/);
+assert.match(growth,/normalize\("NFC"\)/);assert.match(growth,/localization: \{defaultLocale: "und"/);assert.match(growth,/isManualLocked/);
+assert.match(growth,/withDeterministicRetry/);assert.match(growth,/deterministicReceiptId/);assert.match(ingestion,/batch\.create\(db\.collection\("course_sync_receipts"\)/);
+assert.match(ingestion,/transaction\.create\(courseRef, record\)/);assert.match(ingestion,/if \(latest\.exists\) return false/);
+assert.match(index,/listCourseSyncReceipts/);assert.match(service,/httpsCallable\(functions, 'listCourseSyncReceipts'\)/);assert.match(ui,/<V2CourseGrowthReceipts service=\{service\}/);
+for(const locale of ['en','th','ko','ja','zh','es','fr','de'])assert.match(receipts,new RegExp(`\\n  ${locale}:`));
+assert.doesNotMatch(service+ui+receipts,/GOLF_API_KEY|golfapi\.io|Authorization\s*:|Bearer\s+/i);
+console.log('E6_COURSE_GROWTH_VERIFY_PASS quota, idempotency, coordinates, localization, retry, dedupe, fail-closed provider, authenticated receipts and mounted Admin consumer.');

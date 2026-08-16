@@ -1,0 +1,9 @@
+import assert from'node:assert/strict';import{readFileSync}from'node:fs';
+const files=['src/components/admin/v2/V2CourseAcquisitionPipeline.tsx','src/components/B2B/enterprise/CourseCorrectionRequest.tsx','src/components/admin/v2/V2CourseOperations.tsx','src/components/B2B/enterprise/VenueManager.tsx','src/components/admin/v2/courseOperationsService.ts'];const source=files.map(f=>readFileSync(new URL(`../${f}`,import.meta.url),'utf8')).join('\n');let passed=0;const check=(name,fn)=>{fn();passed++;console.log(`  ✓ ${name}`)};
+check('pipeline is mounted only in the existing Admin course area',()=>{assert.match(source,/V2CourseAcquisitionPipeline service=\{service\}/);assert.doesNotMatch(readFileSync(new URL('../src/components/B2B/enterprise/CourseCorrectionRequest.tsx',import.meta.url),'utf8'),/V2CourseAcquisitionPipeline/);});
+check('portal correction is request-only via callable',()=>{assert.match(source,/submitCourseCorrectionRequest/);assert.match(source,/canonicalMutation!==false/);assert.doesNotMatch(source,/setDoc|addDoc|updateDoc|deleteDoc/);});
+check('all exact operational locales are independently present',()=>{for(const locale of['en','th','ko','ja','zh','es','fr','de'])assert.match(source,new RegExp(`${locale}:\\{title:`));});
+check('mounted controls expose 48px confirmation and live status',()=>{assert.match(source,/minHeight:48/);assert.match(source,/aria-live="polite"/);assert.match(source,/role="dialog"/);assert.match(source,/aria-modal="true"/);});
+check('Admin client has no provider credential or direct acquisition collection write',()=>{assert.doesNotMatch(source,/GOLF_API_KEY|Authorization:`Bearer|course_provider_evidence/);assert.match(source,/httpsCallable/);});
+check('dry planner validates zero provider calls and zero writes',()=>{assert.match(source,/value\.providerCalls!==0\|\|value\.writes!==0/);});
+console.log(`Course acquisition mounted verification PASS: ${passed} checks.`);

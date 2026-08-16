@@ -58,6 +58,8 @@ import V2PartnerAuthority from './components/admin/v2/V2PartnerAuthority';
 import V2EnterpriseMemberRequests from './components/admin/v2/V2EnterpriseMemberRequests';
 import V2SmallBusinessReview from './components/admin/v2/V2SmallBusinessReview';
 import V2SmallBusinessReadiness from './components/admin/v2/V2SmallBusinessReadiness';
+import V2CountryUserAnalytics from './components/admin/v2/V2CountryUserAnalytics';
+import V2TeeEconomyAnalytics from './components/admin/v2/V2TeeEconomyAnalytics';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -257,6 +259,8 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingProviderPublicationV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerApplications />}
     {activeArea === 'partners' && <V2PartnerAuthority />}
+    {activeArea === 'analytics' && <V2CountryUserAnalytics />}
+    {activeArea === 'tee-analytics' && <V2TeeEconomyAnalytics />}
     {activeArea === 'partners' && <V2PartnerOperations />}
     {activeArea === 'partners' && <V2EnterpriseMemberRequests />}
     {activeArea === 'partners' && <V2SmallBusinessReview />}

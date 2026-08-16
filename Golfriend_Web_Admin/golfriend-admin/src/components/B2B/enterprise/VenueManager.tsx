@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../../../firebaseConfig';
+import CourseCorrectionRequest from './CourseCorrectionRequest';
 
 interface CourseOption { courseID: string; label: string; city?: string; }
 interface OperatedCourse { courseId: string; courseName: string; }
@@ -126,6 +127,7 @@ export default function VenueManager({ partnerUid }: { partnerUid: string }) {
           </div>
         )}
       </div>
+      <CourseCorrectionRequest />
     </div>
   );
 }
