@@ -446,7 +446,7 @@ import StaffRoles from './enterprise/StaffRoles';
 import PartnerAuthorityConsole from './PartnerAuthorityConsole';
 import VerifiedCourseOnboarding from './VerifiedCourseOnboarding';
 import CourseAvailabilityV2 from './CourseAvailabilityV2';
-import PlayBookingLifecycleV2 from './PlayBookingLifecycleV2';
+import EnterpriseBookingCoordinationDesk from './EnterpriseBookingCoordinationDesk';
 import BookingOperationsReportV2 from './BookingOperationsReportV2';
 import BookingProviderPublicationV2 from './BookingProviderPublicationV2';
 import EnterpriseReporting from './enterprise/EnterpriseReporting';
@@ -619,7 +619,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
       </div>
 
       <div style={styles.content}>
-        {activeTab === 'teesheet' && <><PlayBookingLifecycleV2 /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><CourseTeeSheet /></>}
+        {activeTab === 'teesheet' && <><EnterpriseBookingCoordinationDesk /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><CourseTeeSheet /></>}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
         {activeTab === 'tournaments' && <EnterpriseTournamentOperations />}

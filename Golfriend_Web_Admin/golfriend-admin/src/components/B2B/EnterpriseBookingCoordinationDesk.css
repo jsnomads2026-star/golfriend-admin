@@ -1,0 +1,7 @@
+.booking-desk button,
+.booking-desk input,
+.booking-desk select { min-height: 48px; }
+.booking-desk textarea { min-height: 96px; }
+.booking-desk select { width: 100%; border: 1px solid #84988f; border-radius: .5rem; padding: .65rem; background: #fff; color: #102f26; }
+.booking-desk select:focus-visible { outline: 3px solid #e0a528; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .booking-desk * { scroll-behavior: auto !important; transition: none !important; } }

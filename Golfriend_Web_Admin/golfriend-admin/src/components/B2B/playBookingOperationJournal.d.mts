@@ -1,0 +1,5 @@
+export type JournalAction='confirm'|'alternative'|'cancel'|'message';
+export type JournalPreparation=Readonly<{state:'prepared'|'retry';commandId:string}>|Readonly<{state:'ambiguous';commandId:string}>|Readonly<{state:'conflict'|'invalid'|'unavailable'}>;
+export interface PlayBookingOperationJournal{activateScope(scopeOpaque:string):Promise<Readonly<{scopeKey:string}>>;prepare(input:Readonly<{bookingId:string;action:JournalAction;revision:number;payload?:unknown;confirmation?:Readonly<{slot:string;expiresAt:number}>}>):Promise<JournalPreparation>;markInFlight(commandId:string):boolean;markAmbiguous(commandId:string):boolean;markCompleted(commandId:string):boolean;recover():readonly Readonly<{commandId:string;action:JournalAction;revision:number}>[];purge():void}
+export const PLAY_BOOKING_OPERATION_JOURNAL_SCHEMA:'golfriend.portal.play-booking-operation-journal.v1';
+export function createPlayBookingOperationJournal(options:Readonly<{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;randomUUID?:()=>string|undefined;digest?:(value:BufferSource)=>Promise<ArrayBuffer>;now?:()=>number}>):PlayBookingOperationJournal;

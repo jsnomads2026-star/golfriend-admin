@@ -27,13 +27,13 @@ export const bookingMessageId = (id: string, cmd: string) =>
 export function permissions(role: string) {
   return {
     read: true,
-    message: ["primary_owner", "manager", "course_staff", "support"].includes(
+    message: ["organization_owner", "organization_admin", "course_manager", "booking_staff"].includes(
       role,
     ),
-    confirm: ["primary_owner", "manager", "course_staff"].includes(role),
-    alternative: ["primary_owner", "manager", "course_staff"].includes(role),
-    cancel: ["primary_owner", "manager"].includes(role),
-    complete: ["primary_owner", "manager", "course_staff"].includes(role),
+    confirm: ["organization_owner", "organization_admin", "course_manager", "booking_staff"].includes(role),
+    alternative: ["organization_owner", "organization_admin", "course_manager", "booking_staff"].includes(role),
+    cancel: ["organization_owner", "organization_admin"].includes(role),
+    complete: ["organization_owner", "organization_admin"].includes(role),
   };
 }
 export function transition(from: string, action: string): string {

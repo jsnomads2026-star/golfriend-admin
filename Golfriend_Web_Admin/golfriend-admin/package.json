@@ -71,6 +71,8 @@
     "verify:partner-activation": "node scripts/partner-activation-verify.mjs && node scripts/partner-claim-review-verify.mjs",
     "verify:partner-availability": "node scripts/partner-availability-verify.mjs",
     "verify:partner-booking": "node scripts/partner-booking-verify.mjs",
+    "verify:booking-monday-world": "npm --prefix functions run build && node functions/lib/enterpriseBookingMondayCommissioning.test.js && node --test functions/lib/enterpriseBookingCorrelation.test.js functions/lib/enterpriseBookingProducerRegistry.test.js functions/lib/enterpriseBookingV2Operation.test.js functions/lib/partnerBookingTokenRecovery.test.js functions/lib/partnerBookingTokenRecoveryRuntime.test.js functions/lib/enterpriseBookingSystemTransition.test.js functions/lib/enterpriseBookingCoordinationProjection.test.js && node --test scripts/enterprise-booking-coordination-ui.test.mjs scripts/play-booking-desk-locales.test.mjs && node scripts/booking-monday-world.mjs verify",
+    "verify:booking-monday-world:pair": "node scripts/booking-monday-world.mjs compare ../../../golfriend-golfer-booking-journey-20260815/test/fixtures/mondayBookingWorld.v1.json",
     "verify:partner-booking-reporting": "node scripts/partner-booking-reporting-verify.mjs",
     "verify:booking-provider-publication": "node scripts/booking-provider-publication-verify.mjs",
     "verify:partner-onboarding": "node scripts/partner-onboarding-v2-verify.mjs",

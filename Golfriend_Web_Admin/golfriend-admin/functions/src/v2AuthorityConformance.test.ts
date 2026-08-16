@@ -85,11 +85,13 @@ check('manageTeeTimeSlot: modular App Check plus organization membership', () =>
   assert.ok(/course_operators/.test(availability));
   assert.ok(!/admin@golfriend\.co/.test(availability));
 });
-check('booking responses: modular App Check plus delegated course membership', () => {
+check('booking responses: modular App Check plus exact enterprise course grant', () => {
   const booking = readFileSync(resolve(__dirname, '../src/partnerBookingRuntime.ts'), 'utf8');
   assert.ok(/enforceAppCheck:\s*true/.test(booking));
-  assert.ok(/membership required/i.test(booking));
-  assert.ok(/course_operators/.test(booking));
+  assert.ok(/resolveEnterpriseBookingCourseAuthority/.test(booking));
+  assert.ok(/transactionBookingAuthority/.test(booking));
+  assert.ok(/enterprise_authority_memberships/.test(booking));
+  assert.ok(!/partner_identity_bindings|partner_memberships|partner_organizations/.test(booking));
   assert.ok(!/admin@golfriend\.co/.test(booking));
 });
 for (const name of ['manageEnterpriseStaff', 'cancelB2BContract', 'reportPlayerIncident']) {
