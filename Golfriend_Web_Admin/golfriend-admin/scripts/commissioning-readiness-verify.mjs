@@ -12,11 +12,19 @@ import {
 } from '../src/components/admin/v2/commissioningContracts.ts';
 
 const read = (file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
-const expectedIds = ['marketing.asset-storage','partners.request-intake','partners.decision-submit','courses.preview-apply','booking.report-ingest','advertising-oem.report-ingest','service-health.report-ingest','jhcc.report-transmit'];
+// The original eight are FROZEN — their ids, order and B5-R9 evidence must not change.
+const frozenIds = ['marketing.asset-storage','partners.request-intake','partners.decision-submit','courses.preview-apply','booking.report-ingest','advertising-oem.report-ingest','service-health.report-ingest','jhcc.report-transmit'];
+// Founder-ratified acquisition capabilities (2026-08-15), appended in lockstep.
+const acquisitionIds = ['acquisition.prospect-registry','acquisition.opportunity-report','acquisition.analytics','acquisition.outreach-tracking'];
+const expectedIds = [...frozenIds, ...acquisitionIds];
 assert.deepEqual(COMMISSIONING_LOCALES, ['en','th','ko','ja','zh','es','fr','de']);
 assert.deepEqual(CAPABILITY_IDS, expectedIds);
-assert.equal(new Set(CAPABILITY_IDS).size, 8);
-assert.equal(COMMISSIONING_CONTRACTS.length, 8);
+assert.equal(new Set(CAPABILITY_IDS).size, 12);
+assert.equal(COMMISSIONING_CONTRACTS.length, 12);
+// The frozen eight keep their exact leading order — appending must never reorder them.
+assert.deepEqual(CAPABILITY_IDS.slice(0, 8), frozenIds);
+assert.deepEqual(COMMISSIONING_REGISTRY.slice(0, 8).map((entry) => entry.capabilityId), frozenIds);
+assert.ok(COMMISSIONING_REGISTRY.slice(0, 8).every((entry) => entry.lastVerifiedBuild === 'B5-R9@5785be1'), 'frozen evidence must not be altered');
 assert.deepEqual(COMMISSIONING_CONTRACTS.map((contract) => contract.capabilityId), expectedIds);
 for (const contract of COMMISSIONING_CONTRACTS) {
   assert.equal(contract.schema.version, 1);
@@ -37,7 +45,14 @@ assert.match(validateCommissioningRegistry(missingEvidenceRegistry).join(' '), /
 const falselyCommissionedRegistry = COMMISSIONING_REGISTRY.map((entry, index) => index === 0 ? { ...entry, currentState:'commissioned' } : entry);
 assert.match(validateCommissioningRegistry(falselyCommissionedRegistry).join(' '), /lacks commissioned evidence/);
 assert.ok(COMMISSIONING_REGISTRY.every((entry) => entry.currentState !== 'commissioned'));
-assert.ok(COMMISSIONING_REGISTRY.every((entry) => entry.lastVerifiedBuild === 'B5-R9@5785be1'));
+// The four acquisition rows carry their own build evidence and stay uncommissioned until
+// their real adapters are separately approved.
+assert.ok(COMMISSIONING_REGISTRY.slice(8).every((entry) => entry.lastVerifiedBuild === 'B5-R13@df52da6'));
+assert.ok(COMMISSIONING_REGISTRY.slice(8).every((entry) => ['unavailable','local_preview','contract_ready'].includes(entry.currentState)));
+assert.match(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'acquisition.opportunity-report').blockedActions.join(' '), /invoice, price or commission amount/);
+assert.match(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'acquisition.outreach-tracking').blockedActions.join(' '), /Send any message/);
+assert.match(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'acquisition.analytics').blockedActions.join(' '), /sub-threshold or unattributed/);
+assert.match(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'acquisition.prospect-registry').blockedActions.join(' '), /contact history narrative/);
 assert.ok(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'partners.decision-submit').blockedActions.includes('Approve or decline'));
 assert.match(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'courses.preview-apply').blockedActions.join(' '), /mismatched preview\/course IDs/);
 assert.match(COMMISSIONING_REGISTRY.find((entry) => entry.capabilityId === 'service-health.report-ingest').blockedActions.join(' '), /Infer healthy/);

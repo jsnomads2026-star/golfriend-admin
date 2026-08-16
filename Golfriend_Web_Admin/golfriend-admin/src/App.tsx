@@ -60,7 +60,11 @@ import V2SmallBusinessReview from './components/admin/v2/V2SmallBusinessReview';
 import V2SmallBusinessReadiness from './components/admin/v2/V2SmallBusinessReadiness';
 import V2CountryUserAnalytics from './components/admin/v2/V2CountryUserAnalytics';
 import V2TeeEconomyAnalytics from './components/admin/v2/V2TeeEconomyAnalytics';
+import V2CourseAcquisition from './components/admin/v2/V2CourseAcquisition';
+import V2AcquisitionReport from './components/admin/v2/V2AcquisitionReport';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
+import { AdminIdentityContext, type AdminIdentity } from './components/admin/v2/AdminIdentityContext';
+import { useOnlineStatus } from './components/admin/v2/useOnlineStatus';
 
 export default function App() {
   return (
@@ -92,6 +96,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const [user, setUser] = useState<any>(null);
   const [partnerData, setPartnerData] = useState<any>(null); // b2b_partners/{...}
   const [adminData, setAdminData] = useState<any>(null);     // admin_users/{uid}
+  const isOnline = useOnlineStatus();
   const [isAuthLoading, setIsAuthLoading] = useState(true);  // auth_pending
   const [roleLoading, setRoleLoading] = useState(false);     // role_resolving
   const [resolveError, setResolveError] = useState(false);   // error (honest UI)
@@ -252,7 +257,24 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     );
   }
 
-  return <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
+  // The governing authority for every V2 admin surface. Any change here — sign-out,
+  // suspension, a role or status change, going offline — disposes cached content that was
+  // authorized for the previous authority.
+  const adminIdentity: AdminIdentity = {
+    uid: user?.uid ?? null,
+    role: adminData?.role ?? null,
+    status: adminData?.status ?? null,
+    scope: null,
+    requestVersion: null,
+    // App Check is not provisioned in this repository, so this is UNKNOWN (null) rather
+    // than claimed as verified. Reporting true would assert an attestation that does not
+    // exist; reporting false would disable every surface.
+    appCheck: null,
+    online: isOnline,
+  };
+
+  return <AdminIdentityContext.Provider value={adminIdentity}>
+    <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
@@ -265,12 +287,15 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'partners' && <V2EnterpriseMemberRequests />}
     {activeArea === 'partners' && <V2SmallBusinessReview />}
     {activeArea === 'partners' && <V2SmallBusinessReadiness />}
+    {activeArea === 'partners' && <V2CourseAcquisition />}
     {activeArea === 'partners' && <PartnerIngestion />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}
     {activeArea === 'advertising' && <SponsorDashboard />}
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
     {activeArea === 'reports' && <V2AdminReports />}
-  </V2AdminShell>;
+    {activeArea === 'reports' && <V2AcquisitionReport />}
+    </V2AdminShell>
+  </AdminIdentityContext.Provider>;
 
   return (
     <div style={styles.masterContainer}>

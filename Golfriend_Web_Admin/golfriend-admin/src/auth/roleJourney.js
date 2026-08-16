@@ -6,6 +6,74 @@
 // client-known email, God-Mode literal, local bypass or fallback identity.
 // ==========================================
 
+/**
+ * Canonical ACTIVE admin statuses, normalized. Mirrors ACTIVE_STAFF_STATUSES in
+ * functions/src/authority.ts; scripts/admin-authority-matrix-verify.mjs asserts the two
+ * agree on every input, so a divergence is a gate failure rather than a support ticket.
+ */
+export const ACTIVE_ADMIN_STATUSES = ['active'];
+
+/** Statuses known to mean "not authorized". Documentation and defence in depth only. */
+export const KNOWN_INACTIVE_ADMIN_STATUSES = [
+  'suspended', 'inactive', 'deactivated', 'revoked', 'expired',
+  'disabled', 'deleted', 'removed', 'terminated', 'pending', 'unknown',
+];
+
+/**
+ * The client twin of the ROLE REGISTRY in functions/src/authority.ts. Status was
+ * already an allowlist here; the role was "any non-empty string", so an unrecognized
+ * role rendered as ordinary staff on the very screens an operator uses to diagnose
+ * access. scripts/admin-authority-matrix-verify.mjs asserts the two files agree.
+ *
+ * Derived from the code that writes the value: HRManagement offers 'Manager' and
+ * 'Support'; 'Director' is the founding tier and is never hireable from the UI.
+ */
+export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
+
+export const CANONICAL_ADMIN_ROLES = ['Director', 'Manager', 'Support'];
+
+/** Retired roles that must now fail closed. Empty today; recorded, not implied. */
+export const OBSOLETE_ADMIN_ROLES = [];
+
+/** Exact membership. Never case-folded — folding a role widens authority. */
+export function isCanonicalAdminRole(value) {
+  return typeof value === 'string' && CANONICAL_ADMIN_ROLES.includes(value);
+}
+
+/**
+ * Normalize a status for comparison: NFC, trimmed, lower-cased. Folds canonically
+ * equivalent spellings only — a confusable such as a Cyrillic А is a different string and
+ * stays rejected. Non-strings and blanks normalize to null, i.e. unknown.
+ */
+export function normalizeStaffStatus(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.normalize('NFC').trim().toLowerCase();
+  return normalized === '' ? null : normalized;
+}
+
+/**
+ * Is this admin_users document an ACTIVE staff record? The client twin of
+ * functions/src/authority.ts isActiveStaff. Client surfaces must call this rather than
+ * comparing fields themselves — an inline check is how a suspended Director kept elevated
+ * data access on the sponsor console long after the shared predicate existed.
+ *
+ * This is a rendering decision only. The server re-derives authority on every callable;
+ * nothing here grants anything.
+ */
+export function isActiveAdminDoc(adminDoc) {
+  if (!adminDoc || typeof adminDoc !== 'object' || Array.isArray(adminDoc)) return false;
+  const status = normalizeStaffStatus(adminDoc.status);
+  if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) return false;
+  if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false;
+  if (OBSOLETE_ADMIN_ROLES.includes(adminDoc.role)) return false;
+  return isCanonicalAdminRole(adminDoc.role);
+}
+
+/** Director tier. Exact role match, for the same reason the server uses one. */
+export function isActiveDirectorDoc(adminDoc) {
+  return isActiveAdminDoc(adminDoc) && adminDoc.role === 'Director';
+}
+
 /** Ordered journey states a portal can be in. */
 export const JOURNEY_STATES = [
   'auth_pending',    // Firebase auth state not yet known
@@ -39,10 +107,24 @@ export function resolvePortalAccess(input = {}) {
   if (roleLoading) return { state: 'role_resolving' };
 
   if (mode === 'admin') {
-    // Admin access is derived ONLY from a server-owned admin_users doc.
+    // Admin access is derived ONLY from a server-owned admin_users doc, and only from a
+    // CANONICAL ACTIVE status — the same allowlist the server applies in
+    // functions/src/authority.ts. These two must agree: if this branch authorized a status
+    // the server denies, the portal would render an admin shell whose every action then
+    // failed, which reads to the user as a broken product rather than as a denial.
     if (!adminDoc) return { state: 'unauthorized', surface: 'admin' };
-    if (adminDoc.status === 'Suspended') return { state: 'suspended', surface: 'admin' };
-    if (!adminDoc.role) return { state: 'unauthorized', surface: 'admin' };
+    const status = normalizeStaffStatus(adminDoc.status);
+    if (status !== null && KNOWN_INACTIVE_ADMIN_STATUSES.includes(status)) {
+      return { state: 'suspended', surface: 'admin' };
+    }
+    // Anything not canonically active — missing, blank, malformed or simply unrecognized —
+    // is unauthorized. It is NOT reported as 'suspended', because we do not know that.
+    if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) {
+      return { state: 'unauthorized', surface: 'admin' };
+    }
+    if (!adminDoc.role || typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') {
+      return { state: 'unauthorized', surface: 'admin' };
+    }
     return { state: 'authorized', surface: 'admin', role: adminDoc.role };
   }
 

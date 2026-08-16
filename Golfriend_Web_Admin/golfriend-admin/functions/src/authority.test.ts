@@ -5,7 +5,11 @@
 // Run: `npm run test:authority`. Exits non-zero on the first failed assertion.
 // ==========================================
 import assert from 'node:assert';
-import { isActiveStaff, isActiveDirector } from './authority.js';
+import {
+  ACTIVE_STAFF_STATUSES, KNOWN_INACTIVE_STATUSES,
+  isActiveStaff, isActiveDirector, normalizeStaffStatus,
+  CANONICAL_ADMIN_ROLES, OBSOLETE_ADMIN_ROLES, isCanonicalAdminRole, ADMIN_ROLE_REGISTRY_VERSION,
+} from './authority.js';
 
 let passed = 0;
 function check(name: string, fn: () => void) { fn(); passed += 1; console.log(`  ✓ ${name}`); }
@@ -18,7 +22,77 @@ check('active Director is staff', () => {
 check('active Manager/Support is staff (any assigned role)', () => {
   assert.equal(isActiveStaff({ role: 'Manager', status: 'Active' }), true);
   assert.equal(isActiveStaff({ role: 'Support', status: 'Active' }), true);
-  assert.equal(isActiveStaff({ role: 'Support' }), true); // status defaults to active if not Suspended
+});
+
+// ---- ALLOWLIST (the behaviour this file used to assert the OPPOSITE of) ----
+// This test previously asserted `isActiveStaff({ role: 'Support' }) === true`, with the
+// comment "status defaults to active if not Suspended". That was the denylist, written
+// down and locked in: a document with NO status granted platform staff authority. An
+// authorization predicate must not default to authorized.
+check('a MISSING status is denied, not defaulted to active', () => {
+  assert.equal(isActiveStaff({ role: 'Support' }), false);
+  assert.equal(isActiveStaff({ role: 'Director' }), false);
+  assert.equal(isActiveDirector({ role: 'Director' }), false);
+});
+check('every non-active status is denied, listed or not', () => {
+  // Known-inactive values.
+  for (const status of KNOWN_INACTIVE_STATUSES) {
+    assert.equal(isActiveStaff({ role: 'Director', status }), false, status);
+    assert.equal(isActiveDirector({ role: 'Director', status }), false, status);
+  }
+  // Values nobody has written down. These are the ones a denylist could never cover,
+  // and they are exactly what a partially-migrated or hand-edited document contains.
+  for (const status of [
+    'Inactive', 'Deactivated', 'DEACTIVATED', 'Revoked', 'Expired', 'Disabled',
+    'Deleted', 'Archived', 'On Leave', 'probation', 'active_partner', 'Actives',
+    'act ive', 'activé', '活性', 'true', '1', 'null', 'undefined', 'Active-ish',
+  ]) {
+    assert.equal(isActiveStaff({ role: 'Director', status }), false, status);
+  }
+});
+check('canonically equivalent spellings of Active ARE accepted', () => {
+  // Case and surrounding whitespace are not a different status.
+  for (const status of ['Active', 'active', 'ACTIVE', ' Active ', '\tActive\n']) {
+    assert.equal(isActiveStaff({ role: 'Support', status }), true, JSON.stringify(status));
+  }
+  // A CONFUSABLE is a different status. 'Аctive' below opens with Cyrillic U+0410.
+  const confusable = 'Аctive';
+  assert.notEqual(confusable, 'Active');
+  assert.equal(isActiveStaff({ role: 'Support', status: confusable }), false, 'a Cyrillic look-alike must not authorize');
+  // NFC-equivalent forms fold together; decomposed text is normalized, not rejected.
+  assert.equal(normalizeStaffStatus('Active'), 'active');
+  assert.equal(normalizeStaffStatus('  ACTIVE  '), 'active');
+  assert.equal(normalizeStaffStatus(''), null);
+  assert.equal(normalizeStaffStatus('   '), null);
+  for (const bad of [null, undefined, 0, 1, true, false, {}, [], () => 'Active']) {
+    assert.equal(normalizeStaffStatus(bad), null, String(bad));
+  }
+});
+check('a malformed document type is denied', () => {
+  for (const bad of [[], ['Active'], 'Active', 42, true, () => true]) {
+    assert.equal(isActiveStaff(bad as never), false, String(bad));
+  }
+  // A status of the wrong TYPE cannot authorize, however truthy.
+  for (const bad of [true, 1, {}, [], ['Active']]) {
+    assert.equal(isActiveStaff({ role: 'Director', status: bad as never }), false, String(bad));
+  }
+});
+check('a valid role never overrides an inactive status', () => {
+  // Status is evaluated first and independently. Director is the strongest role in the
+  // system and it still cannot rescue an account that is not active.
+  for (const status of ['Suspended', 'Inactive', 'Deactivated', '', '   ']) {
+    assert.equal(isActiveStaff({ role: 'Director', status }), false, status);
+    assert.equal(isActiveDirector({ role: 'Director', status }), false, status);
+  }
+  assert.equal(ACTIVE_STAFF_STATUSES.length, 1, 'widening the active set is a reviewed change, not a drive-by');
+  assert.deepEqual([...ACTIVE_STAFF_STATUSES], ['active']);
+});
+check('Director role matching stays exact — hardening must not widen', () => {
+  // Case-folding the ROLE would grant Director powers to spellings that never had them.
+  for (const role of ['director', 'DIRECTOR', ' Director ', 'Director ']) {
+    assert.equal(isActiveDirector({ role, status: 'Active' }), false, role);
+  }
+  assert.equal(isActiveDirector({ role: 'Director', status: 'Active' }), true);
 });
 
 // ---- NEGATIVE (fail closed) ----
@@ -39,6 +113,46 @@ check('role-less / unauthorized record → denied', () => {
 });
 check('non-Director active staff is NOT a Director', () => {
   assert.equal(isActiveDirector({ role: 'Support', status: 'Active' }), false);
+});
+// ---- THE ROLE REGISTRY ---------------------------------------------------------
+// Status was already an allowlist; the ROLE was "any non-empty string", so a typo, a
+// legacy title, or a value from another product's vocabulary counted as an assigned
+// role and granted staff authority.
+check(`the registry is versioned and closed (${CANONICAL_ADMIN_ROLES.length} roles)`, () => {
+  assert.ok(ADMIN_ROLE_REGISTRY_VERSION.length > 0);
+  assert.deepEqual([...CANONICAL_ADMIN_ROLES], ['Director', 'Manager', 'Support']);
+  assert.deepEqual([...OBSOLETE_ADMIN_ROLES], []);
+  assert.equal(Object.isFrozen(CANONICAL_ADMIN_ROLES), true);
+});
+check('every canonical role is accepted, so the registry is not a blanket denial', () => {
+  for (const role of CANONICAL_ADMIN_ROLES) {
+    assert.equal(isCanonicalAdminRole(role), true, role);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), true, role);
+  }
+});
+check('an OUT-OF-REGISTRY role fails closed, however plausible it looks', () => {
+  for (const role of ['Admin', 'Owner', 'SuperUser', 'Partner', 'Analyst', 'Directorr', 'Manger', 'staff', 'x']) {
+    assert.equal(isCanonicalAdminRole(role), false, role);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+  }
+});
+check('a role is NEVER case-folded — folding widens authority', () => {
+  for (const role of ['director', 'DIRECTOR', 'Director ', ' Director', 'manager', 'SUPPORT']) {
+    assert.equal(isCanonicalAdminRole(role), false, role);
+    assert.equal(isActiveStaff({ role, status: 'Active' }), false, role);
+    assert.equal(isActiveDirector({ role, status: 'Active' }), false, role);
+  }
+});
+check('non-string and confusable roles fail closed', () => {
+  for (const role of [null, undefined, 42, {}, [], 'Dırector', 'Direсtor']) {
+    assert.equal(isCanonicalAdminRole(role), false, JSON.stringify(role));
+    assert.equal(isActiveStaff({ role } as never), false, JSON.stringify(role));
+  }
+});
+check('status still outranks a canonical role', () => {
+  for (const status of ['Suspended', 'Inactive', 'Revoked', '', '   ', 'Actve']) {
+    assert.equal(isActiveStaff({ role: 'Director', status }), false, status);
+  }
 });
 check('authority derives ONLY from the doc — no email/identity input exists', () => {
   // The function signature takes only the admin_users doc; there is no email,
