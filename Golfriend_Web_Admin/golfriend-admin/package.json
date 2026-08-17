@@ -58,6 +58,7 @@
     "test:enterprise-onboarding-contract": "node scripts/verified-course-onboarding-ui-verify.mjs",
     "verify:enterprise-partner-support-ui": "node scripts/enterprise-partner-support-ui-verify.mjs",
     "verify:enterprise-authority": "node --test src/components/B2B/enterprise/organizationAuthorityModel.test.ts && node scripts/enterprise-authority-ui-verify.mjs",
+    "verify:enterprise-course-intake": "node scripts/enterprise-course-intake-integration-verify.mjs",
     "verify:enterprise-authority-producer": "node scripts/enterprise-authority-producer-verify.mjs",
     "verify:enterprise-tournament-ui": "node scripts/enterprise-tournament-ui-verify.mjs",
     "test:enterprise-tournament-model": "node --test src/components/B2B/enterprise/tournamentOperationsModel.test.ts",

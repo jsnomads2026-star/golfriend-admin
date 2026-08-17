@@ -3,6 +3,7 @@ import {useLocale} from "../../../i18n/hooks";
 import {ENTERPRISE_AUTHORITY_COPY, ENTERPRISE_AUTHORITY_LOCALES, type EnterpriseAuthorityLocale} from "../../../i18n/partner/enterpriseAuthority";
 import {newAuthorityCommandId, organizationAuthorityService} from "../enterprise/organizationAuthorityService";
 import {canGrantRole, type AuthorityScope, type EnterpriseAuthorityProjection, type EnterpriseRole} from "../enterprise/organizationAuthorityModel";
+import EnterpriseCourseIntake from "./EnterpriseCourseIntake";
 
 const roles = ["organization_owner","organization_admin","course_manager","booking_staff","tournament_staff","marketing_content_staff","analyst_viewer"] as const;
 const roleKeys = {organization_owner:"organizationOwner",organization_admin:"organizationAdmin",course_manager:"courseManager",booking_staff:"bookingStaff",tournament_staff:"tournamentStaff",marketing_content_staff:"marketingStaff",analyst_viewer:"analyst"} as const;
@@ -45,6 +46,7 @@ export default function EnterpriseAuthorityPortal(){
       </section>
       <section aria-labelledby={`${prefix}-transfer`} style={card}><h3 id={`${prefix}-transfer`}>{copy.transfer}</h3><p>{copy.supportBody}</p><ul>{view.ownershipTransfers.filter(item=>item.organizationId===organizationId).map(item=><li key={item.transferId}><code>{item.transferId}</code> · {item.status} {item.actorApproval&&<button disabled={busy||!authorityReady} type="button" onClick={()=>{const id=newAuthorityCommandId();void run(()=>organizationAuthorityService.approveOwnershipTransfer(organizationId,organization!.version,item.transferId,item.version,id))}}>{copy.requestTransfer}</button>}</li>)}</ul></section>
       <section aria-labelledby={`${prefix}-receipts`} style={card}><h3 id={`${prefix}-receipts`}>{copy.receipts}</h3><ol>{view.receipts.filter(item=>item.organizationId===organizationId).map(item=><li key={item.receiptId}><code>{item.receiptId}</code> · {item.action} · <code>{item.actorMembershipId}</code> · <time dateTime={item.occurredAt}>{item.occurredAt}</time></li>)}</ol></section>
+      <EnterpriseCourseIntake locale={locale} organizationId={organizationId} authorityVersion={organization!.version}/>
       <Support copy={copy}/>
     </>}
     {notice&&<p role={notice.startsWith(copy.accepted)?"status":"alert"} aria-live="polite" style={notice.startsWith(copy.accepted)?undefined:alert}>{notice} {retry.current&&<button type="button" disabled={busy} onClick={()=>void run(retry.current!)}>{copy.retry}</button>}</p>}
