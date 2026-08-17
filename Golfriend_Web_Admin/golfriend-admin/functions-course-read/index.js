@@ -43,13 +43,14 @@ exports.getCourseAcquisitionDashboard = onCall({region: 'asia-southeast1', enfor
     countries.set(country, row);
   }
   const duplicates = [...providerIds.values()].filter((count) => count > 1).reduce((sum, count) => sum + count - 1, 0);
+  const quota = quotaSnapshot.exists ? quotaSnapshot.data() : null;
   return {
     schema: 'golfriend.course-acquisition-dashboard.v1',
     readOnly: true,
-    providerRequests: 0,
+    providerRequests: Number(quota?.completed || 0) + Number(quota?.failed || 0),
     totals: {canonical, missingCoordinates, unknownFreshness, quarantine: quarantine.size, duplicates},
     countries: [...countries.values()].sort((a, b) => a.country.localeCompare(b.country)),
-    quota: quotaSnapshot.exists ? quotaSnapshot.data() : null,
+    quota,
     checkpoint: checkpointSnapshot.exists ? checkpointSnapshot.data() : null,
     candidateCounts: {},
     candidates: [],
