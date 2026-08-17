@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from './firebaseConfig';
@@ -7,8 +7,6 @@ import { resolvePortalAccess, STATE_COPY } from './auth/roleJourney.js';
 import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
-import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
-import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
 import CourseAvailabilityV2 from './components/B2B/CourseAvailabilityV2';
 import PlayBookingLifecycleV2 from './components/B2B/PlayBookingLifecycleV2';
 import BookingOperationsReportV2 from './components/B2B/BookingOperationsReportV2';
@@ -67,22 +65,28 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Admin-only entrypoints: both URLs mount the same protected resolver. */}
         <Route path="/" element={<Dashboard mode="admin" />} />
         <Route path="/admin" element={<Dashboard mode="admin" />} />
-
-        {/* No consumer/public presentation is routable from the Admin bundle. */}
+        <Route path="/admin/*" element={<Dashboard mode="admin" />} />
+        <Route path="/portal" element={<Dashboard mode="partner" />} />
+        <Route path="/portal/:organizationId/*" element={<ScopedPartnerPortal />} />
+        <Route path="/portal/*" element={<Dashboard mode="partner" />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
 
+function ScopedPartnerPortal() {
+  const { organizationId } = useParams();
+  return <Dashboard mode="partner" requestedOrganizationId={organizationId ?? null} />;
+}
+
 // Bounded client session: auto sign-out after inactivity (defence-in-depth; the
 // server is the authority). Applies to any authorized portal session.
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 
-function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
+function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | 'partner'; requestedOrganizationId?: string | null }) {
   const [user, setUser] = useState<any>(null);
   const [partnerData, setPartnerData] = useState<any>(null); // b2b_partners/{...}
   const [adminData, setAdminData] = useState<any>(null);     // admin_users/{uid}
@@ -143,20 +147,18 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
             setResolveError(true);
           });
         } else {
-          // Partner: b2b_partners keyed by uid or email (retry for webhook buffer).
-          let partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.uid));
-          let retries = 3;
-          while (!partnerDoc.exists() && retries > 0 && currentUser.email) {
-            partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.email));
-            if (!partnerDoc.exists()) {
-              const cap = currentUser.email.charAt(0).toUpperCase() + currentUser.email.slice(1);
-              partnerDoc = await getDoc(doc(db, 'b2b_partners', cap));
-            }
-            if (partnerDoc.exists()) break;
-            await new Promise((r) => setTimeout(r, 1500));
-            retries--;
-          }
+          // Exact authenticated-UID lookup only. The route may narrow organization scope,
+          // but cannot select or grant an organization.
+          const partnerRef = doc(db, 'b2b_partners', currentUser.uid);
+          const partnerDoc = await getDoc(partnerRef);
           setPartnerData(partnerDoc.exists() ? partnerDoc.data() : null);
+          stopRoleWatch = onSnapshot(partnerRef, (next) => {
+            setResolveError(false);
+            setPartnerData(next.exists() ? next.data() : null);
+          }, () => {
+            setPartnerData(null);
+            setResolveError(true);
+          });
         }
       } catch {
         // Never surface raw provider errors — set the honest 'error' state.
@@ -194,7 +196,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   // ---- Server-owned access derivation (single source of truth) ----
   const access = resolvePortalAccess({
     mode, authPending: isAuthLoading, user, roleLoading, resolveError,
-    adminDoc: adminData, partnerDoc: partnerData,
+    adminDoc: adminData, partnerDoc: partnerData, requestedOrganizationId,
   });
 
   // Quarantined TV display: NEVER an unauthenticated bypass — only an authorized
@@ -234,11 +236,6 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         </div>
       </div>
     );
-  }
-
-  // A signed-in applicant may apply without receiving partner-organization authority.
-  if (mode === 'partner' && user && access.state === 'unauthorized') {
-    return <><PartnerInvitationAcceptance /><PartnerApplicationJourney onSignOut={executeSecureLogout} /></>;
   }
 
   // Loading / role-resolving / error / unauthorized / suspended → honest state screens.

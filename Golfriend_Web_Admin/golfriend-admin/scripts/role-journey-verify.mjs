@@ -78,11 +78,11 @@ assertResolve('[admin] authorized Director', { mode: 'admin', user, adminDoc: { 
 
 // partner authorized / suspended / unauthorized
 assertResolve('[partner] unauthorized (no partnerDoc)', { mode: 'partner', user, partnerDoc: null }, { state: 'unauthorized', surface: 'partner' });
-assertResolve('[partner] suspended (inactive)', { mode: 'partner', user, partnerDoc: { tier: 'small_business', status: 'inactive' } }, { state: 'suspended', surface: 'partner' });
-assertResolve('[partner] authorized small_business', { mode: 'partner', user, partnerDoc: { tier: 'small_business', status: 'active_partner' } }, { state: 'authorized', surface: 'small' });
-assertResolve('[partner] authorized enterprise (tier=enterprise)', { mode: 'partner', user, partnerDoc: { tier: 'enterprise', status: 'active_partner' } }, { state: 'authorized', surface: 'enterprise' });
-assertResolve('[partner] authorized enterprise (tier=master_host)', { mode: 'partner', user, partnerDoc: { tier: 'master_host', status: 'active_partner' } }, { state: 'authorized', surface: 'enterprise' });
-assertResolve('[partner] authorized enterprise (tier=Product & Service Promotion)', { mode: 'partner', user, partnerDoc: { tier: 'Product & Service Promotion', status: 'active_partner' } }, { state: 'authorized', surface: 'enterprise' });
+assertResolve('[partner] suspended (inactive)', { mode: 'partner', user, partnerDoc: { tier: 'small_business', status: 'inactive', organizationId: 'org_1' } }, { state: 'suspended', surface: 'partner' });
+assertResolve('[partner] authorized small_business', { mode: 'partner', user, partnerDoc: { tier: 'small_business', status: 'active_partner', organizationId: 'org_1' } }, { state: 'authorized', surface: 'small' });
+assertResolve('[partner] authorized enterprise (tier=enterprise)', { mode: 'partner', user, partnerDoc: { tier: 'enterprise', status: 'active_partner', organizationId: 'org_1' } }, { state: 'authorized', surface: 'enterprise' });
+assertResolve('[partner] authorized enterprise (tier=master_host)', { mode: 'partner', user, partnerDoc: { tier: 'master_host', status: 'active_partner', organizationId: 'org_1' } }, { state: 'authorized', surface: 'enterprise' });
+assertResolve('[partner] authorized enterprise (tier=Product & Service Promotion)', { mode: 'partner', user, partnerDoc: { tier: 'Product & Service Promotion', status: 'active_partner', organizationId: 'org_1' } }, { state: 'authorized', surface: 'enterprise' });
 
 // ---------------------------------------------------------------------------
 // 2. Server-owned derivation proof: a God-Mode-literal email with NO adminDoc

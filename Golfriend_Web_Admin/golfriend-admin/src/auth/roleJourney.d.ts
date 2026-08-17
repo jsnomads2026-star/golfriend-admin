@@ -16,13 +16,16 @@ export interface PortalAccessInput {
   roleLoading?: boolean;
   resolveError?: boolean;
   adminDoc?: { role?: string; status?: string } | null;
-  partnerDoc?: { tier?: string; status?: string } | null;
+  partnerDoc?: { tier?: string; status?: string; organizationId?: string; disabled?: boolean; accessExpiresAt?: string | {toMillis(): number}; trialEndsAt?: string | {toMillis(): number} } | null;
+  requestedOrganizationId?: string | null;
+  nowMs?: number;
 }
 
 export interface PortalAccess {
   state: JourneyState;
   surface?: 'admin' | 'small' | 'enterprise' | 'partner';
   role?: string;
+  organizationId?: string;
 }
 
 export function resolvePortalAccess(input?: PortalAccessInput): PortalAccess;
@@ -35,6 +38,8 @@ export function normalizeStaffStatus(value: unknown): string | null;
 export const ADMIN_ROLE_REGISTRY_VERSION: string;
 export const CANONICAL_ADMIN_ROLES: string[];
 export const OBSOLETE_ADMIN_ROLES: string[];
+export const CANONICAL_PARTNER_TIERS: string[];
+export const ENTERPRISE_PARTNER_TIER_ALIASES: string[];
 export function isCanonicalAdminRole(value: unknown): boolean;
 
 /** Client twin of the server isActiveStaff. A rendering decision only. */

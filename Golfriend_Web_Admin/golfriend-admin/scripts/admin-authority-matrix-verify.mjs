@@ -115,9 +115,9 @@ ok(`server/client agreement over ${allStatuses.length} statuses, both normalizer
 // A course representative or ordinary member has a b2b_partners/users doc, never an
 // admin_users one. Admin authority must not be reachable from either.
 for (const partnerDoc of [
-  { tier: 'enterprise', status: 'active_partner' },
-  { tier: 'master_host', status: 'active_partner' },
-  { tier: 'small_business', status: 'active_partner' },
+  { tier: 'enterprise', status: 'active_partner', organizationId: 'org_1' },
+  { tier: 'master_host', status: 'active_partner', organizationId: 'org_1' },
+  { tier: 'small_business', status: 'active_partner', organizationId: 'org_1' },
 ]) {
   const resolved = journey.resolvePortalAccess({ mode: 'partner', user, partnerDoc });
   assert.equal(resolved.state, 'authorized');

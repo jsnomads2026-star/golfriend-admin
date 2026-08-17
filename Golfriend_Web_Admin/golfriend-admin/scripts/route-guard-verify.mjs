@@ -6,7 +6,7 @@
 // route/surface is behind SERVER-OWNED authorization: no local/God-Mode/fallback
 // identity and no client role assignment can reach a privileged portal.
 //
-// It performs a comment-stripped, string/regex scan (NOT execution) and checks:
+// It performs a string/regex scan (NOT execution) and checks:
 //   1. Route inventory: every <Route path=..> is classified PUBLIC vs PRIVILEGED.
 //   2. Every PRIVILEGED route (/, /admin) renders <Dashboard  (the
 //      resolver-gated component) — never a portal/admin component directly.
@@ -42,19 +42,16 @@ try {
   process.exit(1);
 }
 
-// ---- Comment-strip (block + line comments), preserving line count for context. ----
-function stripComments(src) {
-  // Remove /* ... */ (multiline) then // ... to end of line.
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/([^:])\/\/[^\n]*/g, '$1'); // keep http:// etc. (needs a non-colon before //)
-}
-const code = stripComments(raw);
+// Wildcard React Router paths contain `/*`, which is not a JavaScript comment while
+// inside a string. The legacy regex stripper misread those paths as block comments.
+// Route inventory therefore scans source directly; the focused route test separately
+// rejects commented or client-selected authority paths.
+const code = raw;
 const lines = code.split(/\r?\n/);
 
 // ---- Route classification sets ----
 const PUBLIC_PATHS = [];
-const PRIVILEGED_PATHS = ['/', '/admin'];
+const PRIVILEGED_PATHS = ['/', '/admin', '/admin/*', '/portal', '/portal/:organizationId/*', '/portal/*'];
 
 const results = []; // { ok: boolean, label: string }
 const pass = (label) => results.push({ ok: true, label });
@@ -101,10 +98,10 @@ for (const p of PRIVILEGED_PATHS) {
 // NOT render a portal/admin component directly.
 const PORTAL_COMPONENTS = ['EnterpriseDashboard', 'SmallBusinessDashboard', 'TournamentTV'];
 for (const r of privilegedRoutes) {
-  const rendersDashboard = /<Dashboard[\s/>]/.test(r.element) || /<Dashboard$/.test(r.element);
+  const rendersDashboard = /<(?:Dashboard|ScopedPartnerPortal)[\s/>]/.test(r.element) || /<(?:Dashboard|ScopedPartnerPortal)$/.test(r.element);
   const rendersPortalDirect = PORTAL_COMPONENTS.some((c) => new RegExp(`<${c}[\\s/>]`).test(r.element));
   if (rendersDashboard && !rendersPortalDirect) {
-    pass(`CHECK 2: privileged route "${r.path}" renders <Dashboard ...> (resolver-gated)`);
+    pass(`CHECK 2: privileged route "${r.path}" renders a resolver-gated entrypoint`);
   } else if (rendersPortalDirect) {
     fail(`CHECK 2: privileged route "${r.path}" renders a portal component DIRECTLY (element=${r.element}) — must route through <Dashboard>`);
   } else {

@@ -34,6 +34,8 @@ export const CANONICAL_ADMIN_ROLES = ['Director', 'Manager', 'Support'];
 
 /** Retired roles that must now fail closed. Empty today; recorded, not implied. */
 export const OBSOLETE_ADMIN_ROLES = [];
+export const CANONICAL_PARTNER_TIERS = ['small_business', 'enterprise'];
+export const ENTERPRISE_PARTNER_TIER_ALIASES = ['master_host', 'Product & Service Promotion'];
 
 /** Exact membership. Never case-folded — folding a role widens authority. */
 export function isCanonicalAdminRole(value) {
@@ -99,7 +101,10 @@ export const JOURNEY_STATES = [
  * @returns {{ state: string, surface?: 'admin'|'small'|'enterprise'|'partner', role?: string }}
  */
 export function resolvePortalAccess(input = {}) {
-  const { mode, authPending, user, roleLoading, resolveError, adminDoc, partnerDoc } = input;
+  const {
+    mode, authPending, user, roleLoading, resolveError, adminDoc, partnerDoc,
+    requestedOrganizationId = null, nowMs = Date.now(),
+  } = input;
 
   if (authPending) return { state: 'auth_pending' };
   if (!user || !user.uid) return { state: 'signed_out' };
@@ -128,18 +133,37 @@ export function resolvePortalAccess(input = {}) {
     return { state: 'authorized', surface: 'admin', role: adminDoc.role };
   }
 
-  // Partner portals derive from the server-owned b2b_partners doc.
+  // Partner portals derive only from b2b_partners/{authenticated uid}.
   if (!partnerDoc) return { state: 'unauthorized', surface: 'partner' };
-  const status = partnerDoc.status;
-  if (status && status !== 'active_partner') return { state: 'suspended', surface: 'partner' };
+  if (partnerDoc.status !== 'active_partner' || partnerDoc.disabled === true) {
+    return { state: 'suspended', surface: 'partner' };
+  }
+  const organizationId = typeof partnerDoc.organizationId === 'string'
+    ? partnerDoc.organizationId.trim()
+    : '';
+  if (!organizationId) return { state: 'unauthorized', surface: 'partner' };
+  if (requestedOrganizationId !== null && requestedOrganizationId !== organizationId) {
+    return { state: 'unauthorized', surface: 'partner' };
+  }
+  const expiresAt = partnerDoc.accessExpiresAt ?? partnerDoc.trialEndsAt ?? null;
+  if (expiresAt !== null) {
+    const expiryMs = typeof expiresAt?.toMillis === 'function'
+      ? expiresAt.toMillis()
+      : Date.parse(String(expiresAt));
+    if (!Number.isFinite(expiryMs) || expiryMs <= nowMs) {
+      return { state: 'suspended', surface: 'partner' };
+    }
+  }
   const tierRaw = partnerDoc.tier;
-  const tier = String(tierRaw || '').toLowerCase();
-  const isEnterprise =
-    tier === 'enterprise' || tierRaw === 'master_host' || tierRaw === 'Product & Service Promotion';
+  const tier = typeof tierRaw === 'string' ? tierRaw : '';
+  const isEnterprise = tier === 'enterprise' || ENTERPRISE_PARTNER_TIER_ALIASES.includes(tier);
+  const isSmallBusiness = tier === 'small_business';
+  if (!isEnterprise && !isSmallBusiness) return { state: 'unauthorized', surface: 'partner' };
   return {
     state: 'authorized',
     surface: isEnterprise ? 'enterprise' : 'small',
     role: isEnterprise ? 'enterprise' : 'small_business',
+    organizationId,
   };
 }
 

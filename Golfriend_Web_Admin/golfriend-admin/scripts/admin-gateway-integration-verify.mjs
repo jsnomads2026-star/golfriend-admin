@@ -8,8 +8,8 @@ assert.match(app, /path="\/" element=\{<Dashboard mode="admin" \/>\}/,
   'root must mount the protected Admin gateway directly');
 assert.match(app, /path="\/admin" element=\{<Dashboard mode="admin" \/>\}/,
   'canonical Admin route must remain resolver-gated');
-assert.doesNotMatch(app, /path="\/(storefront|discover|legal|support|partner)"/,
-  'Admin entrypoint must expose no public or partner route');
+assert.match(app, /path="\/portal" element=\{<Dashboard mode="partner" \/>\}/,
+  'Partner Portal route must remain resolver-gated and separate from Admin');
 assert.doesNotMatch(app, /components\/public\/(LandingPage|B2BStorefront|CourseDiscovery|LegalPrivacy|SupportPage)/,
   'Admin entrypoint must not import consumer presentation components');
 assert.doesNotMatch(app, /<PhotoValidator\b/,
