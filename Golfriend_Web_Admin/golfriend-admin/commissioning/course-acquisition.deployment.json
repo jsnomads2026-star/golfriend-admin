@@ -1,0 +1,44 @@
+{
+  "schema": "golfriend.course-acquisition-deployment.v2",
+  "enabled": false,
+  "projectId": "golfriend-v2",
+  "canonicalCollection": "courses",
+  "provider": "golf-api",
+  "providerRequestsAllowed": false,
+  "roles": {
+    "viewer": "course_catalogue_viewer",
+    "operator": "course_acquisition_operator",
+    "reviewer": "course_catalogue_reviewer",
+    "approver": "course_catalogue_approver",
+    "quotaOverrideApprover": "course_quota_override_approver"
+  },
+  "quota": {
+    "collection": "golf_api_quota",
+    "monthlyDocument": "YYYY-MM",
+    "mustExistBeforeActivation": true
+  },
+  "migration": {
+    "sourceProject": "golfriend-v1",
+    "sourceCollection": "courses",
+    "checkpointCollection": "course_migration_checkpoints",
+    "receiptCollection": "course_migration_receipts",
+    "rawSourceCollection": "course_migration_sources",
+    "quarantineCollection": "course_migration_quarantine",
+    "version": "golfriend.course-migration.v1"
+  },
+  "functions": {
+    "deploymentAllowed": false,
+    "requiredBeforeActivation": ["getCourseAcquisitionDashboard", "previewCourseAcquisitionPlan", "acquireCourseCandidates", "decideCourseCandidate", "publishCourseCandidate"]
+  },
+  "rollback": {
+    "owner": "Golfriend backend release owner",
+    "method": "disable acquisition; preserve immutable migration receipts; restore prior rules/functions revisions; correct canonical records by reviewed version only"
+  },
+  "activationBlockers": [
+    "integrate and deploy the canonical V2 rules fragment from the rules-owner repository",
+    "assign distinct human operator, reviewer, approver and quota-override owners",
+    "create and verify the current UTC quota document",
+    "reconcile migrated provider IDs against a separately authorized provider catalogue index",
+    "deploy and verify acquisition functions without invoking the provider"
+  ]
+}

@@ -1,0 +1,13 @@
+// Integrate into the canonical golfriend-v2 rules owner; never deploy alone.
+match /courses/{courseId} {
+  allow read: if request.auth != null
+    && resource.data.schema == 'golfriend.v2.course.v2'
+    && resource.data.courseID == courseId
+    && resource.data.freshnessState in ['verified', 'unknown', 'stale']
+    && resource.data.migrationState in ['migrated', 'incomplete'];
+  allow create, update, delete: if false;
+}
+match /course_migration_sources/{document=**} { allow read, write: if false; }
+match /course_migration_receipts/{document=**} { allow read, write: if false; }
+match /course_migration_checkpoints/{document=**} { allow read, write: if false; }
+match /course_migration_quarantine/{document=**} { allow read, write: if false; }

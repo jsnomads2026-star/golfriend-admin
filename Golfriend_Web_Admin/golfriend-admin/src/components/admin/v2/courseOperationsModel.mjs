@@ -8,20 +8,22 @@ const validCoordinates = (lat, lng) => lat !== null && lng !== null && lat >= -9
 export function normalizeCourse(id, record, now = new Date()) {
   const latitude = number(record, ['latitude', 'lat']);
   const longitude = number(record, ['longitude', 'lng']);
-  const updatedRaw = value(record, ['providerFetchedAt', 'cachedAt', 'updatedAt', 'lastUpdated']);
-  const providerSyncRaw = value(record, ['providerFetchedAt']);
+  const updatedRaw = value(record, ['providerRetrievalAt', 'providerFetchedAt', 'sourceUpdatedAt']);
+  const providerSyncRaw = value(record, ['providerRetrievalAt', 'providerFetchedAt', 'sourceUpdatedAt']);
   const updatedMs = updatedRaw && typeof updatedRaw?.toDate === 'function' ? updatedRaw.toDate().getTime() : Date.parse(String(updatedRaw || ''));
   const hasCoordinates = validCoordinates(latitude, longitude);
-  const canonicalId = text(record, ['courseID', 'courseId', 'providerId'], id);
-  const name = text(record, ['clubName', 'name', 'courseName'], 'Unnamed course');
+  const canonicalId = text(record, ['providerCourseId', 'courseID', 'courseId', 'providerId'], id);
+  const name = text(record, ['displayName', 'clubName', 'name', 'courseName'], 'Unnamed course');
   const country = text(record, ['country', 'countryName'], 'Unknown');
   const region = text(record, ['region', 'state', 'province', 'city'], 'Unknown');
-  const source = text(record, ['gpsSource', 'source'], record.apiImported ? 'golfapi' : 'unknown');
+  const source = text(record, ['provider', 'gpsSource'], record.provenance === 'golf-api' || record.apiImported ? 'golf-api' : 'unknown');
   const incomplete = name === 'Unnamed course' || country === 'Unknown' || !canonicalId;
-  const stale = !Number.isFinite(updatedMs) || now.getTime() - updatedMs > STALE_AFTER_DAYS * 86400000;
+  const explicitFreshness = value(record, ['freshnessState']);
+  const freshnessState = text(record, ['freshnessState'], Number.isFinite(updatedMs) ? 'verified' : 'unknown');
+  const stale = freshnessState === 'stale' || (!explicitFreshness && !Number.isFinite(updatedMs)) || (freshnessState === 'verified' && Number.isFinite(updatedMs) && now.getTime() - updatedMs > STALE_AFTER_DAYS * 86400000);
   const duplicateKey = `${name.toLocaleLowerCase()}|${country.toLocaleLowerCase()}|${region.toLocaleLowerCase()}`;
   const providerSyncMs = Date.parse(String(providerSyncRaw || ''));
-  return { id, canonicalId, name, country, region, latitude, longitude, hasCoordinates, source, incomplete, stale, duplicateKey,
+  return { id, canonicalId, name, country, region, latitude, longitude, hasCoordinates, source, incomplete, stale, freshnessState, duplicateKey,
     updatedAt: Number.isFinite(updatedMs) ? new Date(updatedMs).toISOString() : null,
     lastSyncAt: Number.isFinite(providerSyncMs) ? new Date(providerSyncMs).toISOString() : null,
     contact: text(record, ['phone', 'telephone', 'contactPhone']) || null,

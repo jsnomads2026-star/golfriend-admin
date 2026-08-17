@@ -1,0 +1,8 @@
+{
+  "indexes": [
+    {"collectionGroup":"courses","queryScope":"COLLECTION","fields":[{"fieldPath":"country","order":"ASCENDING"},{"fieldPath":"displayName","order":"ASCENDING"}]},
+    {"collectionGroup":"courses","queryScope":"COLLECTION","fields":[{"fieldPath":"freshnessState","order":"ASCENDING"},{"fieldPath":"coordinateValidity","order":"ASCENDING"}]},
+    {"collectionGroup":"courses","queryScope":"COLLECTION","fields":[{"fieldPath":"migrationState","order":"ASCENDING"},{"fieldPath":"country","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": []
+}
