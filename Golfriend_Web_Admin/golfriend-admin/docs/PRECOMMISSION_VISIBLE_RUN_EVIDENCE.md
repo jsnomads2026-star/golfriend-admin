@@ -5,7 +5,7 @@
 ## Configuration
 - App mode: `VITE_FIREBASE_PROJECT=precommission` → resolves the demo-only project **`demo-golfriend-v2-canonical`** and connects Auth/Firestore/Functions/Storage to the local emulator (dev-only, fail-closed). Verified in-browser: `ACTIVE_FIREBASE_PROJECT="precommission"`, `USING_EMULATORS=true`, `auth.emulatorConfig={host:127.0.0.1,port:19701}`.
 - Emulator (isolated ports, Lane B's `firestore.v2-preview.rules`/`storage.v2-preview.rules`): Auth `127.0.0.1:19701`, Firestore `127.0.0.1:19711`, Functions `127.0.0.1:5203` (26 callables loaded), Storage `127.0.0.1:19721`, project `demo-golfriend-v2-canonical`.
-- Seed (Lane C-owned slice, Admin SDK): **10 auth users, 43 Firestore docs** (admin_users 5, b2b_partners 3, courses 2, course_operators 2, tee_time_slots 3, bookings 1, booking_audit 2, members/profiles, enterprise_staff 1). Login password (local only): `Precommission-1`.
+- Seed (Lane C-owned slice, Admin SDK): **10 auth users, 43 Firestore docs** (admin_users 5, b2b_partners 3, courses 2, course_operators 2, tee_time_slots 3, bookings 1, booking_audit 2, members/profiles, enterprise_staff 1). Authentication credentials are transient operator-supplied environment values and are never committed or recorded in evidence.
 - Web servers (separate confirmed ports): Web `:5180`, Admin `:5181`, Small-Business Portal `:5182`, Enterprise Portal `:5183`.
 
 ## Network boundary — PROVEN localhost-only (production unreachable)

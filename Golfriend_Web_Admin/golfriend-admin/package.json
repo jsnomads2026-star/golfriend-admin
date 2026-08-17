@@ -11,6 +11,7 @@
     "gate:v2": "node scripts/v2-mode-gate.mjs",
     "gate:a11y": "node scripts/portal-a11y-gate.mjs",
     "verify:admin-gateway": "node scripts/admin-gateway-integration-verify.mjs",
+    "verify:admin-local-auth": "node scripts/admin-local-auth-fixture-verify.mjs",
     "gate:fnauth": "node scripts/functions-authority-gate.mjs",
     "gate:godmode": "node scripts/functions-godmode-gate.mjs",
     "test:godmode-aliases": "node scripts/functions-godmode-alias-contract.test.mjs",
@@ -89,7 +90,7 @@
     "verify:commissioning-readiness": "node scripts/commissioning-readiness-verify.mjs",
     "check:laneb": "node scripts/laneb-rules-contract-check.mjs",
     "precommission": "node scripts/precommission-evidence.mjs",
-    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run verify:admin-gateway && npm run gate:fnauth && npm run gate:godmode && npm run gate:clientcallable && npm run gate:fnexport && npm run gate:coursewrites && npm run gate:course-intake && npm run gate:storefront && npm run gate:c2 && npm run gate:c2b && npm run gate:c2c && npm run gate:c2d && npm run gate:c2e && npm run gate:c3a && npm run gate:c3b && npm run test:golfapi-preflight && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops && npm run verify:coursepreview && npm run gate:admin-v2 && npm run verify:seed && npm run verify:nav && npm run verify:precommission && npm run verify:booking-provider-publication && npm run gate:i18n && npm run verify:enterprise-member-commissioning-ui",
+    "gate": "npm run gate:authority && npm run gate:dead-route && npm run gate:v2 && npm run gate:a11y && npm run verify:admin-gateway && npm run verify:admin-local-auth && npm run gate:fnauth && npm run gate:godmode && npm run gate:clientcallable && npm run gate:fnexport && npm run gate:coursewrites && npm run gate:course-intake && npm run gate:storefront && npm run gate:c2 && npm run gate:c2b && npm run gate:c2c && npm run gate:c2d && npm run gate:c2e && npm run gate:c3a && npm run gate:c3b && npm run test:golfapi-preflight && npm run verify:booking && npm run verify:v2 && npm run verify:roles && npm run verify:guards && npm run verify:courseops && npm run verify:coursepreview && npm run gate:admin-v2 && npm run verify:seed && npm run verify:nav && npm run verify:precommission && npm run verify:booking-provider-publication && npm run gate:i18n && npm run verify:enterprise-member-commissioning-ui",
     "lint": "eslint .",
     "preview": "vite preview"
   },

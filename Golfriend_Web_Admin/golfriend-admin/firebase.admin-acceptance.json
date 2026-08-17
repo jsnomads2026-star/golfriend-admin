@@ -1,0 +1,10 @@
+{
+  "firestore": {
+    "rules": "admin-acceptance.firestore.rules"
+  },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 19701 },
+    "firestore": { "host": "127.0.0.1", "port": 19711 },
+    "ui": { "enabled": false }
+  }
+}

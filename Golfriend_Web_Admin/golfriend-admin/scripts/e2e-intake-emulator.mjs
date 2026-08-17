@@ -1,7 +1,14 @@
 // Firebase Emulator end-to-end verification of the partner intake pipeline.
 // Drives the real client path: Auth emulator sign-in, onCall callables over HTTP
 // with ID tokens, Firestore REST (user tokens) for rules + authorization boundaries.
-const PROJECT = 'golfriend-v1';
+if (process.env.GOLFRIEND_LOCAL_AUTH_FIXTURES !== 'enabled') {
+  throw new Error('Set GOLFRIEND_LOCAL_AUTH_FIXTURES=enabled to run this emulator-only test.');
+}
+const TEST_PASSWORD = process.env.GOLFRIEND_LOCAL_E2E_PASSWORD;
+if (typeof TEST_PASSWORD !== 'string' || TEST_PASSWORD.length < 16) {
+  throw new Error('GOLFRIEND_LOCAL_E2E_PASSWORD must contain at least 16 transient characters.');
+}
+const PROJECT = 'demo-golfriend-v2-canonical';
 const AUTH = 'http://127.0.0.1:19701/identitytoolkit.googleapis.com/v1/accounts';
 const FN = `http://127.0.0.1:5203/${PROJECT}/us-central1`;
 const FS = `http://127.0.0.1:19711/v1/projects/${PROJECT}/databases/(default)/documents`;
@@ -11,7 +18,7 @@ function ok(name, cond, detail = '') { if (cond) { pass++; console.log(`  ✓ ${
 
 async function signUp(email) {
   const r = await fetch(`${AUTH}:signUp?key=fake`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'Passw0rd!', returnSecureToken: true }) });
+    body: JSON.stringify({ email, password: TEST_PASSWORD, returnSecureToken: true }) });
   const j = await r.json();
   if (!j.idToken) throw new Error('signUp failed: ' + JSON.stringify(j));
   return { idToken: j.idToken, uid: j.localId };

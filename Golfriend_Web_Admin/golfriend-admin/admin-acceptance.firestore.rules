@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Local authenticated acceptance needs only the caller's server-projected
+    // Admin record. Every other client read/write remains denied; Admin data
+    // operations continue through server-authorized callables.
+    match /admin_users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
