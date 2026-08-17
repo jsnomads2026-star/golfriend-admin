@@ -1,1 +1,25 @@
-import assert from'node:assert/strict';import{readFileSync}from'node:fs';const s=readFileSync(new URL('../functions/src/index.ts',import.meta.url),'utf8');let n=0;for(const re of [/rejectSurplus\(payload, action\)/,/REMOVAL_REASONS/,/removalFingerprint/,/tx\.create\(auditRef/,/status:'removed'/,/tx\.set\(registryRef/,/prior\.exists/,/membershipVersion:Number\(saved\.membershipVersion\)/,/member\.role\)/]){assert.match(s,re);n++}assert.doesNotMatch(s,/membersCol\.doc\(staffUid\)\.delete/);n++;console.log(`Course Intake security regression PASS: ${n}/${n}`);
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const source = readFileSync(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
+const requiredSecurityInvariants = [
+  /Object\.keys\(payload\)\.filter[\s\S]*?ALLOWED_FIELDS\[action\]/,
+  /REMOVAL_REASONS\.join/,
+  /removalFingerprint\(/,
+  /tx\.create\(removalAuditRef/,
+  /tx\.set\(targetRef,\s*\{\s*status:\s*'removed'/s,
+  /tx\.set\(removalRegistryRef,\s*\{[\s\S]*?status:\s*'removed'/,
+  /if \(priorAudit\.exists\)/,
+  /currentData\.enterpriseUid[\s\S]*?callerUid/,
+  /currentData\.organizationId[\s\S]*?actorOrganizationId/,
+];
+
+let checks = 0;
+for (const invariant of requiredSecurityInvariants) {
+  assert.match(source, invariant);
+  checks += 1;
+}
+assert.doesNotMatch(source, /membersCol\.doc\(staffUid\)\.delete/);
+checks += 1;
+
+console.log(`Course Intake security regression PASS: ${checks}/${checks}`);

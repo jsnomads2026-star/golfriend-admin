@@ -1,9 +1,10 @@
+import {LOCALE_CODES} from '../../i18n/locales.ts';
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.prototype.hasOwnProperty.call(value,key));
 const id=/^[A-Za-z0-9_-]{8,200}$/,sha=/^[a-f0-9]{64}$/,statuses=new Set(['course_reviewing','course_confirmed','alternative_proposed','cancellation_requested','cancellation_accepted','cancellation_declined','cancelled','expired','ambiguous_locked']);
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value)}return value};
 const actions=new Set(['confirm','alternative','accept_cancellation','decline_cancellation']);
 const resultingStatus={confirm:'course_confirmed',alternative:'alternative_proposed',accept_cancellation:'cancellation_accepted',decline_cancellation:'cancellation_declined'};
-const roles=new Set(['organization_owner','organization_admin','course_manager','booking_staff','analyst_viewer']),locales=new Set(['en','th','ko','ja','zh','es','fr','de']),channels=new Set(['course_phone','course_email','provider_redirect']);
+const roles=new Set(['organization_owner','organization_admin','course_manager','booking_staff','analyst_viewer']),locales=new Set(LOCALE_CODES),channels=new Set(['course_phone','course_email','provider_redirect']);
 const date=value=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const[y,m,d]=value.split('-').map(Number),parsed=new Date(Date.UTC(y,m-1,d));return parsed.getUTCFullYear()===y&&parsed.getUTCMonth()===m-1&&parsed.getUTCDate()===d};
 const time=value=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value),zone=value=>/^([A-Za-z_]+\/[A-Za-z_+-]+|UTC)$/.test(value),uniqueIds=value=>Array.isArray(value)&&new Set(value).size===value.length&&value.every(item=>id.test(item));
 export function parseEnterpriseBookingCoordinationProjection(raw,now=Date.now()){

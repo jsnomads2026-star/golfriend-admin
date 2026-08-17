@@ -94,7 +94,15 @@ check('booking responses: modular App Check plus exact enterprise course grant',
   assert.ok(!/partner_identity_bindings|partner_memberships|partner_organizations/.test(booking));
   assert.ok(!/admin@golfriend\.co/.test(booking));
 });
-for (const name of ['manageEnterpriseStaff', 'cancelB2BContract', 'reportPlayerIncident']) {
+check('Enterprise staff authority: canonical runtime is server-owned and exact-scope', () => {
+  const authority = readFileSync(resolve(__dirname, '../src/enterpriseAuthorityRuntime.ts'), 'utf8');
+  assert.ok(/resolveEnterpriseCourseAuthority/.test(authority));
+  assert.ok(/m\.organizationId!==organizationId/.test(authority));
+  assert.ok(/m\.scope\.propertyId!==propertyId/.test(authority));
+  assert.ok(/m\.scope\.courseId!==courseId/.test(authority));
+  assert.ok(!/callerEmail|candidateIds|admin@golfriend\.co/.test(authority));
+});
+for (const name of ['cancelB2BContract', 'reportPlayerIncident']) {
   check(`identity-resolution ${name}: email used for candidateIds only, no God-Mode`, () => {
     const code = stripComments(bodyOf(name));
     assert.ok(!/admin@golfriend\.co/.test(code), `${name} must not contain the God-Mode email`);

@@ -1,8 +1,8 @@
 export const FROZEN_CALLABLE_ALIASES = Object.freeze({
   manageTeeTimeSlot: Object.freeze({ source: "manageCourseAvailabilityV2", module: "./partnerAvailabilityRuntime.js", authority: ["uid(r)", "membership(caller)", "course_operators"], primaryCollection: "tee_time_slots", auditCollection: "availability_audits" }),
-  respondBooking: Object.freeze({ source: "managePlayBookingV2", module: "./partnerBookingRuntime.js", authority: ["uid(r)", "member(caller)", "course_operators"], primaryCollection: "bookings", auditCollection: "play_booking_audits" }),
-  cancelBooking: Object.freeze({ source: "managePlayBookingV2", module: "./partnerBookingRuntime.js", authority: ["uid(r)", "member(caller)", "course_operators"], primaryCollection: "bookings", auditCollection: "play_booking_audits" }),
-  sendBookingMessage: Object.freeze({ source: "sendPlayBookingMessageV2", module: "./partnerBookingRuntime.js", authority: ["uid(r)", "member(caller)", "permissions(m.role).message"], primaryCollection: "bookings", auditCollection: "play_booking_audits" }),
+  respondBooking: Object.freeze({ source: "managePlayBookingV2", module: "./partnerBookingRuntime.js", authority: ["uid(r)", "exactBookingAuthority(caller,scope", "permissions(scope.role)"], primaryCollection: "bookings", auditCollection: "play_booking_audits" }),
+  cancelBooking: Object.freeze({ source: "managePlayBookingV2", module: "./partnerBookingRuntime.js", authority: ["uid(r)", "exactBookingAuthority(caller,scope", "permissions(scope.role)"], primaryCollection: "bookings", auditCollection: "play_booking_audits" }),
+  sendBookingMessage: Object.freeze({ source: "sendPlayBookingMessageV2", module: "./partnerBookingRuntime.js", authority: ["uid(r)", "exactBookingAuthority(caller,scope", "permissions(scope.role).message"], primaryCollection: "bookings", auditCollection: "play_booking_audits" }),
 });
 
 const escaped = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

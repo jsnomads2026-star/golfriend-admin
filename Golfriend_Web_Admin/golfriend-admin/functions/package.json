@@ -12,6 +12,7 @@
     "test:janitor": "tsc && node lib/janitorLogic.test.js",
     "test:coursewrites": "tsc && node lib/courseWriteAuthority.test.js",
     "test:intake": "tsc && node lib/partnerIntakeLogic.test.js",
+    "test:course-intake": "tsc && node lib/enterpriseCourseIntakeSecurity.test.js",
     "test:marketing": "tsc && node lib/marketingAssetDomain.test.js",
     "test:partner-v2": "tsc && node lib/partnerOnboardingDomain.test.js",
     "test:partner-activation": "tsc && node lib/partnerActivationDomain.test.js",

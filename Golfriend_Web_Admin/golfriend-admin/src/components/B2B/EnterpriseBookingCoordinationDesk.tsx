@@ -2,19 +2,19 @@ import {useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent} f
 import {getFunctions, httpsCallable} from 'firebase/functions';
 import {useT} from '../../i18n/hooks.ts';
 import {PLAY_BOOKING_DESK, type PlayBookingDeskKey} from '../../i18n/partner/playBookingDesk.ts';
+import {LOCALE_CODES, isCanonicalLocale, type CanonicalLocale} from '../../i18n/locales.ts';
 import {parseEnterpriseBookingActionPreview,parseEnterpriseBookingActionResult,parseEnterpriseBookingCoordinationProjection,parseEnterpriseBookingTokenRecovery} from './enterpriseBookingCoordinationProjection.mjs';
 import {approvePlayBookingMessageDraft, createPlayBookingMessageDraft, playBookingMessageApprovalDigest, type PlayBookingMessageDraft, type PlayBookingMessageDraftType} from './playBookingMessageDraft.mjs';
 import './PlayBookingDesk.css';
 import './EnterpriseBookingCoordinationDesk.css';
 
 type Raw = Record<string, any>;
-type BookingLocale = 'en'|'th'|'ko'|'ja'|'zh'|'es'|'fr'|'de';
+type BookingLocale = CanonicalLocale;
 type Action = 'confirm'|'alternative'|'accept_cancellation'|'decline_cancellation';
 type Pending = {booking: Raw; action: Action; commandId: string; recoveryCommandId: string; expiresAt: number; operationId?: string; operationDigest?: string; alternativeSlot?: Raw|null};
 const call = async (name: string, data: Raw = {}) => (await httpsCallable(getFunctions(), name)(data)).data as Raw;
 const service = {load: () => call('getEnterpriseBookingCoordinationPortalV2'), preview: (value: Raw) => call('previewEnterpriseBookingActionV2', value), manage: (value: Raw) => call('manageEnterpriseBookingActionV2', value), recover: (value: Raw) => call('recoverPlayBookingConfirmationV2', value)};
-const locales: readonly BookingLocale[] = ['en','th','ko','ja','zh','es','fr','de'];
-const locale = (): BookingLocale => {const value = localStorage.getItem('golfriend.locale') as BookingLocale|null; return value && locales.includes(value) ? value : 'en';};
+const locale = (): BookingLocale => {const value = localStorage.getItem('golfriend.locale'); return isCanonicalLocale(value) ? value : LOCALE_CODES[0];};
 const uuid = () => crypto.randomUUID().replaceAll('-', '_');
 const statusKey: Record<string, PlayBookingDeskKey> = {course_reviewing:'statusUnderReview',course_confirmed:'statusConfirmed',alternative_proposed:'statusAlternative',cancellation_requested:'statusCancellationRequested',cancellation_accepted:'statusCancellationAccepted',cancellation_declined:'statusCancellationDeclined',cancelled:'statusCancelled',expired:'statusExpired',ambiguous_locked:'operationAmbiguous'};
 const actionKey: Record<Action, PlayBookingDeskKey> = {confirm:'confirm',alternative:'proposeAlternative',accept_cancellation:'statusCancellationAccepted',decline_cancellation:'statusCancellationDeclined'};

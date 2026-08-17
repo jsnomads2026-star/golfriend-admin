@@ -1,6 +1,7 @@
-export const PLAY_BOOKING_COMMUNICATION_LOCALES=['en','th','ko','ja','zh','es','fr','de']as const;
+import {LOCALE_CODES,type CanonicalLocale} from '../locales.ts';
+export const PLAY_BOOKING_COMMUNICATION_LOCALES=LOCALE_CODES;
 export const PLAY_BOOKING_COMMUNICATION_TYPES=['request_received','information_needed','alternative_proposed','confirmed','declined','cancellation_received','cancellation_accepted','cancellation_declined','manual_support_required']as const;
-export type PlayBookingCommunicationLocale=typeof PLAY_BOOKING_COMMUNICATION_LOCALES[number];
+export type PlayBookingCommunicationLocale=CanonicalLocale;
 export type PlayBookingCommunicationType=typeof PLAY_BOOKING_COMMUNICATION_TYPES[number];
 export type PlayBookingCommunicationCopy=Readonly<{recipientFallback:string;draftOnly:string;awaitingDeliveryProvider:string;messages:Readonly<Record<PlayBookingCommunicationType,string>>}>;
 export const PLAY_BOOKING_COMMUNICATION:Readonly<Record<PlayBookingCommunicationLocale,PlayBookingCommunicationCopy>>={

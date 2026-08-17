@@ -48,7 +48,7 @@ assert(/state==="unavailable"/.test(EnterpriseTournament) && /role="alert"/.test
 assert(/if \(!this\.producer/.test(EnterpriseTournamentService) && /TOURNAMENT_PRODUCER_UNAVAILABLE/.test(EnterpriseTournamentService), `Enterprise tournament service fails closed without its producer`);
 assert(!/firebase\/firestore|setDoc|updateDoc|addDoc|deleteDoc/.test(EnterpriseTournament), `Enterprise tournament consumer performs no direct datastore writes`);
 assert(/activeTab === 'raffle' && <PolicyUnavailable/.test(Ent), `EnterpriseDashboard: 'raffle' renders PolicyUnavailable`);
-assert(/activeTab === 'tournaments' && <PolicyUnavailable/.test(SB), `SmallBusinessDashboard: 'tournaments' renders PolicyUnavailable`);
+assert(!/activeTab === 'tournaments'|EnterpriseTournamentOperations/.test(SB), `SmallBusinessDashboard: Enterprise tournament route remains absent`);
 
 // Approved journeys remain mounted (regression guard).
 const APPROVED_APP_MOUNTS = [
@@ -62,13 +62,19 @@ for (const [tab, comp] of APPROVED_APP_MOUNTS) {
 // Enterprise/SB approved surfaces preserved.
 const teeSheetBranch = Ent.match(/activeTab === 'teesheet' && <>([\s\S]*?)<\/?>/)?.[1] || '';
 assert(
-  teeSheetBranch.includes('<PlayBookingLifecycleV2 />') &&
+  teeSheetBranch.includes('<EnterpriseBookingCoordinationDesk />') &&
   teeSheetBranch.includes('<BookingOperationsReportV2 />') &&
   teeSheetBranch.includes('<BookingProviderPublicationV2 />') &&
   teeSheetBranch.includes('<CourseTeeSheet />'),
   `EnterpriseDashboard: approved 'teesheet' lifecycle, reporting, publication and tee sheet preserved`,
 );
-assert(/CourseAvailability/.test(SB), `SmallBusinessDashboard: approved availability surface preserved`);
+assert(
+  /<EnterpriseBookingCoordinationDesk\s*\/>/.test(SB) &&
+  /<BookingOperationsReportV2\s*\/>/.test(SB) &&
+  /<BookingProviderPublicationV2\s*\/>/.test(SB) &&
+  !/CourseAvailabilityV2|VenueManager/.test(SB),
+  `SmallBusinessDashboard: booking interoperability is preserved without Enterprise course authority`,
+);
 
 // The approved flight sheet stays, but its check-in control no longer calls the callable.
 assert(!/httpsCallable\([^,]*,\s*['"]checkInFlight['"]/.test(Tee), `CourseTeeSheet: no checkInFlight invocation remains`);
