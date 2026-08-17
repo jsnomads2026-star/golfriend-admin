@@ -11,6 +11,7 @@ import PartnerOnboarding from './PartnerOnboarding';
 import EnterpriseBookingCoordinationDesk from './EnterpriseBookingCoordinationDesk';
 import BookingOperationsReportV2 from './BookingOperationsReportV2';
 import BookingProviderPublicationV2 from './BookingProviderPublicationV2';
+import TournamentGovernancePanel from './TournamentGovernancePanel';
 export default function SmallBusinessDashboard({provider=firebaseSmallBusinessProvider}:{partnerData?:unknown;provider?:SmallBusinessProvider}){
  const locale=useLocale(),t=SMALL_BUSINESS_COPY[locale],[data,setData]=useState<PortalProjection|null>(null),[busy,setBusy]=useState(true),[message,setMessage]=useState(''),[confirmed,setConfirmed]=useState(false),[action,setAction]=useState<'submit'|'withdraw'>('submit'),stable=useRef(commandId('small_business_portal')),requestGeneration=useRef(0);
  const load=useCallback(async()=>{const generation=++requestGeneration.current;setBusy(true);setMessage('');const next=await provider.portal(locale);if(generation!==requestGeneration.current)return;setData(next);setBusy(false)},[locale,provider]); useEffect(()=>{void load();return()=>{requestGeneration.current++}},[load]);
@@ -22,5 +23,6 @@ export default function SmallBusinessDashboard({provider=firebaseSmallBusinessPr
  <section className="sb-card"><h2>{t.locations}</h2>{data.locations.length?data.locations.map(location=><article key={location.locationId}><h3>{location.label}</h3><p>{location.city}, {location.country}</p><ul>{location.hours.map(hour=><li key={hour.day}>{smallBusinessWeekday(locale,hour.day)}: {hour.closed?smallBusinessLabel(locale,'isClosed'):`${hour.opens}–${hour.closes}`}</li>)}</ul></article>):<p>{t.empty}</p>}</section>
  <section className="sb-card"><h2>{t.subscription}</h2><p>{t.subscriptionBoundary}</p>{data.plans.map(plan=><article key={`${plan.planId}:${plan.version}`}><h3>{plan.planId} · v{plan.version}</h3><p>{plan.priceDisplay||t.unavailable}</p><button disabled={plan.status!=='available'} onClick={()=>setMessage(t.subscriptionBoundary)}>{t.prepareIntent}</button></article>)}</section>
  <PartnerOnboarding projection={data}/><PartnerDocuments projection={data}/><SmallBusinessPortalForms data={data} provider={provider} locale={locale} t={t} onReload={load} onMessage={setMessage}/><EnterpriseBookingCoordinationDesk/><BookingOperationsReportV2/><BookingProviderPublicationV2/><section className="sb-card"><h2>{t.promotions}</h2><p>{t.promotionBoundary}</p>{data.promotions.map(p=><article key={p.promotionId}><h3>{smallBusinessLabel(locale,p.status)} · {p.locale}</h3><p>{p.jurisdiction} · {p.effectiveAt} → {p.expiresAt}</p><p>{t.sponsored}</p></article>)}</section><section className="sb-card"><h2>{t.history}</h2><ol>{data.receipts.map(r=><li key={r.receiptId}>{r.occurredAt} · {smallBusinessLabel(locale,r.action)} · v{r.version}</li>)}</ol></section></>}
+ <TournamentGovernancePanel/>
  </main>;
 }

@@ -34,21 +34,22 @@ for (const [name, txt] of [['App', App], ['EnterpriseDashboard', Ent], ['SmallBu
 }
 
 // Each quarantined/unresolved admin tab renders PolicyUnavailable.
-const ADMIN_UNAVAILABLE_TABS = ['photos', 'escrow', 'fiat', 'ledger', 'bank', 'tournaments', 'fulfillment', 'b2b'];
+const ADMIN_UNAVAILABLE_TABS = ['photos', 'escrow', 'fiat', 'ledger', 'bank', 'fulfillment', 'b2b'];
 for (const tab of ADMIN_UNAVAILABLE_TABS) {
   const re = new RegExp(`activeTab === '${tab}' && <PolicyUnavailable`);
   assert(re.test(App), `App: '${tab}' tab renders PolicyUnavailable`);
 }
 // The recorded Enterprise tournament consumer is mounted, but remains honest and
 // unavailable unless its separately owned authoritative producer is supplied.
-assert(/activeTab === 'tournaments' && <EnterpriseTournamentOperations\s*\/>/.test(Ent), `EnterpriseDashboard: 'tournaments' mounts the approved scoped consumer`);
+assert(/activeTab === 'tournaments' && <TournamentGovernancePanel\s*\/>/.test(Ent), `EnterpriseDashboard: 'tournaments' mounts authoritative governance`);
 assert(/service=unavailableService/.test(EnterpriseTournament), `Enterprise tournament consumer defaults to the unavailable service`);
 assert(/new EnterpriseTournamentOperationsService\(null\)/.test(EnterpriseTournament), `Enterprise tournament consumer does not invent a producer`);
 assert(/state==="unavailable"/.test(EnterpriseTournament) && /role="alert"/.test(EnterpriseTournament), `Enterprise tournament consumer exposes an accessible unavailable state`);
 assert(/if \(!this\.producer/.test(EnterpriseTournamentService) && /TOURNAMENT_PRODUCER_UNAVAILABLE/.test(EnterpriseTournamentService), `Enterprise tournament service fails closed without its producer`);
 assert(!/firebase\/firestore|setDoc|updateDoc|addDoc|deleteDoc/.test(EnterpriseTournament), `Enterprise tournament consumer performs no direct datastore writes`);
 assert(/activeTab === 'raffle' && <PolicyUnavailable/.test(Ent), `EnterpriseDashboard: 'raffle' renders PolicyUnavailable`);
-assert(!/activeTab === 'tournaments'|EnterpriseTournamentOperations/.test(SB), `SmallBusinessDashboard: Enterprise tournament route remains absent`);
+assert(/<TournamentGovernancePanel\s*\/>/.test(SB)&&!/EnterpriseTournamentOperations/.test(SB), `SmallBusinessDashboard: organization-scoped governance is mounted without Enterprise-only projection`);
+assert(/activeTab === 'tournaments' && <TournamentGovernancePanel admin \/>/.test(App), `App: Admin tournament governance replaces the unavailable boundary`);
 
 // Approved journeys remain mounted (regression guard).
 const APPROVED_APP_MOUNTS = [

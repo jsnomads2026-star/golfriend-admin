@@ -23,6 +23,7 @@ import CourseSyncConsole from './components/admin/CourseSyncConsole'; // 🛰️
 import CourseTeeSheet from './components/B2B/CourseTeeSheet'; // 🔥 B2B flight sheet (check-in control quarantined)
 // TournamentManager removed from navigation (manageTournamentOps unresolved — fail-closed).
 import TournamentTV from './components/admin/TournamentTV';
+import TournamentGovernancePanel from './components/B2B/TournamentGovernancePanel';
 import EventGenesisConsole from './components/admin/EventGenesisConsole';
 // SponsorOnboardingWizard QUARANTINED (dead code w/ client ledger writes) — not routed.
 import SponsorDashboard from './components/admin/sponsors/SponsorDashboard';
@@ -372,7 +373,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
         {activeTab === 'teetimes' && <TeeTimeInventory />}
         {activeTab === 'coursesync' && <CourseSyncConsole />}
         {activeTab === 'teesheet' && <CourseTeeSheet />}
-        {activeTab === 'tournaments' && <PolicyUnavailable feature="Tournament Operations" category="unresolved-policy" callable="manageTournamentOps" />}
+        {activeTab === 'tournaments' && <TournamentGovernancePanel admin />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
 
         {/* 🔥 RENDER OEM HUB */}

@@ -11,7 +11,7 @@ import { db, storage } from '../../firebaseConfig';
 // drawRaffleWinner unresolved — fail-closed pending founder policy).
 import PolicyUnavailable from '../common/PolicyUnavailable';
 import TournamentTV from '../admin/TournamentTV';
-import EnterpriseTournamentOperations from './enterpriseTournament/EnterpriseTournamentOperations';
+import TournamentGovernancePanel from './TournamentGovernancePanel';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import AdLeadsInbox from './AdLeadsInbox';
 import CourseTeeSheet from './CourseTeeSheet'; // 🔥 B2B flight sheet (check-in control quarantined)
@@ -622,7 +622,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'teesheet' && <><EnterpriseBookingCoordinationDesk /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><CourseTeeSheet /></>}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
-        {activeTab === 'tournaments' && <EnterpriseTournamentOperations />}
+        {activeTab === 'tournaments' && <TournamentGovernancePanel/>}
         {activeTab === 'adhub' && <AdHub isMasterHost={isMasterHost} partnerUid={authUid} />}
         {activeTab === 'wallet' && <WalletSettings partnerUid={authUid} />}
         {activeTab === 'tv' && <TournamentTV />}

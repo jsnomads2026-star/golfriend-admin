@@ -60,6 +60,7 @@ export {getCountryUserAnalytics} from "./countryUserAnalytics.js";
 export {getTeeEconomyAnalytics} from "./teeEconomyAnalytics.js";
 export {getAdminControlProjectionV1,decidePartnerTrialAdminV1,previewEconomyConfigAdminV1,activateEconomyConfigAdminV1,rollbackEconomyConfigAdminV1} from "./adminControlRuntime.js";
 export {prepareAdminJhccFinanceReportV1,transmitAdminJhccFinanceReportV1,getAdminJhccFinanceDeliveryV1} from "./financeReportRuntime.js";
+export {getPartnerTournamentGovernanceV1,managePartnerTournamentGovernanceV1,getAdminTournamentGovernanceV1,manageAdminTournamentGovernanceV1,getPublishedTournamentProjectionV1} from "./tournamentGovernanceRuntime.js";
 export {getCourseAcquisitionDashboard,previewCourseAcquisitionPlan,acquireCourseCandidates,decideCourseCandidate,publishCourseCandidate,submitCourseCorrectionRequest} from "./courseAcquisition.js";
 
 // Initialize Firebase Admin
