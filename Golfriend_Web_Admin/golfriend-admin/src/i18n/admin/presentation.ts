@@ -29,3 +29,7 @@ export const ADMIN_ANALYTICS_PRESENTATION: LocaleDict<'analytics' | 'tee-analyti
   fr:{analytics:'Analyse des utilisateurs par pays','tee-analytics':'Analyse de l’économie Tee'},
   de:{analytics:'Nutzeranalyse nach Land','tee-analytics':'Tee-Wirtschaftsanalyse'},
 };
+
+export const ADMIN_CONTROL_PRESENTATION: LocaleDict<'economy'> = {
+  en:{economy:'Economy master controls'},th:{economy:'การควบคุมเศรษฐกิจหลัก'},ko:{economy:'경제 마스터 제어'},ja:{economy:'エコノミーマスター管理'},zh:{economy:'经济主控'},es:{economy:'Controles maestros de economía'},fr:{economy:'Contrôles maîtres de l’économie'},de:{economy:'Zentrale Wirtschaftssteuerung'},
+};

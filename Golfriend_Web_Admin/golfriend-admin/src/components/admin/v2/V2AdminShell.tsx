@@ -1,13 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ADMIN_LOCALES, ADMIN_NAVIGATION_AREAS, type AdminArea, type AdminLocale } from './adminNavigation';
-import { ADMIN_ANALYTICS_PRESENTATION, ADMIN_PRESENTATION } from '../../../i18n/admin/presentation';
+import { ADMIN_ANALYTICS_PRESENTATION, ADMIN_CONTROL_PRESENTATION, ADMIN_PRESENTATION } from '../../../i18n/admin/presentation';
 import { AdminLocaleContext } from './AdminLocaleContext';
 import './V2AdminShell.css';
 
 export default function V2AdminShell({ activeArea, onAreaChange, onSignOut, children }: { activeArea: AdminArea; onAreaChange: (area: AdminArea) => void; onSignOut: () => void; children: ReactNode }) {
   const [locale, setLocale] = useState<AdminLocale>('en');
   const [menuOpen, setMenuOpen] = useState(false);
-  const copy = {...ADMIN_PRESENTATION[locale], ...ADMIN_ANALYTICS_PRESENTATION[locale]};
+  const copy = {...ADMIN_PRESENTATION[locale], ...ADMIN_ANALYTICS_PRESENTATION[locale], ...ADMIN_CONTROL_PRESENTATION[locale]};
   useEffect(() => setMenuOpen(false), [activeArea]);
   return <AdminLocaleContext.Provider value={locale}><div className="v2-admin-shell">
     <aside className={`v2-admin-sidebar ${menuOpen ? 'is-open' : ''}`} aria-label={copy.primaryNavigation}>

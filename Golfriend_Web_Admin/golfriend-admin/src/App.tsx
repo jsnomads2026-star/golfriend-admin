@@ -57,6 +57,8 @@ import V2CountryUserAnalytics from './components/admin/v2/V2CountryUserAnalytics
 import V2TeeEconomyAnalytics from './components/admin/v2/V2TeeEconomyAnalytics';
 import V2CourseAcquisition from './components/admin/v2/V2CourseAcquisition';
 import V2AcquisitionReport from './components/admin/v2/V2AcquisitionReport';
+import AdminTrialDecisions from './components/admin/v2/AdminTrialDecisions';
+import EconomyMasterControl from './components/admin/v2/EconomyMasterControl';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 import { AdminIdentityContext, type AdminIdentity } from './components/admin/v2/AdminIdentityContext';
 import { useOnlineStatus } from './components/admin/v2/useOnlineStatus';
@@ -289,12 +291,14 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'partners' && <V2SmallBusinessReview />}
     {activeArea === 'partners' && <V2SmallBusinessReadiness />}
     {activeArea === 'partners' && <V2CourseAcquisition />}
+    {activeArea === 'partners' && <AdminTrialDecisions />}
     {activeArea === 'partners' && <PartnerIngestion />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}
     {activeArea === 'advertising' && <SponsorDashboard />}
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
     {activeArea === 'reports' && <V2AdminReports />}
     {activeArea === 'reports' && <V2AcquisitionReport />}
+    {activeArea === 'economy' && <EconomyMasterControl />}
     </V2AdminShell>
   </AdminIdentityContext.Provider>;
 

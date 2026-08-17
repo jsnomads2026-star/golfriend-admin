@@ -3,6 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import { CustomProvider, initializeAppCheck } from 'firebase/app-check';
 import { resolveFirebaseTarget, resolveEmulatorEndpoints } from './firebaseTarget.js';
 
 // ==========================================
@@ -46,6 +47,14 @@ if (USING_EMULATORS) {
       'precommission (emulator) mode is development-only and must never run in a production build.',
     );
   }
+  // Local attestation is non-secret and exists only inside this development-only
+  // branch. Auth and server role projection remain independently mandatory.
+  initializeAppCheck(app, {
+    provider: new CustomProvider({
+      getToken: () => Promise.resolve({ token: 'local-emulator-attestation', expireTimeMillis: Date.now() + 60 * 60 * 1000 }),
+    }),
+    isTokenAutoRefreshEnabled: false,
+  });
   // Fails closed if any emulator endpoint is missing — never a production fallback.
   const emu = resolveEmulatorEndpoints(ACTIVE_PROJECT, env)!;
   connectAuthEmulator(auth, `http://${emu.host}:${emu.ports.auth}`, { disableWarnings: true });

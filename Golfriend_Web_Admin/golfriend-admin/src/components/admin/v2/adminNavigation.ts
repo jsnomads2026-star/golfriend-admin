@@ -14,10 +14,12 @@ export const ADMIN_ANALYTICS_AREAS = [
   { id: 'analytics', label: 'Country user analytics' },
   { id: 'tee-analytics', label: 'Tee economy analytics' },
 ] as const;
+export const ADMIN_CONTROL_AREAS = [{ id: 'economy', label: 'Economy master controls' }] as const;
 export const ADMIN_NAVIGATION_AREAS = [
   ADMIN_AREAS[0],
   ADMIN_AREAS[1],
   ...ADMIN_ANALYTICS_AREAS,
+  ...ADMIN_CONTROL_AREAS,
   ...ADMIN_AREAS.slice(2),
 ] as const;
 export type AdminArea = (typeof ADMIN_NAVIGATION_AREAS)[number]['id'];
