@@ -122,7 +122,7 @@ export function resolvePortalAccess(input = {}) {
     if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) {
       return { state: 'unauthorized', surface: 'admin' };
     }
-    if (!adminDoc.role || typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') {
+    if (!isCanonicalAdminRole(adminDoc.role)) {
       return { state: 'unauthorized', surface: 'admin' };
     }
     return { state: 'authorized', surface: 'admin', role: adminDoc.role };

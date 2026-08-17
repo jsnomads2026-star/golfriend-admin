@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { resolvePortalAccess, STATE_COPY } from './auth/roleJourney.js';
 import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
-import LandingPage from './components/public/LandingPage';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
 import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
 import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
@@ -70,8 +69,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* PUBLIC ARENA */}
-        <Route path="/" element={<LandingPage />} />
+        {/* This checkout is the Admin entrypoint. Keep the protected gateway canonical. */}
+        <Route path="/" element={<Navigate to="/admin" replace />} />
         <Route path="/storefront" element={<B2BStorefront />} />
         <Route path="/discover" element={<CourseDiscovery />} />
         <Route path="/legal" element={<LegalPrivacy />} />
@@ -81,8 +80,8 @@ export default function App() {
         <Route path="/partner" element={<Dashboard mode="partner" />} />
         <Route path="/admin" element={<Dashboard mode="admin" />} />
         
-        {/* CATCH-ALL: Redirects unknown links to the landing page */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Unknown links never expose a privileged surface; they return to its gate. */}
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>
   );
@@ -104,9 +103,9 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   const executeSecureLogout = async () => {
     try {
       await signOut(getAuth());
-      window.location.href = mode === 'partner' ? '/storefront' : '/';
+      window.location.href = mode === 'partner' ? '/storefront' : '/admin';
     } catch {
-      window.location.href = '/';
+      window.location.href = mode === 'partner' ? '/storefront' : '/admin';
     }
   };
 
@@ -124,7 +123,10 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
   // CORE AUTH LISTENER — access is derived ONLY from server-owned role docs.
   useEffect(() => {
     const auth = getAuth();
+    let stopRoleWatch: (() => void) | null = null;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      stopRoleWatch?.();
+      stopRoleWatch = null;
       setUser(currentUser);
       setResolveError(false);
       setAdminData(null);
@@ -139,6 +141,16 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
           // Server-owned admin authorization: admin_users/{uid}. No email/God-Mode literal.
           const snap = await getDoc(doc(db, 'admin_users', currentUser.uid));
           setAdminData(snap.exists() ? snap.data() : null);
+          // Keep the rendered console bound to current server authority. A removal,
+          // suspension, expiry or role mutation is reflected immediately; callable
+          // authorization still re-checks the same server record on every operation.
+          stopRoleWatch = onSnapshot(doc(db, 'admin_users', currentUser.uid), (next) => {
+            setResolveError(false);
+            setAdminData(next.exists() ? next.data() : null);
+          }, () => {
+            setAdminData(null);
+            setResolveError(true);
+          });
         } else {
           // Partner: b2b_partners keyed by uid or email (retry for webhook buffer).
           let partnerDoc = await getDoc(doc(db, 'b2b_partners', currentUser.uid));
@@ -162,7 +174,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
         setRoleLoading(false);
       }
     });
-    return () => unsubscribe();
+    return () => { stopRoleWatch?.(); unsubscribe(); };
   }, [mode]);
 
   // Bounded inactivity sign-out for any authenticated session.
