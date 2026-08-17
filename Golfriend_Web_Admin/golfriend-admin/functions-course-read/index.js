@@ -15,9 +15,12 @@ async function director(request) {
 
 exports.getCourseAcquisitionDashboard = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
   await director(request);
-  const [courses, quarantine] = await Promise.all([
+  const period = new Date().toISOString().slice(0, 7);
+  const [courses, quarantine, quotaSnapshot, checkpointSnapshot] = await Promise.all([
     db.collection('courses').get(),
     db.collection('course_migration_quarantine').get(),
+    db.collection('golf_api_quota').doc(period).get(),
+    db.collection('course_acquisition_checkpoints').doc('golf-api').get(),
   ]);
   const countries = new Map(), providerIds = new Map();
   let canonical = 0, missingCoordinates = 0, unknownFreshness = 0;
@@ -46,7 +49,8 @@ exports.getCourseAcquisitionDashboard = onCall({region: 'asia-southeast1', enfor
     providerRequests: 0,
     totals: {canonical, missingCoordinates, unknownFreshness, quarantine: quarantine.size, duplicates},
     countries: [...countries.values()].sort((a, b) => a.country.localeCompare(b.country)),
-    quota: null,
+    quota: quotaSnapshot.exists ? quotaSnapshot.data() : null,
+    checkpoint: checkpointSnapshot.exists ? checkpointSnapshot.data() : null,
     candidateCounts: {},
     candidates: [],
   };

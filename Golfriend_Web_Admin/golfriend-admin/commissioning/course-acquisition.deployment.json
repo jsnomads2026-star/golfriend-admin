@@ -15,7 +15,11 @@
   "quota": {
     "collection": "golf_api_quota",
     "monthlyDocument": "YYYY-MM",
-    "mustExistBeforeActivation": true
+    "mustExistBeforeActivation": true,
+    "configuredBudget": 500,
+    "emergencyReserve": 100,
+    "periodStartedAt": "2026-08-05T00:00:00Z",
+    "resetsAt": "2026-09-05T00:00:00Z"
   },
   "migration": {
     "sourceProject": "golfriend-v1",
@@ -39,6 +43,7 @@
     "assign distinct human operator, reviewer, approver and quota-override owners",
     "create and verify the current UTC quota document",
     "reconcile migrated provider IDs against a separately authorized provider catalogue index",
+    "confirm provider per-endpoint charging, pagination cost, account rate limit and CSV entitlement",
     "deploy and verify acquisition functions without invoking the provider"
   ]
 }
