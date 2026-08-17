@@ -3,8 +3,6 @@ export type AdminLocale = (typeof ADMIN_LOCALES)[number];
 export const ADMIN_AREAS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Golf courses / Golf API data' },
-  { id: 'analytics', label: 'Country user analytics' },
-  { id: 'tee-analytics', label: 'Tee economy analytics' },
   { id: 'bookings', label: 'Booking communications' },
   { id: 'partners', label: 'Partners / portal requests' },
   { id: 'marketing', label: 'Marketing assets' },
@@ -12,9 +10,21 @@ export const ADMIN_AREAS = [
   { id: 'exchange', label: 'OEM / Exchange publishing' },
   { id: 'reports', label: 'Reports to JHCC' },
 ] as const;
-export type AdminArea = (typeof ADMIN_AREAS)[number]['id'];
-export const isAdminArea = (value: string | null): value is AdminArea => ADMIN_AREAS.some((area) => area.id === value);
+export const ADMIN_ANALYTICS_AREAS = [
+  { id: 'analytics', label: 'Country user analytics' },
+  { id: 'tee-analytics', label: 'Tee economy analytics' },
+] as const;
+export const ADMIN_NAVIGATION_AREAS = [
+  ADMIN_AREAS[0],
+  ADMIN_AREAS[1],
+  ...ADMIN_ANALYTICS_AREAS,
+  ...ADMIN_AREAS.slice(2),
+] as const;
+export type AdminArea = (typeof ADMIN_NAVIGATION_AREAS)[number]['id'];
+export const isAdminArea = (value: string | null): value is AdminArea => ADMIN_NAVIGATION_AREAS.some((area) => area.id === value);
 
+// Retained for compatibility with the frozen Admin shell verification. Runtime
+// presentation, including navigation labels, is owned by ADMIN_PRESENTATION.
 export const ADMIN_COPY: Record<AdminLocale, { workspace: string; signOut: string; language: string }> = {
   en: { workspace: 'Operations workspace', signOut: 'Secure sign out', language: 'Language' },
   th: { workspace: 'พื้นที่ปฏิบัติการ', signOut: 'ออกจากระบบอย่างปลอดภัย', language: 'ภาษา' },
