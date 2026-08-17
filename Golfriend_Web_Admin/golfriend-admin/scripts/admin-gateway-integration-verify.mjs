@@ -4,10 +4,16 @@ import { resolvePortalAccess } from '../src/auth/roleJourney.js';
 
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
-assert.match(app, /path="\/" element=\{<Navigate to="\/admin" replace \/>\}/,
-  'root must expose the protected Admin gateway');
+assert.match(app, /path="\/" element=\{<Dashboard mode="admin" \/>\}/,
+  'root must mount the protected Admin gateway directly');
 assert.match(app, /path="\/admin" element=\{<Dashboard mode="admin" \/>\}/,
   'canonical Admin route must remain resolver-gated');
+assert.doesNotMatch(app, /path="\/(storefront|discover|legal|support|partner)"/,
+  'Admin entrypoint must expose no public or partner route');
+assert.doesNotMatch(app, /components\/public\/(LandingPage|B2BStorefront|CourseDiscovery|LegalPrivacy|SupportPage)/,
+  'Admin entrypoint must not import consumer presentation components');
+assert.doesNotMatch(app, /<PhotoValidator\b/,
+  'Photo Validator must remain unreachable from the Admin surface');
 assert.doesNotMatch(app, /createUserWithEmailAndPassword|signUp|registerAdmin/i,
   'Admin must not expose self-registration');
 assert.match(app, /signInWithEmailAndPassword/,
@@ -30,4 +36,4 @@ for (const status of ['Suspended', 'Revoked', 'Expired', 'Pending', 'Unknown']) 
 assert.equal(resolvePortalAccess({ mode:'admin', user, adminDoc:null }).state, 'unauthorized');
 assert.equal(resolvePortalAccess({ mode:'admin', user, resolveError:true }).state, 'error');
 
-console.log('Admin gateway integration PASS: canonical root, no registration, provider sign-in, closed roles, live revocation, idle expiry and fail-closed states.');
+console.log('Admin gateway integration PASS: Admin-only root, no consumer routes or registration, provider sign-in, closed roles, live revocation, idle expiry and fail-closed states.');

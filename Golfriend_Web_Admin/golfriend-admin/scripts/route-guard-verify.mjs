@@ -8,7 +8,7 @@
 //
 // It performs a comment-stripped, string/regex scan (NOT execution) and checks:
 //   1. Route inventory: every <Route path=..> is classified PUBLIC vs PRIVILEGED.
-//   2. Every PRIVILEGED route (/partner, /admin) renders <Dashboard  (the
+//   2. Every PRIVILEGED route (/, /admin) renders <Dashboard  (the
 //      resolver-gated component) — never a portal/admin component directly.
 //   3. The privileged portal renders (EnterpriseDashboard, SmallBusinessDashboard,
 //      the admin sidebar block, TournamentTV) each sit inside an
@@ -53,8 +53,8 @@ const code = stripComments(raw);
 const lines = code.split(/\r?\n/);
 
 // ---- Route classification sets ----
-const PUBLIC_PATHS = ['/', '/storefront', '/discover', '/legal', '/support'];
-const PRIVILEGED_PATHS = ['/partner', '/admin'];
+const PUBLIC_PATHS = [];
+const PRIVILEGED_PATHS = ['/', '/admin'];
 
 const results = []; // { ok: boolean, label: string }
 const pass = (label) => results.push({ ok: true, label });

@@ -14,10 +14,6 @@ import PlayBookingLifecycleV2 from './components/B2B/PlayBookingLifecycleV2';
 import BookingOperationsReportV2 from './components/B2B/BookingOperationsReportV2';
 import BookingProviderPublicationV2 from './components/B2B/BookingProviderPublicationV2';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
-import B2BStorefront from './components/public/B2BStorefront';
-import CourseDiscovery from './components/public/CourseDiscovery';
-import LegalPrivacy from './components/public/LegalPrivacy';
-import SupportPage from './components/public/SupportPage';
 import PolicyUnavailable from './components/common/PolicyUnavailable';
 // Quarantined economy/settlement consoles removed from active navigation (their
 // Cloud Functions are quarantined fail-closed): PhotoValidator, CentralBankMonitor,
@@ -69,18 +65,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* This checkout is the Admin entrypoint. Keep the protected gateway canonical. */}
-        <Route path="/" element={<Navigate to="/admin" replace />} />
-        <Route path="/storefront" element={<B2BStorefront />} />
-        <Route path="/discover" element={<CourseDiscovery />} />
-        <Route path="/legal" element={<LegalPrivacy />} />
-        <Route path="/support" element={<SupportPage />} />
-        
-        {/* SECURE ISOLATED DASHBOARDS */}
-        <Route path="/partner" element={<Dashboard mode="partner" />} />
+        {/* Admin-only entrypoints: both URLs mount the same protected resolver. */}
+        <Route path="/" element={<Dashboard mode="admin" />} />
         <Route path="/admin" element={<Dashboard mode="admin" />} />
-        
-        {/* Unknown links never expose a privileged surface; they return to its gate. */}
+
+        {/* No consumer/public presentation is routable from the Admin bundle. */}
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>
