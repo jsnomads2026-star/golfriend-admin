@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 
 export const sha256=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
-const integer=value=>Number.isInteger(Number(value))?Number(value):null;
+const providerNumber=value=>{const number=Number(value);return Number.isFinite(number)?number:null;};
 const validId=value=>{const id=String(value??'').trim();return id&&id.length<=160&&/^[A-Za-z0-9_-]+$/.test(id)?id:null;};
 const firstId=(row,fields)=>{for(const field of fields){const id=validId(row?.[field]);if(id)return{field,id};}return null;};
 export const CLUB_ID_FIELDS=Object.freeze(['clubId','clubID','club_id','golfClubId','golfClubID','id']);
@@ -9,7 +9,7 @@ export const COURSE_ID_FIELDS=Object.freeze(['courseId','courseID','course_id','
 
 export function extractProviderMetadata(body){
   const pagination=body?.pagination??body?.page??body?.links??null;
-  return Object.freeze({apiRequestsLeft:integer(body?.apiRequestsLeft),numAllClubs:integer(body?.numAllClubs),numClubs:integer(body?.numClubs),pagination:pagination&&typeof pagination==='object'?pagination:null,topLevelFields:body&&typeof body==='object'&&!Array.isArray(body)?Object.keys(body).sort():[]});
+  return Object.freeze({apiRequestsLeft:providerNumber(body?.apiRequestsLeft),numAllClubs:providerNumber(body?.numAllClubs),numClubs:providerNumber(body?.numClubs),pagination:pagination&&typeof pagination==='object'?pagination:null,topLevelFields:body&&typeof body==='object'&&!Array.isArray(body)?Object.keys(body).sort():[]});
 }
 
 export function decodeCatalogue(body,existingCourseIds=new Set()){
