@@ -97,7 +97,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "pricing:generate": "node scripts/generate-pricing-projection.mjs",
-    "verify:pricing-projection": "node scripts/generate-pricing-projection.mjs --check"
+    "verify:pricing-projection": "node scripts/generate-pricing-projection.mjs --check",
+    "verify:partner-acquisition-journey": "node scripts/run-partner-acquisition-journey-emulator.mjs"
   },
   "dependencies": {
     "firebase": "12.17.1",

@@ -1,0 +1,113 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Self-reads the client genuinely performs to derive portal access.
+    // Rendering only: every callable re-derives authority server-side.
+    match /admin_users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+    match /b2b_partners/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+    match /tournament_governance/{document=**} { allow read, write: if false; }
+    match /tournament_governance_commands/{document=**} { allow read, write: if false; }
+    match /tournament_governance_receipts/{document=**} { allow read, write: if false; }
+    match /app_tournament_publications/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_bindings/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_memberships/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_grants/{document=**} { allow read, write: if false; }
+    match /enterprise_organizations/{document=**} { allow read, write: if false; }
+    match /enterprise_properties/{document=**} { allow read, write: if false; }
+    match /enterprise_courses/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_authority_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_operation_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profiles/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profile_attempts/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profile_counters/{document=**} { allow read, write: if false; }
+    match /enterprise_course_profile_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_links/{document=**} { allow read, write: if false; }
+    match /enterprise_member_link_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_verified_golfers/{document=**} { allow read, write: if false; }
+    match /enterprise_onboarding_applications/{document=**} { allow read, write: if false; }
+    match /enterprise_onboarding_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_onboarding_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_agreement_policies/{document=**} { allow read, write: if false; }
+    match /enterprise_economy_config/{document=**} { allow read, write: if false; }
+    match /enterprise_economy_config_versions/{document=**} { allow read, write: if false; }
+    match /enterprise_trial_offers/{document=**} { allow read, write: if false; }
+    match /enterprise_trials/{document=**} { allow read, write: if false; }
+    match /enterprise_support_requests/{document=**} { allow read, write: if false; }
+    match /enterprise_support_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_support_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_support_evidence_registry/{document=**} { allow read, write: if false; }
+    match /enterprise_course_member_scopes/{document=**} { allow read, write: if false; }
+    match /enterprise_member_management_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_member_management_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_import_previews/{document=**} { allow read, write: if false; }
+    match /enterprise_member_admin_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_member_admin_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_outbox/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_workflows/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_templates/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_policies/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_suppressions/{document=**} { allow read, write: if false; }
+    match /enterprise_member_report_ready_events/{document=**} { allow read, write: if false; }
+    match /enterprise_member_template_approvals/{document=**} { allow read, write: if false; }
+    match /enterprise_member_template_approval_policies/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_template_retirements/{document=**} { allow read, write: if false; }
+    match /enterprise_member_commissioning_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_member_commissioning_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_legal_approval_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_customer_template_approval_receipts/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_dry_runs/{document=**} { allow read, write: if false; }
+    match /enterprise_member_delivery_provider_compositions/{document=**} { allow read, write: if false; }
+    match /enterprise_member_jhcc_validations/{document=**} { allow read, write: if false; }
+    match /small_businesses/{document=**} { allow read, write: if false; }
+    match /small_business_representative_bindings/{document=**} { allow read, write: if false; }
+    match /small_business_commands/{document=**} { allow read, write: if false; }
+    match /small_business_approval_receipts/{document=**} { allow read, write: if false; }
+    match /small_business_profile_corrections/{document=**} { allow read, write: if false; }
+    match /small_business_profile_correction_receipts/{document=**} { allow read, write: if false; }
+    match /small_business_profile_history/{document=**} { allow read, write: if false; }
+    match /small_business_subscription_intents/{document=**} { allow read, write: if false; }
+    match /small_business_subscription_outbox/{document=**} { allow read, write: if false; }
+    match /small_business_promotions/{document=**} { allow read, write: if false; }
+    match /small_business_promotion_policy_approvals/{document=**} { allow read, write: if false; }
+    match /small_business_contract_approvals/{document=**} { allow read, write: if false; }
+    match /small_business_promotion_suppressions/{document=**} { allow read, write: if false; }
+    match /small_business_delivery_suppressions/{document=**} { allow read, write: if false; }
+    match /small_business_promotion_publications/{document=**} { allow read, write: if false; }
+    match /small_business_engagements/{document=**} { allow read, write: if false; }
+    match /small_business_report_events/{document=**} { allow read, write: if false; }
+    match /small_business_jhcc_preparations/{document=**} { allow read, write: if false; }
+    match /tournament_governance/{document=**} { allow read, write: if false; }
+    match /tournament_governance_commands/{document=**} { allow read, write: if false; }
+    match /tournament_governance_receipts/{document=**} { allow read, write: if false; }
+    match /app_tournament_publications/{document=**} { allow read, write: if false; }
+    match /partner_applications_v2/{document=**} { allow read, write: if false; }
+    match /partner_application_audits/{document=**} { allow read, write: if false; }
+    match /course_growth_candidates/{document=**} { allow read, write: if false; }
+    match /partner_organizations/{document=**} { allow read, write: if false; }
+    match /partner_identity_bindings/{document=**} { allow read, write: if false; }
+    match /partner_memberships/{document=**} { allow read, write: if false; }
+    match /partner_course_claims/{document=**} { allow read, write: if false; }
+    match /partner_staff_invitations/{document=**} { allow read, write: if false; }
+    match /partner_claim_disputes/{document=**} { allow read, write: if false; }
+    match /partner_authority_audits/{document=**} { allow read, write: if false; }
+    match /availability_audits/{document=**} { allow read, write: if false; }
+    match /play_booking_audits/{document=**} { allow read, write: if false; }
+    match /booking_reconciliation_receipts/{document=**} { allow read, write: if false; }
+    match /booking_report_export_receipts/{document=**} { allow read, write: if false; }
+    match /booking_report_access_audits/{document=**} { allow read, write: if false; }
+    match /booking_provider_publications/{document=**} { allow read, write: if false; }
+    match /booking_provider_publication_receipts/{document=**} { allow read, write: if false; }
+    // NEW in afbeab3 — absent from every existing rules file.
+    match /partner_trials/{document=**} { allow read, write: if false; }
+    match /partner_statements/{document=**} { allow read, write: if false; }
+    match /partner_contract_approvals/{document=**} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
