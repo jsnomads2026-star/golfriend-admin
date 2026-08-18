@@ -1,12 +1,12 @@
-import assert from"node:assert/strict";import{readFileSync}from"node:fs";const root=new URL("../",import.meta.url),read=path=>readFileSync(new URL(path,root),"utf8"),ui=read("src/components/B2B/TournamentGovernancePanel.tsx"),enterprise=read("src/components/B2B/EnterpriseDashboard.tsx"),small=read("src/components/B2B/SmallBusinessDashboard.tsx"),app=read("src/App.tsx"),runtime=read("functions/src/tournamentGovernanceRuntime.ts"),domain=read("functions/src/tournamentGovernanceDomain.ts");let passed=0;const check=(name,value)=>{assert.ok(value,name);console.log(`ok ${++passed} - ${name}`)};
+import assert from"node:assert/strict";import{readFileSync}from"node:fs";const root=new URL("../",import.meta.url),read=path=>readFileSync(new URL(path,root),"utf8"),ui=read("src/components/B2B/TournamentGovernancePanel.tsx"),enterprise=read("src/components/B2B/EnterpriseDashboard.tsx"),small=read("src/components/B2B/SmallBusinessDashboard.tsx"),app=read("src/App.tsx"),runtime=read("functions/src/tournamentGovernanceRuntime.ts"),authority=read("functions/src/enterpriseAuthorityRuntime.ts")+read("functions/src/enterpriseAuthorityDomain.ts"),domain=read("functions/src/tournamentGovernanceDomain.ts");let passed=0;const check=(name,value)=>{assert.ok(value,name);console.log(`ok ${++passed} - ${name}`)};
 check("exact eight independent locales",/[{,]en:/.test(ui)&&["th","ko","ja","zh","es","fr","de"].every(code=>ui.includes(`${code}:[`)));
 check("Small Business governance mounted",small.includes("<TournamentGovernancePanel/>"));
 check("Enterprise governance mounted",enterprise.includes("<TournamentGovernancePanel/>"));
 check("Admin governance mounted",app.includes("<TournamentGovernancePanel admin />"));
 check("legacy tournament callable is not mounted",!ui.includes("manageTournamentOps")&&!enterprise.includes('callable="manageTournamentOps"'));
-check("server-owned partner and enterprise authority",runtime.includes('b2b_partners')&&runtime.includes('resolveEnterpriseCourseAuthority'));
+check("server-owned partner and enterprise authority",runtime.includes('b2b_partners')&&runtime.includes('resolveEnterpriseTournamentCourseAuthority'));
 check("immutable organization and creator identities",["organizationId","creatorUid","creatorMembershipId","correlationId"].every(key=>runtime.includes(key)));
-check("least privilege enterprise roles",runtime.includes('course_manager')&&runtime.includes('tournament_staff'));
+check("least privilege enterprise roles",["organization_owner","course_manager","tournament_staff"].every(role=>authority.includes(role)));
 check("explicit governance controls",["submit","request_changes","approve","reject","publish","unpublish","cancel"].every(key=>ui.includes(`\"${key}\"`)));
 check("Portal cannot approve or publish",domain.includes("validatePartnerAction")&&domain.includes("PARTNER_ACTION_DENIED"));
 check("Admin approval is separate",ui.includes('admin?"manageAdminTournamentGovernanceV1":"managePartnerTournamentGovernanceV1"'));
@@ -15,5 +15,11 @@ check("authoritative App publication projection",runtime.includes("app_tournamen
 check("replay and stale revisions fail closed",runtime.includes("COMMAND_REPLAY_CONFLICT")&&runtime.includes("STALE_REVISION"));
 check("no direct Firestore mutations",!/(firebase\/firestore|setDoc|updateDoc|addDoc|deleteDoc)/.test(ui));
 check("financial authority excluded",domain.includes('organizerMoneyBoundary:"external_organizer_only"')&&!/(entryFee|prize|escrow|ledger)\s*:/.test(runtime));
-check("accessible failure state",ui.includes('role="alert"'));
+check("accessible failure state",ui.includes('role={noticeOk?"status":"alert"}'));
+check("current Firebase account is verified",runtime.includes("admin.auth().getUser")&&runtime.match(/await verifyCurrentUser/g)?.length>=2);
+check("stable command survives unknown retry",ui.includes("commands.current.get(intent)")&&ui.includes("commands.current.delete(intent)")&&ui.includes("result is unknown"));
+check("timestamps and zones are explicit",domain.includes("OFFSET_INSTANT")&&domain.includes("requireTimeZone")&&ui.includes("resolvedOptions().timeZone"));
+check("stable ordered pagination exceeds 200",runtime.includes("FieldPath.documentId")&&runtime.includes("startAfter")&&ui.includes("nextPageToken"));
+check("weaker App reader removed",!runtime.includes("getPublishedTournamentProjectionV1"));
+check("Tournament-specific accessible names",ui.includes("aria-label={label(")&&ui.includes("Create tournament draft"));
 console.log(`enterprise tournament UI verification: ${passed}/${passed} passed`);

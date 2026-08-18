@@ -1,5 +1,9 @@
 rules_version = '2';
 service cloud.firestore { match /databases/{database}/documents {
+  match /tournament_governance/{document=**} { allow read, write: if false; }
+  match /tournament_governance_commands/{document=**} { allow read, write: if false; }
+  match /tournament_governance_receipts/{document=**} { allow read, write: if false; }
+  match /app_tournament_publications/{document=**} { allow read, write: if false; }
   match /partner_applications_v2/{document=**} { allow read, write: if false; }
   match /partner_application_audits/{document=**} { allow read, write: if false; }
   match /course_growth_candidates/{document=**} { allow read, write: if false; }
