@@ -173,6 +173,12 @@ test("all Small Business backend collections deny direct clients", () => {
     "small_business_profile_correction_receipts",
     "small_business_profile_history",
     "small_business_subscription_intents",
+    "small_business_subscription_outbox",
+    "small_business_checkout_commands",
+    "small_business_provider_subscriptions",
+    "small_business_subscription_event_receipts",
+    "small_business_entitlements",
+    "small_business_post_trial_statements",
     "small_business_promotions",
     "small_business_promotion_policy_approvals",
     "small_business_contract_approvals",
@@ -268,7 +274,7 @@ test("dual-role interleaving cannot replace request authority", () => {
     compactSrc.indexOf("asyncfunctionreviewer"),
     compactSrc.indexOf("constfail"),
   );
-  assert.match(representativeBody, /commandAuthority:\{ref:snap\.ref,kind:"representative"/);
+  assert.match(representativeBody, /commandAuthority:\{ref:membershipRef,kind:"representative"/);
   assert.match(reviewerBody, /commandAuthority:\{ref:snap\.ref,kind:"admin"/);
   const calls = compactSrc.match(/authority:a\.commandAuthority/g) || [];
   assert.equal(calls.length, 10, `all mutations must pass authority, found ${calls.length}`);

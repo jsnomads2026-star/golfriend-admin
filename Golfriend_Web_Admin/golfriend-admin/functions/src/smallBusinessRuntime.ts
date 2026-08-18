@@ -719,10 +719,10 @@ export const createSmallBusinessSubscriptionIntentV1 = onCall(
     try {
       const a = await representative(r),
         b = (await business(a.businessId)).x,
-        plan = await economyPlan(
-          strictId(r.data?.planId, "PLAN"),
-          String(b.profile.locations[0].countryCode),
-        ),
+        jurisdiction = String(b.profile.locations[0].countryCode),
+        catalogue = await economyCatalogue(jurisdiction);
+      if (r.data?.planId !== undefined || r.data?.amount !== undefined || r.data?.amountMinor !== undefined || r.data?.currency !== undefined || r.data?.price !== undefined || r.data?.tier !== undefined || r.data?.entitlement !== undefined || catalogue.length !== 1) throw new Error("SERVER_PLAN_SELECTION_REQUIRED");
+      const plan = await economyPlan(catalogue[0]!.planId, jurisdiction),
         intent = subscriptionIntent({ intentId: r.data?.intentId }, plan, {
           businessId: a.businessId,
           status: b.status,

@@ -82,26 +82,9 @@ export default function WalletSettings({ partnerUid }: { partnerUid: string }) {
     });
   };
 
-  // 🔥 STRIPE PAYMENT LINKS (Replace these with your actual Stripe Payment Link URLs)
-  const STRIPE_LINKS = {
-    // Front Door (Onboarding)
-    small_biz_monthly: "https://buy.stripe.com/test_aFa6oI4OKdUa3ecfOQ6Na03",
-    
-    // Small Business Upgrades
-    small_biz_6_months: "https://buy.stripe.com/test_4gM00k0yuaHYcOMfOQ6Na04",
-    small_biz_1_year: "https://buy.stripe.com/test_3cIdRa2GCeYe020fOQ6Na05",
-
-    // Enterprise Upgrades
-    enterprise_monthly: "https://buy.stripe.com/test_bJe28s2GC4jA5mkauw6Na06",
-    enterprise_6_months: "https://buy.stripe.com/test_9B628s95017ocOMfOQ6Na07",
-    enterprise_1_year: "https://buy.stripe.com/test_5kQdRa5SOdUag0YbyA6Na08"
-  };
-
   const executeTierUpgrade = async () => {
-    setIsProcessing(true);
-    setModalConfig({ ...modalConfig, visible: false });
-    // 💳 Upgrades Small Business to Enterprise (Monthly) and attaches their UID
-    window.location.href = `${STRIPE_LINKS.enterprise_monthly}?client_reference_id=${partnerUid}`;
+    setIsProcessing(false);
+    setModalConfig({visible:true,title:'CHECKOUT MOVED',message:'Use the authoritative subscription panel. Legacy tier checkout is disabled.',isDestructive:false,confirmText:'OK',showCancel:false,action:()=>setModalConfig({...modalConfig,visible:false})});
   };
 
   // ==========================================
@@ -121,19 +104,9 @@ export default function WalletSettings({ partnerUid }: { partnerUid: string }) {
   };
 
   const executeDurationUpgrade = async (duration: '6_months' | '1_year') => {
-    setIsProcessing(true);
-    setModalConfig({ ...modalConfig, visible: false });
-    
-    // 💳 Dynamically selects the correct Stripe Link based on their CURRENT tier
-    let checkoutUrl = '';
-    if (isEnterprise) {
-      checkoutUrl = duration === '6_months' ? STRIPE_LINKS.enterprise_6_months : STRIPE_LINKS.enterprise_1_year;
-    } else {
-      checkoutUrl = duration === '6_months' ? STRIPE_LINKS.small_biz_6_months : STRIPE_LINKS.small_biz_1_year;
-    }
-
-    // Routes them to Stripe with their UID attached for the Webhook to read
-    window.location.href = `${checkoutUrl}?client_reference_id=${partnerUid}`;
+    void duration;
+    setIsProcessing(false);
+    setModalConfig({visible:true,title:'CHECKOUT MOVED',message:'Legacy duration checkout is disabled. Billing changes require a server-created checkout session.',isDestructive:false,confirmText:'OK',showCancel:false,action:()=>setModalConfig({...modalConfig,visible:false})});
   };
 
   // ==========================================

@@ -10,7 +10,9 @@ export interface SmallBusinessProvider {
  submitApplication(input:Record<string,unknown>):Promise<void>;
  withdraw(input:Record<string,unknown>):Promise<void>;
  preparePromotion(input:Record<string,unknown>):Promise<void>;
- createSubscriptionIntent(input:Record<string,unknown>):Promise<void>;
+ createSubscriptionIntent(input:Record<string,unknown>):Promise<{intentId:string}>;
+ createSubscriptionCheckout(input:Record<string,unknown>):Promise<{checkoutUrl:string;status:string}>;
+ subscriptionState():Promise<any>;
  discover(input:Record<string,unknown>):Promise<DiscoveryProjection>;
  adminQueue(input:Record<string,unknown>):Promise<AdminQueueProjection>;
  adminDecision(input:Record<string,unknown>):Promise<void>;
@@ -31,7 +33,9 @@ export const firebaseSmallBusinessProvider:SmallBusinessProvider={
  async submitApplication(input){const v:any=await invoke('submitSmallBusinessApplicationV1',input);if(v?.schema!==SMALL_BUSINESS_SCHEMA||!Number.isSafeInteger(v.version)||!v.businessId)throw new Error('INVALID_COMMAND_RESULT')},
  async withdraw(input){const v:any=await invoke('withdrawSmallBusinessApplicationV1',input);if(v?.schema!==SMALL_BUSINESS_SCHEMA||!Number.isSafeInteger(v.version)||!v.businessId)throw new Error('INVALID_COMMAND_RESULT')},
  async preparePromotion(input){const v:any=await invoke('prepareSmallBusinessPromotionV1',input);if(v?.schema!=='golfriend.small-business.promotion.v1'||!Number.isSafeInteger(v.version)||!v.promotionId)throw new Error('INVALID_COMMAND_RESULT')},
- async createSubscriptionIntent(input){const v:any=await invoke('createSmallBusinessSubscriptionIntentV1',input);if(v?.schema!=='golfriend.small-business.subscription-intent.v1'||v.state!=='prepared'||v.entitlementState!=='not_granted'||v.revenueState!=='not_recognized')throw new Error('INVALID_COMMAND_RESULT')},
+ async createSubscriptionIntent(input){const v:any=await invoke('createSmallBusinessSubscriptionIntentV1',input);if(v?.schema!=='golfriend.small-business.subscription-intent.v1'||v.state!=='prepared'||v.entitlementState!=='not_granted'||v.revenueState!=='not_recognized')throw new Error('INVALID_COMMAND_RESULT');return{intentId:v.intentId}},
+ async createSubscriptionCheckout(input){const v:any=await invoke('createSmallBusinessSubscriptionCheckoutV1',input);if(v?.schema!=='golfriend.small-business.checkout-session.v1'||v.status!=='checkout_pending'||!/^https:\/\//.test(v.checkoutUrl))throw new Error('INVALID_CHECKOUT_RESULT');return{checkoutUrl:v.checkoutUrl,status:v.status}},
+ async subscriptionState(){const v:any=await invoke('getSmallBusinessSubscriptionStateV1');if(v?.schema!=='golfriend.small-business.subscription-state.v1'||!['trial_active','checkout_pending','paid','payment_failed','cancelled','provider_unavailable'].includes(v.status))throw new Error('INVALID_SUBSCRIPTION_STATE');return v},
  async discover(input){try{const value=await invoke<DiscoveryProjection>('discoverSmallBusinessesV1',input);if(value?.schema!==SMALL_BUSINESS_SCHEMA||!Array.isArray(value.items)||!value.items.every(isSafeCard))throw new Error();return value}catch{return{schema:SMALL_BUSINESS_SCHEMA,state:'unavailable',items:[],supportReference:'DISCOVERY_UNAVAILABLE'}}},
  async adminQueue(input){try{const value:any=await invoke('listSmallBusinessApplicationsAdminV1',input);if(value?.schema!==SMALL_BUSINESS_SCHEMA||!Array.isArray(value.items))throw new Error();return{...value,items:value.items.map((x:any)=>({...x,displayName:x.displayName||x.publicName,country:x.country||x.countryCode}))}}catch{return{schema:SMALL_BUSINESS_SCHEMA,state:'unavailable',items:[],supportReference:'ADMIN_QUEUE_UNAVAILABLE'}}},
  async adminDecision(input){const value:any=await invoke('decideSmallBusinessApplicationAdminV1',{...input,action:input.decision==='reactivate'?'activate':input.decision});if(value?.schema!==SMALL_BUSINESS_SCHEMA||!value.receiptId)throw new Error('INVALID_SERVER_PROJECTION')},
