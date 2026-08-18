@@ -8,7 +8,7 @@ const KEYS = [
   'smallBusiness', 'enterprise', 'notAuthority', 'signInRequired', 'verifyRequired',
   'loading', 'error', 'offline', 'ready', 'submitted', 'informationNeeded', 'rejected',
   'suspended', 'approved', 'enterPortal', 'legalPending', 'documents', 'agreement',
-  'review', 'status', 'unknown',
+  'review', 'status', 'unknown', 'invitation',
 ];
 
 /** Slice each locale object out of the source so values can be compared per locale. */

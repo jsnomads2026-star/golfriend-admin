@@ -16,6 +16,7 @@ export interface ApplicantCopy {
   ready: string; submitted: string; informationNeeded: string; rejected: string; suspended: string;
   approved: string; enterPortal: string; legalPending: string;
   documents: string; agreement: string; review: string; status: string; unknown: string;
+  invitation: string;
 }
 
 export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
@@ -32,6 +33,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: 'This application is suspended. Contact support.',
     approved: 'Approved and activated. Your Portal is ready.', enterPortal: 'Enter Partner Portal',
     legalPending: 'Final legal wording is pending legal approval.',
+    invitation: 'Partner staff invitation',
     documents: 'Documents', agreement: 'Agreement', review: 'Review', status: 'Status',
     unknown: 'The result of that action is unknown. Reload before trying again.',
   },
@@ -48,6 +50,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: 'ใบสมัครนี้ถูกระงับ โปรดติดต่อฝ่ายสนับสนุน',
     approved: 'อนุมัติและเปิดใช้งานแล้ว พอร์ทัลของคุณพร้อมแล้ว', enterPortal: 'เข้าสู่ Partner Portal',
     legalPending: 'ถ้อยคำทางกฎหมายฉบับสุดท้ายอยู่ระหว่างรอการอนุมัติทางกฎหมาย',
+    invitation: 'คำเชิญพนักงานพันธมิตร',
     documents: 'เอกสาร', agreement: 'ข้อตกลง', review: 'ตรวจทาน', status: 'สถานะ',
     unknown: 'ไม่ทราบผลของการดำเนินการนั้น โปรดโหลดใหม่ก่อนลองอีกครั้ง',
   },
@@ -64,6 +67,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: '이 신청서는 중지되었습니다. 지원팀에 문의하세요.',
     approved: '승인 및 활성화되었습니다. 포털이 준비되었습니다.', enterPortal: 'Partner Portal 입장',
     legalPending: '최종 법률 문구는 법무 승인 대기 중입니다.',
+    invitation: '파트너 스태프 초대',
     documents: '서류', agreement: '계약서', review: '검토', status: '상태',
     unknown: '해당 작업의 결과를 알 수 없습니다. 다시 시도하기 전에 새로 고치세요.',
   },
@@ -80,6 +84,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: 'この申請は停止されています。サポートにご連絡ください。',
     approved: '承認・有効化されました。ポータルをご利用いただけます。', enterPortal: 'Partner Portal に入る',
     legalPending: '最終的な法的文言は法務承認待ちです。',
+    invitation: 'パートナースタッフ招待',
     documents: '書類', agreement: '契約', review: '確認', status: 'ステータス',
     unknown: 'その操作の結果は不明です。再試行の前に再読み込みしてください。',
   },
@@ -96,6 +101,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: '该申请已被暂停。请联系支持。',
     approved: '已批准并激活。你的门户已就绪。', enterPortal: '进入 Partner Portal',
     legalPending: '最终法律文本仍在等待法务批准。',
+    invitation: '合作方员工邀请',
     documents: '文件', agreement: '协议', review: '复核', status: '状态',
     unknown: '该操作结果未知。请重新加载后再试。',
   },
@@ -112,6 +118,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: 'Esta solicitud está suspendida. Contacta con soporte.',
     approved: 'Aprobada y activada. Tu Portal está listo.', enterPortal: 'Entrar al Partner Portal',
     legalPending: 'El texto legal definitivo está pendiente de aprobación legal.',
+    invitation: 'Invitación de personal asociado',
     documents: 'Documentos', agreement: 'Acuerdo', review: 'Revisión', status: 'Estado',
     unknown: 'Se desconoce el resultado de esa acción. Recarga antes de reintentar.',
   },
@@ -128,6 +135,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: 'Cette candidature est suspendue. Contactez le support.',
     approved: 'Approuvée et activée. Votre Portail est prêt.', enterPortal: 'Accéder au Partner Portal',
     legalPending: 'Le texte juridique définitif est en attente d’approbation juridique.',
+    invitation: 'Invitation de personnel partenaire',
     documents: 'Documents', agreement: 'Accord', review: 'Vérification', status: 'Statut',
     unknown: 'Le résultat de cette action est inconnu. Rechargez avant de réessayer.',
   },
@@ -144,6 +152,7 @@ export const APPLICANT_COPY: Record<ApplicantLocale, ApplicantCopy> = {
     suspended: 'Diese Bewerbung ist ausgesetzt. Bitte kontaktieren Sie den Support.',
     approved: 'Genehmigt und aktiviert. Ihr Portal ist bereit.', enterPortal: 'Zum Partner Portal',
     legalPending: 'Der endgültige Rechtstext steht noch unter juristischem Genehmigungsvorbehalt.',
+    invitation: 'Einladung für Partnerpersonal',
     documents: 'Dokumente', agreement: 'Vereinbarung', review: 'Prüfung', status: 'Status',
     unknown: 'Das Ergebnis dieser Aktion ist unbekannt. Bitte neu laden, bevor Sie es erneut versuchen.',
   },

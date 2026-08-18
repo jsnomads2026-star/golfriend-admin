@@ -104,7 +104,16 @@ function ApplicantZone({ intent = null, view = 'application' }: { intent?: 'smal
 function InvitationAcceptanceRoute() {
   // The token is validated by the server and is single-use and expiring. No email or URL
   // field on this page grants authority; it only carries the opaque token to the callable.
-  return <PartnerInvitationAcceptance />;
+  //
+  // Wrapped in the shared landmark structure: mounted bare it rendered no <main> and no
+  // level-1 heading, so a screen-reader user had no page landmark to navigate to.
+  const copy = applicantCopy(useLocale());
+  return (
+    <main id="main" className="applicant-zone" aria-labelledby="invitation-heading">
+      <h1 id="invitation-heading" className="sr-only">{copy.invitation}</h1>
+      <PartnerInvitationAcceptance />
+    </main>
+  );
 }
 
 // ---- Applicant zone -------------------------------------------------------------

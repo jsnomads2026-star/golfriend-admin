@@ -12,6 +12,7 @@ import { db, storage } from '../../firebaseConfig';
 import PolicyUnavailable from '../common/PolicyUnavailable';
 import TournamentTV from '../admin/TournamentTV';
 import TournamentGovernancePanel from './TournamentGovernancePanel';
+import PartnerTrialReceipt from './PartnerTrialReceipt';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import AdLeadsInbox from './AdLeadsInbox';
 import CourseTeeSheet from './CourseTeeSheet'; // 🔥 B2B flight sheet (check-in control quarantined)
@@ -622,6 +623,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'teesheet' && <><EnterpriseBookingCoordinationDesk /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><CourseTeeSheet /></>}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
+        {activeTab === 'overview' && <PartnerTrialReceipt/>}
         {activeTab === 'tournaments' && <TournamentGovernancePanel/>}
         {activeTab === 'adhub' && <AdHub isMasterHost={isMasterHost} partnerUid={authUid} />}
         {activeTab === 'wallet' && <WalletSettings partnerUid={authUid} />}
