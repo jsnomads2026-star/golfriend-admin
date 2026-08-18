@@ -66,3 +66,35 @@ test("activation writes no external-money field", () => {
     assert.doesNotMatch(src, new RegExp(`${banned}\\s*:`), `activation must never write ${banned}`);
   }
 });
+
+// --- Regressions proven against the Firebase emulator by
+// --- scripts/partner-acquisition-journey-emulator.mjs, pinned here so a refactor cannot
+// --- silently reintroduce either defect.
+
+test("a retried activation is decided BEFORE the candidate-state gate", () => {
+  // The first activation moves the candidate to "activation_ready". While the candidate state
+  // was checked first, the restart branch could never run and every retry failed with
+  // "Approved application and candidate required." — proven against the emulator.
+  const restart = src.indexOf("if(org.exists){");
+  const candidateGate = src.indexOf('candidate.data()?.status!=="admin_review_required"');
+  assert.ok(restart > 0 && candidateGate > 0, "both branches must exist");
+  assert.ok(restart < candidateGate, "the restart branch must be evaluated before the candidate-state gate");
+  // A restart must still prove the organization belongs to THIS application and course.
+  assert.match(src, /if\(org\.data\(\)\?\.sourceApplicationId!==appId\|\|!org\.data\(\)\?\.authorizedCourseIds\?\.includes\(courseId\)\)throw new HttpsError\("already-exists"/);
+});
+
+test("a retried activation never creates a second trial or statement", () => {
+  // Deterministic ids plus tx.create are what make the retry collide instead of duplicating.
+  assert.match(src, /tx\.create\(db\.collection\("partner_trials"\)\.doc\(orgId\)/);
+  assert.match(src, /tx\.create\(db\.collection\("partner_statements"\)\.doc\(firstStatement\.statementId\)/);
+});
+
+test("a missing or malformed contract approval id fails closed with a stated reason", () => {
+  const onboarding = fs.readFileSync(path.join(__dirname, "..", "src", "partnerOnboardingRuntime.ts"), "utf8");
+  // An empty id reached Firestore as an empty document path and surfaced as INTERNAL rather
+  // than as the missing-evidence precondition — proven against the emulator.
+  assert.match(onboarding, /if \(!\/\^pca_\[a-f0-9\]\{32\}\$\/\.test\(approvalId\)\) throw new HttpsError\("failed-precondition"/);
+  const guard = onboarding.indexOf("test(approvalId)");
+  const read = onboarding.indexOf('db.collection("partner_contract_approvals").doc(approvalId)');
+  assert.ok(guard > 0 && read > 0 && guard < read, "the id must be validated before it is used as a document path");
+});

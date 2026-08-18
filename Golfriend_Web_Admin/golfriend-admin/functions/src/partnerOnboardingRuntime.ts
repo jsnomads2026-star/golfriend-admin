@@ -163,6 +163,10 @@ export const reviewPartnerApplicationV2 = onCall({enforceAppCheck: true}, async 
       const representative = snapshot.data()?.representative; const agreement = snapshot.data()?.agreement;
       if (!representative?.authorityEvidenceId || agreement?.receiptId == null) throw new HttpsError("failed-precondition", "Verified representative and current agreement are required.");
       const approvalId = String(request.data?.contractApprovalId || "");
+      // An absent or malformed id previously reached Firestore as an empty document path, which
+      // threw an unhandled error and surfaced as INTERNAL. It still denied, but an operator saw a
+      // provider fault instead of the missing-evidence reason. Same shape validateContractConfiguration uses.
+      if (!/^pca_[a-f0-9]{32}$/.test(approvalId)) throw new HttpsError("failed-precondition", "Immutable onboarding approval evidence is incomplete.");
       const [representativeEvidence, agreementReceipt, approvalEvidence] = await Promise.all([tx.get(ref.collection("evidence").doc(representative.authorityEvidenceId)), tx.get(db.collection("partner_application_audits").doc(agreement.receiptId)), tx.get(db.collection("partner_contract_approvals").doc(approvalId))]);
       if (!representativeEvidence.exists || representativeEvidence.data()?.verificationStatus !== "verified" || !agreementReceipt.exists || agreementReceipt.data()?.version !== agreement.version || !approvalEvidence.exists || approvalEvidence.data()?.applicationId !== id) throw new HttpsError("failed-precondition", "Immutable onboarding approval evidence is incomplete.");
       try { contract = validateContractConfiguration({approvalId, ...approvalEvidence.data()}); } catch { throw new HttpsError("failed-precondition", "Contractual approval for the effective three-percent founding commission is required."); }
