@@ -1,3 +1,4 @@
+import {LOCALE_CODES, type CanonicalLocale} from '../locales.ts';
 // Applicant zone copy. Exactly the canonical eight locales, independently written.
 //
 // The wording is deliberately careful on one point: choosing Small Business or Enterprise
@@ -6,8 +7,8 @@
 
 export type ApplicantView = 'application' | 'status' | 'documents' | 'agreement' | 'review';
 
-export const APPLICANT_LOCALES = ['en', 'th', 'ko', 'ja', 'zh', 'es', 'fr', 'de'] as const;
-export type ApplicantLocale = typeof APPLICANT_LOCALES[number];
+export const APPLICANT_LOCALES = LOCALE_CODES;
+export type ApplicantLocale = CanonicalLocale;
 
 export interface ApplicantCopy {
   smallBusiness: string; enterprise: string;

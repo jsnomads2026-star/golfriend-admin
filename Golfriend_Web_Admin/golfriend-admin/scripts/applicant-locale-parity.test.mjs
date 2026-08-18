@@ -27,7 +27,12 @@ function localeBlocks() {
 test('exactly the canonical eight locales are declared, in contract order', () => {
   const declared = [...src.matchAll(/^ {2}([a-z]{2}): \{$/gm)].map(m => m[1]);
   assert.deepEqual(declared, LOCALES);
-  assert.match(src, /APPLICANT_LOCALES = \['en', 'th', 'ko', 'ja', 'zh', 'es', 'fr', 'de'\]/);
+  // The set must come from the canonical source rather than be re-declared here — that is what
+  // scripts/i18n/no-duplicate-locale-literals.test.mjs enforces repo-wide, and asserting the
+  // literal here put the two gates in direct conflict. The copy blocks checked above still
+  // prove exactly the eight locales, in contract order.
+  assert.match(src, /APPLICANT_LOCALES = LOCALE_CODES;/);
+  assert.match(src, /from '\.\.\/locales/);
 });
 
 test('every applicant key exists and is non-empty in all eight locales', () => {

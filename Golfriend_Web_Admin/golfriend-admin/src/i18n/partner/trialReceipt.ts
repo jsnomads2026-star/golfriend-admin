@@ -1,8 +1,9 @@
+import {LOCALE_CODES, type CanonicalLocale} from '../locales.ts';
 // Trial + receipt copy. Exactly the canonical eight locales, independently written.
 // Labels only: no amount, date, number or status value is ever produced here.
 
-export const TRIAL_RECEIPT_LOCALES = ['en', 'th', 'ko', 'ja', 'zh', 'es', 'fr', 'de'] as const;
-export type TrialReceiptLocale = typeof TRIAL_RECEIPT_LOCALES[number];
+export const TRIAL_RECEIPT_LOCALES = LOCALE_CODES;
+export type TrialReceiptLocale = CanonicalLocale;
 
 export interface TrialReceiptCopy {
   heading: string; organization: string; partnerType: string; smallBusiness: string; enterprise: string;
