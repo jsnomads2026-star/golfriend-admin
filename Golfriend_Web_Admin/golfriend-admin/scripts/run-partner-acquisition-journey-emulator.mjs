@@ -29,12 +29,17 @@ const env = {
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + ' ' : ''}--require ${path.join(root, 'scripts', 'emulator-admin-namespace-shim.cjs').split(path.sep).join('/')}`,
 };
 
-const result = spawnSync(
-  runner,
-  ['emulators:exec', '--config', 'firebase.partner-acceptance.json', '--project', 'demo-partner-acquisition',
-    '--only', 'auth,firestore,functions,storage', 'node scripts/partner-acquisition-journey-emulator.mjs'],
-  {cwd: root, env, stdio: 'inherit', shell: true},
-);
+// Built as ONE command string: with shell:true an args array is re-parsed by the shell, which
+// splits the quoted script argument and makes emulators:exec see extra arguments.
+const command = [
+  runner, 'emulators:exec',
+  '--config', 'firebase.partner-acceptance.json',
+  '--project', 'demo-partner-acquisition',
+  '--only', 'auth,firestore,functions,storage',
+  '"node scripts/partner-acquisition-journey-emulator.mjs"',
+].join(' ');
+
+const result = spawnSync(command, {cwd: root, env, stdio: 'inherit', shell: true});
 
 if (result.error) console.error(result.error);
 process.exit(result.status ?? 1);
