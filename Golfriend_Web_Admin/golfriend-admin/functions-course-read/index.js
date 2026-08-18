@@ -22,7 +22,7 @@ exports.getCourseAcquisitionDashboard = onCall({region: 'asia-southeast1', enfor
     db.collection('golf_api_quota').doc(period).get(),
     db.collection('course_acquisition_checkpoints').doc('golf-api').get(),
   ]);
-  const countries = new Map(), providerIds = new Map();
+  const countries = new Map(), providerIds = new Map(), clubIds = new Set();
   let canonical = 0, missingCoordinates = 0, unknownFreshness = 0;
   for (const document of courses.docs) {
     const course = document.data();
@@ -30,6 +30,7 @@ exports.getCourseAcquisitionDashboard = onCall({region: 'asia-southeast1', enfor
     canonical += 1;
     const providerId = String(course.providerCourseId || course.courseID);
     providerIds.set(providerId, (providerIds.get(providerId) || 0) + 1);
+    if (course.providerClubId || course.clubID) clubIds.add(String(course.providerClubId || course.clubID));
     if (course.coordinateValidity !== 'valid') missingCoordinates += 1;
     if (course.freshnessState === 'unknown') unknownFreshness += 1;
     const country = String(course.country || 'Unknown');
@@ -48,10 +49,11 @@ exports.getCourseAcquisitionDashboard = onCall({region: 'asia-southeast1', enfor
     schema: 'golfriend.course-acquisition-dashboard.v1',
     readOnly: true,
     providerRequests: Number(quota?.completed || 0) + Number(quota?.failed || 0),
-    totals: {canonical, missingCoordinates, unknownFreshness, quarantine: quarantine.size, duplicates},
+    totals: {canonical, usable: courses.docs.filter((doc) => { const value=doc.data(); return value.schema==='golfriend.v2.course.v2' && value.courseID===doc.id && value.needsReview!==true; }).length, uniqueClubIDs: clubIds.size, uniqueCourseIDs: providerIds.size, missingCoordinates, unknownFreshness, quarantine: quarantine.size, duplicates},
     countries: [...countries.values()].sort((a, b) => a.country.localeCompare(b.country)),
     quota,
     checkpoint: checkpointSnapshot.exists ? checkpointSnapshot.data() : null,
+    progress: checkpointSnapshot.exists ? checkpointSnapshot.data()?.progress || null : null,
     candidateCounts: {},
     candidates: [],
   };

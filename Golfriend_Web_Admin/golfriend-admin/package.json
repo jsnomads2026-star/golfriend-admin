@@ -57,6 +57,7 @@
     "verify:coursepreview": "npm --prefix functions run test:preview",
     "preflight:golfapi": "node scripts/golf-api-commissioning-preflight.mjs",
     "test:golfapi-preflight": "node scripts/golf-api-commissioning-preflight.test.mjs",
+    "test:course-catalogue-pipeline": "node --test scripts/course-catalogue-pipeline-domain.test.mjs",
     "test:course-migration": "node --test scripts/course-v1-v2-migration-domain.test.mjs",
     "verify:seed": "node scripts/lanec-seed-conformance-verify.mjs && node scripts/lanec-seed-evidence-gate.test.mjs",
     "update:seed-evidence": "node scripts/lanec-seed-conformance-verify.mjs --update-evidence",
