@@ -164,7 +164,9 @@ export default function V2PartnerApplications() {
                 <dt>{shared.contactName}</dt><dd>{application.contactName} · {application.contactEmail}</dd>
                 <dt>{shared.statusHeading}</dt><dd>{application.status}</dd>
                 <dt>{shared.representationBasis}</dt><dd>{checklist?.representationBasis}</dd>
-                <dt>{copy.checklist}</dt><dd>{checklist?.satisfied ? copy.checklistSatisfied : `${copy.checklistMissing}: ${(checklist?.missing ?? []).join(', ')}`}</dd>
+                {/* Document kinds are shown by name on both sides of the review, never as the
+                    stored token — a reviewer should read the same words the applicant does. */}
+                <dt>{copy.checklist}</dt><dd>{checklist?.satisfied ? copy.checklistSatisfied : `${copy.checklistMissing}: ${(checklist?.missing ?? []).map((group: string) => group.split('|').map((kind) => evidenceKindLabel(shared, kind)).join(' / ')).join('; ')}`}</dd>
                 <dt>{copy.agreement}</dt><dd>{application.agreement?.receiptId ? `${application.agreement.version} · ${String(application.agreement.digest).slice(0, 16)}…` : copy.agreementNone}</dd>
               </dl>
 

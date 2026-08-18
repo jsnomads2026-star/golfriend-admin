@@ -13,6 +13,7 @@ import PolicyUnavailable from '../common/PolicyUnavailable';
 import TournamentTV from '../admin/TournamentTV';
 import TournamentGovernancePanel from './TournamentGovernancePanel';
 import PartnerTrialReceipt from './PartnerTrialReceipt';
+import {partnerTrialReceiptService} from './partnerTrialReceiptService';
 import EventGenesisConsole from '../admin/EventGenesisConsole';
 import AdLeadsInbox from './AdLeadsInbox';
 import CourseTeeSheet from './CourseTeeSheet'; // 🔥 B2B flight sheet (check-in control quarantined)
@@ -467,7 +468,7 @@ interface PartnerDashboardProps {
 
 export default function EnterpriseDashboard({ partnerData }: PartnerDashboardProps) {
   // 🔥 Added 'teesheet' to the allowed state literal
-  const [activeTab, setActiveTab] = useState<'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm' | 'org' | 'venues' | 'staff' | 'reporting' | 'billing' | 'support'>('teesheet');
+  const [activeTab, setActiveTab] = useState<'overview' | 'teesheet' | 'genesis' | 'tournaments' | 'adhub' | 'wallet' | 'tv' | 'raffle' | 'crm' | 'org' | 'venues' | 'staff' | 'reporting' | 'billing' | 'support'>('teesheet');
   const [liveTier, setLiveTier] = useState<string>(partnerData?.tier || 'basic_operator');
   const [dbCredits, setDbCredits] = useState<number | null>(null); // 🔥 FIX: Track if DB explicitly overrides credits
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -604,6 +605,11 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         </button>
 
         <div style={styles.sectionHeader}>ACCOUNT</div>
+        {/* The trial and first statement had no way in: the render branch existed but no control
+            could select it, and a @ts-ignore hid that 'overview' was not even a valid tab. */}
+        <button style={{...styles.navBtn, ...(activeTab === 'overview' ? styles.activeBtn : {})}} onClick={() => setActiveTab('overview')}>
+          🧾 Trial &amp; first statement
+        </button>
         <button style={{...styles.navBtn, ...(activeTab === 'support' ? styles.activeBtn : {})}} onClick={() => setActiveTab('support')}>
           🛟 Partner Support
         </button>
@@ -622,8 +628,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
       <main id="main" style={styles.content}>
         {activeTab === 'teesheet' && <><EnterpriseBookingCoordinationDesk /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><CourseTeeSheet /></>}
         {activeTab === 'genesis' && <EventGenesisConsole />}
-        {/* @ts-ignore */}
-        {activeTab === 'overview' && <PartnerTrialReceipt/>}
+        {activeTab === 'overview' && <PartnerTrialReceipt onCancelTrial={() => partnerTrialReceiptService.cancel()} />}
         {activeTab === 'tournaments' && <TournamentGovernancePanel/>}
         {activeTab === 'adhub' && <AdHub isMasterHost={isMasterHost} partnerUid={authUid} />}
         {activeTab === 'wallet' && <WalletSettings partnerUid={authUid} />}

@@ -43,9 +43,9 @@
       { "uid": "ex_roleless_omar",  "email": "omar@example.test",  "name": "Omar NoRole",    "role": "",         "status": "Active",    "expectedStaff": false, "expectedDirector": false, "expectedPortalState": "unauthorized", "authorityNegative": true, "negativeReason": "no_role" }
     ],
     "b2b_partners": [
-      { "id": "ex_operator_evan",   "tier": "small_business", "status": "active_partner", "name": "Evan Ops",       "expectedPortalSurface": "small",      "expectedPortalState": "authorized" },
-      { "id": "ex_enterprise_erin", "tier": "enterprise",     "status": "active_partner", "name": "Erin Enterprise","expectedPortalSurface": "enterprise", "expectedPortalState": "authorized" },
-      { "id": "ex_suspended_finn",  "tier": "small_business", "status": "suspended",      "name": "Finn Frozen",    "expectedPortalSurface": "partner",    "expectedPortalState": "suspended",    "authorityNegative": true, "negativeReason": "partner_suspended" }
+      { "id": "ex_operator_evan", "organizationId": "org_seed_evan",   "tier": "small_business", "status": "active_partner", "name": "Evan Ops",       "expectedPortalSurface": "small",      "expectedPortalState": "authorized" },
+      { "id": "ex_enterprise_erin", "organizationId": "org_seed_erin", "tier": "enterprise",     "status": "active_partner", "name": "Erin Enterprise","expectedPortalSurface": "enterprise", "expectedPortalState": "authorized" },
+      { "id": "ex_suspended_finn", "organizationId": "org_seed_finn",  "tier": "small_business", "status": "suspended",      "name": "Finn Frozen",    "expectedPortalSurface": "partner",    "expectedPortalState": "suspended",    "authorityNegative": true, "negativeReason": "partner_suspended" }
     ],
     "players": [
       { "uid": "ex_player_grace", "nickname": "Grace" },

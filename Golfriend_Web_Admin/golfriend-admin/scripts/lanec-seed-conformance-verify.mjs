@@ -93,7 +93,7 @@ for (const a of SEED.personas.admin_users) {
     `admin portal journey ${a.uid}: state === ${a.expectedPortalState} (got ${j.state})`, { uid: a.uid });
 }
 for (const p of SEED.personas.b2b_partners) {
-  const j = resolvePortalAccess({ mode: 'partner', user: { uid: p.id }, partnerDoc: { tier: p.tier, status: p.status } });
+  const j = resolvePortalAccess({ mode: 'partner', user: { uid: p.id }, partnerDoc: { tier: p.tier, status: p.status, organizationId: p.organizationId } });
   assert(j.state === p.expectedPortalState,
     `partner portal journey ${p.id}: state === ${p.expectedPortalState} (got ${j.state})`, { uid: p.id });
   if (p.expectedPortalState === 'authorized') {
@@ -267,7 +267,7 @@ for (const a of negAdmins) {
 }
 for (const p of negPartners) {
   assert(!!p.negativeReason, `negative partner ${p.id}: reason marker present`, { uid: p.id });
-  assert(resolvePortalAccess({ mode: 'partner', user: { uid: p.id }, partnerDoc: { tier: p.tier, status: p.status } }).state !== 'authorized',
+  assert(resolvePortalAccess({ mode: 'partner', user: { uid: p.id }, partnerDoc: { tier: p.tier, status: p.status, organizationId: p.organizationId } }).state !== 'authorized',
     `negative partner ${p.id}: portal NOT authorized`, { uid: p.id });
 }
 

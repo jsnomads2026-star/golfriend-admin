@@ -458,13 +458,37 @@ async function recordCollections(paths) {
   ok('D one account maps to ONE organization: a second relationship needs its own account', crossOrgAccept.errorStatus === 'ALREADY_EXISTS', `(got ${crossOrgAccept.errorStatus})`);
 
   // ---- receipt tampering ---------------------------------------------------------------
-  note('OUT-OF-BAND WRITE (deliberate attack simulation): the ENTERPRISE statement is altered directly to prove tamper detection. The Small Business receipt stays intact.');
-  await seed(`partner_statements/${bStatementId}`, {statementNumber: S('GF-TRIAL-TAMPERED')}, ['statementNumber']);
-  const tamperedRead = await callFn('getPartnerTrialReceiptV1', {}, applicantB.idToken);
+  // A THIRD partner is onboarded specifically to be the tamper subject. Altering a stored
+  // receipt is irreversible in practice - the digest covers the serialized body, so even
+  // writing the original text back does not restore the original field ordering - and the two
+  // partners above must stay healthy for the browser acceptance that reuses this data plane.
+  section('D1 - tamper subject (a third activated partner)');
+  const applicantC = await verifyEmail(await signUp(`sb.tamper.${Date.now()}@example.com`));
+  const cAppId = appIdFor(applicantC.uid);
+  await callFn('savePartnerApplicationDraftV2', {...draftFor(applicantC.email, 'Phuket Sands', 'golf_course', 'TH', 'sole_proprietor'), commandId: cmd()}, applicantC.idToken);
+  const cRegistration = await uploadDocument(applicantC, cAppId, 'sole_proprietor_registration', 'TAMPER SUBJECT REGISTRATION - emulator only');
+  await callFn('reviewPartnerApplicationEvidenceV2', {commandId: cmd(), applicationId: cAppId, evidenceId: cRegistration.evidenceId, decision: 'verified'}, director.idToken);
+  await callFn('acceptVerifiedCourseOnboardingAgreementV2', {commandId: cmd(), representative: {name: 'Pim R', title: 'Owner', email: applicantC.email, authorityEvidenceId: cRegistration.evidenceId, authorityConfirmed: true}, agreement}, applicantC.idToken);
+  await callFn('submitPartnerApplicationV2', {commandId: cmd()}, applicantC.idToken);
+  await callFn('reviewPartnerApplicationV2', {applicationId: cAppId, status: 'under_review', note: 'r', commandId: cmd()}, director.idToken);
+  const cContract = await callFn('approvePartnerContractV2', {commandId: cmd(), applicationId: cAppId, scope: 'course_partner_founding_commission', effectiveFrom: '2026-08-18T00:00:00.000Z', commissionBps: 300}, director.idToken);
+  await callFn('reviewPartnerApplicationV2', {applicationId: cAppId, status: 'approved', note: 'ok', contractApprovalId: cContract.result?.approvalId, commandId: cmd()}, director.idToken);
+  const cCourseId = `course_c_${Date.now()}`; await seed(`courses/${cCourseId}`, {name: S('Phuket Sands'), country: S('TH')});
+  const cActivate = await callFn('activatePartner', {applicationId: cAppId, courseId: cCourseId, commandId: cmd()}, director.idToken);
+  ok('D1 the tamper subject completes the same journey end to end', cActivate.result?.success === true && cActivate.result?.tier === 'enterprise', `(${JSON.stringify(cActivate.errorMsg || cActivate.result)})`);
+  const cOrgId = cActivate.result?.organizationId, cStatementId = cActivate.result?.statementId;
+  const cBefore = await callFn('getPartnerTrialReceiptV1', {}, applicantC.idToken);
+  ok('D1 its receipt is healthy before the tamper', cBefore.result?.state === 'ready', `(${cBefore.result?.reason})`);
+
+  note('OUT-OF-BAND WRITE (deliberate attack simulation): this third statement is altered directly to prove tamper detection. The Small Business and Enterprise receipts above stay intact.');
+  await seed(`partner_statements/${cStatementId}`, {statementNumber: S('GF-TRIAL-TAMPERED')}, ['statementNumber']);
+  const tamperedRead = await callFn('getPartnerTrialReceiptV1', {}, applicantC.idToken);
   ok('D receipt tampering surfaces a security state before values render', tamperedRead.result?.state === 'unavailable' && tamperedRead.result?.reason === 'receipt_digest_mismatch', `(${tamperedRead.result?.state}/${tamperedRead.result?.reason})`);
   ok('D tampered receipt returns NO statement values', tamperedRead.result?.statement === null, `(${JSON.stringify(tamperedRead.result?.statement)?.slice(0, 80)})`);
-  const tamperedAdmin = await callFn('getAdminPartnerTrialReceiptV1', {organizationId: bOrgId}, director.idToken);
+  const tamperedAdmin = await callFn('getAdminPartnerTrialReceiptV1', {organizationId: cOrgId}, director.idToken);
   ok('D Admin sees the identical tampering verdict', tamperedAdmin.result?.reason === 'receipt_digest_mismatch', `(${tamperedAdmin.result?.reason})`);
+  const untouchedEnterprise = await callFn('getAdminPartnerTrialReceiptV1', {organizationId: bOrgId}, director.idToken);
+  ok('D tampering with one receipt does not disturb another', untouchedEnterprise.result?.state === 'ready' && untouchedEnterprise.result?.statement?.receiptDigest === bps?.receiptDigest, `(${untouchedEnterprise.result?.state}/${untouchedEnterprise.result?.reason})`);
 
   const missing = await callFn('getAdminPartnerTrialReceiptV1', {organizationId: 'org_does_not_exist_000'}, director.idToken);
   ok('D missing trial receipt fails closed with a stated reason', missing.result?.state === 'unavailable' && missing.result?.reason === 'no_activated_trial_for_organization', `(${JSON.stringify(missing.result)})`);

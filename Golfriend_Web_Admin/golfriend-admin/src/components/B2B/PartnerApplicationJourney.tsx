@@ -5,6 +5,8 @@ import {APPLICANT_JOURNEY_LOCALES} from "../../i18n/partner/applicantJourney";
 import type {ApplicantView} from "../../i18n/partner/applicant";
 import {partnerApplicationService} from "./partnerApplicationService";
 import "./PartnerApplicationJourney.css";
+import VerifiedCourseOnboarding from "./VerifiedCourseOnboarding";
+import EnterprisePartnerSupport from "./enterpriseSupport/EnterprisePartnerSupport";
 
 // The applicant journey. It renders INSIDE the applicant zone landmark, so every block here is a
 // section element — a second main landmark on the page would leave a screen-reader user with two
@@ -174,11 +176,14 @@ export default function PartnerApplicationJourney({view = "application", onSignO
             <legend>{copy.organizationHeading}</legend>
             <label>{copy.organization}<input required {...field("organization")} /></label>
             <label>{copy.organizationType}
+              {/* The chosen type is a DECLARATION, not a tier. The server classifies it: a
+                  course-shaped organization is an Enterprise relationship whatever is picked
+                  here, and everything else is Small Business unless Admin records otherwise. */}
               <select {...field("organizationType")}>
-                <option value="golf_course">{copy.courseName}</option>
-                <option value="organizer">{copy.basisAlternative}</option>
-                <option value="cafe">{copy.basisSoleProprietor}</option>
-                <option value="brand">{copy.basisCompany}</option>
+                <option value="golf_course">{copy.typeGolfCourse}</option>
+                <option value="organizer">{copy.typeOrganizer}</option>
+                <option value="cafe">{copy.typeCafe}</option>
+                <option value="brand">{copy.typeBrand}</option>
               </select>
             </label>
             <label>{copy.country}<input required pattern="[A-Za-z]{2}" maxLength={2} {...field("country")} /></label>
@@ -385,6 +390,13 @@ export default function PartnerApplicationJourney({view = "application", onSignO
 
           <h4>{copy.materialsHeading}</h4>
           <ul>{(server?.materials ?? []).length === 0 ? <li>{copy.none}</li> : server.materials.map((item: any) => <li key={item.assetId ?? item.id}>{item.title}</li>)}</ul>
+
+          {/* Two self-contained applicant surfaces carried over from the previous journey: the
+              pre-partner course onboarding entry, and the partner support desk. Each renders its
+              own honest loading/unavailable state, and neither is gated on having an application
+              — a course operator may start here before saving anything. */}
+          <VerifiedCourseOnboarding />
+          <EnterprisePartnerSupport />
         </>
       ) : null}
 

@@ -22,6 +22,7 @@ export interface ApplicantJourneyCopy {
   none: string; savedNotice: string; locked: string;
   // Organization
   organizationHeading: string; organization: string; organizationType: string; country: string; region: string;
+  typeGolfCourse: string; typeOrganizer: string; typeCafe: string; typeBrand: string;
   courseName: string; courseAddress: string; courseWebsite: string;
   legalName: string; registrationId: string; timeZone: string; holes: string;
   catalogueLocales: string; catalogueHint: string;
@@ -55,6 +56,7 @@ export interface ApplicantJourneyCopy {
 }
 
 const en: ApplicantJourneyCopy = {
+  typeGolfCourse: "Golf course or venue", typeOrganizer: "Event or society organizer", typeCafe: "Cafe, restaurant or shop", typeBrand: "Brand, retailer or service operator",
   title: 'Golfriend partner application', lead: 'Complete each step. Your draft is saved on the server and you can return to it at any time.',
   language: 'Language', signOut: 'Sign out',
   navApplication: 'Organization', navDocuments: 'Documents', navAgreement: 'Agreement', navReview: 'Review and submit', navStatus: 'Status',
@@ -106,6 +108,7 @@ const en: ApplicantJourneyCopy = {
 };
 
 const th: ApplicantJourneyCopy = {
+  typeGolfCourse: "สนามกอล์ฟหรือสถานที่", typeOrganizer: "ผู้จัดกิจกรรมหรือสมาคม", typeCafe: "คาเฟ่ ร้านอาหาร หรือร้านค้า", typeBrand: "แบรนด์ ผู้ค้าปลีก หรือผู้ให้บริการ",
   title: 'ใบสมัครพันธมิตร Golfriend', lead: 'กรอกให้ครบทุกขั้นตอน ระบบบันทึกฉบับร่างไว้บนเซิร์ฟเวอร์ และคุณกลับมาทำต่อได้ทุกเมื่อ',
   language: 'ภาษา', signOut: 'ออกจากระบบ',
   navApplication: 'องค์กร', navDocuments: 'เอกสาร', navAgreement: 'ข้อตกลง', navReview: 'ตรวจทานและส่ง', navStatus: 'สถานะ',
@@ -157,6 +160,7 @@ const th: ApplicantJourneyCopy = {
 };
 
 const ko: ApplicantJourneyCopy = {
+  typeGolfCourse: "골프장 또는 시설", typeOrganizer: "이벤트 또는 동호회 주최자", typeCafe: "카페, 레스토랑 또는 상점", typeBrand: "브랜드, 소매점 또는 서비스 운영자",
   title: 'Golfriend 파트너 신청', lead: '각 단계를 완료하세요. 초안은 서버에 저장되며 언제든 이어서 작성할 수 있습니다.',
   language: '언어', signOut: '로그아웃',
   navApplication: '조직', navDocuments: '서류', navAgreement: '계약서', navReview: '검토 후 제출', navStatus: '상태',
@@ -208,6 +212,7 @@ const ko: ApplicantJourneyCopy = {
 };
 
 const ja: ApplicantJourneyCopy = {
+  typeGolfCourse: "ゴルフ場または施設", typeOrganizer: "イベント／同好会の主催者", typeCafe: "カフェ・レストラン・ショップ", typeBrand: "ブランド・小売・サービス事業者",
   title: 'Golfriend パートナー申請', lead: '各ステップを入力してください。下書きはサーバーに保存され、いつでも再開できます。',
   language: '言語', signOut: 'サインアウト',
   navApplication: '組織', navDocuments: '書類', navAgreement: '契約', navReview: '確認して送信', navStatus: 'ステータス',
@@ -259,6 +264,7 @@ const ja: ApplicantJourneyCopy = {
 };
 
 const zh: ApplicantJourneyCopy = {
+  typeGolfCourse: "高尔夫球场或场地", typeOrganizer: "活动或球会组织者", typeCafe: "咖啡馆、餐厅或商店", typeBrand: "品牌、零售或服务经营者",
   title: 'Golfriend 合作伙伴申请', lead: '请完成每个步骤。草稿保存在服务器上，你可以随时回来继续。',
   language: '语言', signOut: '退出登录',
   navApplication: '机构', navDocuments: '文件', navAgreement: '协议', navReview: '复核并提交', navStatus: '状态',
@@ -310,6 +316,7 @@ const zh: ApplicantJourneyCopy = {
 };
 
 const es: ApplicantJourneyCopy = {
+  typeGolfCourse: "Campo de golf o local", typeOrganizer: "Organizador de eventos o sociedad", typeCafe: "Cafetería, restaurante o tienda", typeBrand: "Marca, minorista u operador de servicios",
   title: 'Solicitud de socio Golfriend', lead: 'Completa cada paso. Tu borrador se guarda en el servidor y puedes retomarlo cuando quieras.',
   language: 'Idioma', signOut: 'Cerrar sesión',
   navApplication: 'Organización', navDocuments: 'Documentos', navAgreement: 'Acuerdo', navReview: 'Revisar y enviar', navStatus: 'Estado',
@@ -361,6 +368,7 @@ const es: ApplicantJourneyCopy = {
 };
 
 const fr: ApplicantJourneyCopy = {
+  typeGolfCourse: "Parcours de golf ou site", typeOrganizer: "Organisateur d evenements ou d association", typeCafe: "Cafe, restaurant ou boutique", typeBrand: "Marque, detaillant ou prestataire de services",
   title: 'Candidature partenaire Golfriend', lead: 'Complétez chaque étape. Votre brouillon est enregistré sur le serveur et vous pouvez y revenir à tout moment.',
   language: 'Langue', signOut: 'Se déconnecter',
   navApplication: 'Organisation', navDocuments: 'Documents', navAgreement: 'Accord', navReview: 'Vérifier et envoyer', navStatus: 'Statut',
@@ -412,6 +420,7 @@ const fr: ApplicantJourneyCopy = {
 };
 
 const de: ApplicantJourneyCopy = {
+  typeGolfCourse: "Golfplatz oder Standort", typeOrganizer: "Veranstalter oder Cluborganisator", typeCafe: "Cafe, Restaurant oder Laden", typeBrand: "Marke, Handel oder Dienstleister",
   title: 'Golfriend-Partnerbewerbung', lead: 'Füllen Sie jeden Schritt aus. Ihr Entwurf wird auf dem Server gespeichert und Sie können jederzeit zurückkehren.',
   language: 'Sprache', signOut: 'Abmelden',
   navApplication: 'Organisation', navDocuments: 'Dokumente', navAgreement: 'Vereinbarung', navReview: 'Prüfen und senden', navStatus: 'Status',
