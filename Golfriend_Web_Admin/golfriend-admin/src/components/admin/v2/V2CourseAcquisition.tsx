@@ -315,7 +315,7 @@ export default function V2CourseAcquisition({
           client-side authority and no simulated outcome. */}
       <V2OutreachApprovals />
       <section className="acq-grid">
-        <main>
+        <section className="panel-region">
           <div className="acq-tools">
             <input
               aria-label="Search prospects"
@@ -421,7 +421,7 @@ export default function V2CourseAcquisition({
               </table>
             </div>
           )}
-        </main>
+        </section>
         <aside className="acq-stages">
           <span>PIPELINE BY STAGE</span>
           {PROSPECT_STAGES.filter((s) => summary.byStage[s] > 0).map((s) => (

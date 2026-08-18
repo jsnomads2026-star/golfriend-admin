@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 let checks = 0;
 const test = (name, fn) => { fn(); checks += 1; console.log(`ok ${checks} - ${name}`); };
-const runtime=read('functions/src/partnerOnboardingRuntime.ts'), index=read('functions/src/index.ts'), app=read('src/App.tsx'), journey=read('src/components/B2B/PartnerApplicationJourney.tsx'), admin=read('src/components/admin/v2/V2PartnerApplications.tsx'), service=read('src/components/B2B/partnerApplicationService.ts'), firestore=read('partner-onboarding.firestore.rules'), storage=read('partner-onboarding.storage.rules');
+const runtime=read('functions/src/partnerOnboardingRuntime.ts'), index=read('functions/src/index.ts'), app=read('src/App.tsx'), journey=read('src/components/B2B/PartnerApplicationJourney.tsx'), copyModule=read('src/i18n/partner/applicantJourney.ts'), admin=read('src/components/admin/v2/V2PartnerApplications.tsx'), service=read('src/components/B2B/partnerApplicationService.ts'), firestore=read('partner-onboarding.firestore.rules'), storage=read('partner-onboarding.storage.rules');
 // Proportional, not a frozen count: a new callable must ALSO enforce App Check, and pinning
 // the number just meant the next one silently changed the expected total.
 test('every onboarding callable enforces App Check',()=>{const calls=(runtime.match(/onCall\(/g)||[]).length,guarded=(runtime.match(/enforceAppCheck: true/g)||[]).length;assert.ok(calls>0,'no callables found');assert.equal(guarded,calls,`${calls-guarded} callable(s) do not enforce App Check`);});
@@ -37,7 +37,45 @@ test('applicant journey is mounted only inside the applicant zone',()=>{
 });
 test('admin consumer mounted',()=>assert.match(app,/V2PartnerApplications/));
 test('callables exported',()=>['savePartnerApplicationDraftV2','uploadPartnerApplicationEvidenceV2','reviewPartnerApplicationV2'].forEach(name=>assert.match(index,new RegExp(name))));
-test('eight locale applicant selector',()=>assert.match(journey,/\["en", "th", "ko", "ja", "zh", "es", "fr", "de"\]/));
+// The eight-locale set now comes from the canonical source instead of a literal in the
+// component; the copy module itself must carry every locale, which is what a partner actually
+// experiences.
+test('applicant journey copy covers the canonical eight locales',()=>{
+  assert.match(journey,/applicantJourneyCopy/);
+  assert.match(journey,/APPLICANT_JOURNEY_LOCALES/);
+  assert.match(copyModule,/from '\.\.\/locales\.ts'/);
+  for(const locale of ['en','th','ko','ja','zh','es','fr','de']) assert.match(copyModule,new RegExp(`const ${locale}: ApplicantJourneyCopy`),`missing ${locale}`);
+  assert.match(copyModule,/Record<CanonicalLocale, ApplicantJourneyCopy>/,'the record must be exhaustive so a missing locale is a type error');
+});
+test('applicant can supply an authorized representative and proportionate evidence',()=>{
+  assert.match(journey,/representativeName/);
+  assert.match(journey,/authorityConfirm/);
+  assert.match(journey,/representationBasis/);
+  assert.match(journey,/EVIDENCE_KIND_KEYS/,'a document checklist needs typed document kinds');
+  assert.match(journey,/checklist\?\.missing/,'the server checklist drives what is still needed');
+  assert.doesNotMatch(journey,/verificationStatus:\s*['"]verified['"]/, 'the client must never set its own verification status');
+});
+test('applicant accepts the exact agreement version and digest',()=>{
+  assert.match(journey,/agreement\?\.version/);
+  assert.match(journey,/agreement\?\.digest/);
+  assert.match(journey,/acceptAgreement/);
+  assert.match(service,/getPartnerAgreementV2/);
+});
+test('review-before-submit and status/history are real surfaces',()=>{
+  for(const marker of ['reviewHeading','submitButton','statusHeading','historyHeading','messagesHeading']) assert.match(journey,new RegExp(marker));
+});
+test('no raw internal error code reaches the applicant',()=>{
+  assert.match(journey,/humanError/);
+  // Every branch of the failure mapper resolves to localized copy.
+  assert.doesNotMatch(journey,/setNotice\(\{tone: "alert", text: String\(/);
+});
+test('Admin can decide documents and record contract approval',()=>{
+  assert.match(service,/reviewPartnerApplicationEvidenceV2/);
+  assert.match(service,/approvePartnerContractV2/);
+  assert.match(admin,/reviewEvidence/);
+  assert.match(admin,/approveContract/);
+});
+test('the applicant journey renders inside the zone landmark, not a second one',()=>assert.doesNotMatch(journey,/<main/));
 test('Thai staff copy',()=>assert.match(admin,/ตรวจสอบการสมัครพันธมิตร/));
 test('loading and error semantics',()=>{assert.match(journey,/role="status"/);assert.match(journey,/role="alert"/);});
 test('restart server load',()=>assert.match(journey,/partnerApplicationService\.load/));

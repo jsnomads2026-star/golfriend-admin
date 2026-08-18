@@ -619,7 +619,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         </button>
       </div>
 
-      <div style={styles.content}>
+      <main id="main" style={styles.content}>
         {activeTab === 'teesheet' && <><EnterpriseBookingCoordinationDesk /><BookingOperationsReportV2 /><BookingProviderPublicationV2 /><CourseTeeSheet /></>}
         {activeTab === 'genesis' && <EventGenesisConsole />}
         {/* @ts-ignore */}
@@ -636,7 +636,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
         {activeTab === 'billing' && <BillingBoundary partnerUid={authUid} />}
         {activeTab === 'support' && <EnterprisePartnerSupport />}
-      </div>
+      </main>
     </div>
   );
 }

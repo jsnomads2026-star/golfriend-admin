@@ -151,6 +151,53 @@ const record = (ok, label, detail = '') =>
 }
 
 // ---------------------------------------------------------------------------
+// Landmark ownership: exactly ONE main landmark per rendered page.
+//
+// A page cannot have two page landmarks. The composed pages are the admin shell, the two
+// Portals, the applicant zone and the public storefront, so exactly those five own a <main>;
+// everything they mount must use a sectioning element instead. This is checked over the source
+// tree rather than by hiding a nested landmark behind a role attribute.
+// ---------------------------------------------------------------------------
+{
+  const { readdirSync, statSync } = await import('node:fs');
+  const { join, relative, sep } = await import('node:path');
+
+  const srcRoot = new URL('../src/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const LANDMARK_OWNERS = new Set([
+    'App.tsx',
+    'components/admin/v2/V2AdminShell.tsx',
+    'components/B2B/SmallBusinessDashboard.tsx',
+    'components/B2B/EnterpriseDashboard.tsx',
+    'components/public/B2BStorefront.tsx',
+  ]);
+
+  const offenders = [];
+  const owners = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (!/\.(tsx|jsx)$/.test(entry)) continue;
+      const rel = relative(srcRoot, full).split(sep).join('/');
+      // Only a real JSX element counts; the word "main" in prose does not.
+      if (!/<main[\s/>]/.test(readFileSync(full, 'utf8'))) continue;
+      if (LANDMARK_OWNERS.has(rel)) owners.add(rel); else offenders.push(rel);
+    }
+  };
+  walk(srcRoot);
+
+  const nested = offenders;
+  record(nested.length === 0,
+    'Exactly one main landmark per page (only the five page shells render <main>)',
+    nested.length ? `nested landmark(s) in: ${nested.join(', ')}` : '');
+
+  const missing = [...LANDMARK_OWNERS].filter((f) => !owners.has(f));
+  record(missing.length === 0,
+    'Every composed page actually has a main landmark',
+    missing.length ? `page(s) with no <main>: ${missing.join(', ')}` : '');
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 console.log('\nPortal a11y / no-bypass source gate  (src/App.tsx)\n');

@@ -58,4 +58,11 @@ export const partnerTrialReceiptService = {
   mine: (organizationId?: string) => call("getPartnerTrialReceiptV1", organizationId ? {organizationId} : {}),
   /** Admin: any organization, same stored document. */
   forOrganization: (organizationId: string) => call("getAdminPartnerTrialReceiptV1", {organizationId}),
+  /**
+   * Portal: cancel the caller's own trial. Zero due, immediate stop, and a read-only/export
+   * window — all decided by the server. The sealed statement is never rewritten.
+   */
+  cancel: async () => {
+    await httpsCallable(getFunctions(), "cancelPartnerTrialV1")({commandId: crypto.randomUUID().replaceAll("-", "_")});
+  },
 };

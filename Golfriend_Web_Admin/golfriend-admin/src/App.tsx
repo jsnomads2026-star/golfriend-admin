@@ -138,12 +138,16 @@ function Applicant({ intent, view, requestedApplicationId }: { intent: 'small_bu
     setRoleLoading(true); setResolveError(false);
     (async () => {
       try {
-        const [application, partner] = await Promise.all([
+        const [view, partner] = await Promise.all([
           partnerApplicationService.load().catch(() => null),
           getDoc(doc(db, 'b2b_partners', user.uid)).then((s) => (s.exists() ? s.data() : null)).catch(() => null),
         ]);
         if (!active) return;
-        setApplicationDoc(application ?? null);
+        // The callable returns a VIEW envelope; the resolver wants the application document
+        // itself. Passing the envelope made every application look like a fresh draft, so a
+        // submitted or information-needed application still rendered as "ready".
+        const application = view?.application ?? null;
+        setApplicationDoc(application ? {...application, id: application.applicationId} : null);
         setPartnerDoc(partner ?? null);
       } catch {
         if (active) setResolveError(true);   // never surface a raw provider error
@@ -186,8 +190,8 @@ function Applicant({ intent, view, requestedApplicationId }: { intent: 'small_bu
       <p role={liveRole} aria-live="polite">{message}</p>
       <p className="applicant-legal">{copy.legalPending}</p>
       {access.portalReady ? <a className="applicant-portal" href="/portal">{copy.enterPortal}</a> : null}
-      {access.state === 'ready' || access.state === 'submitted' || access.state === 'information_needed'
-        ? <PartnerApplicationJourney onSignOut={() => { void signOut(getAuth()); }} />
+      {['ready', 'submitted', 'information_needed', 'rejected', 'approved'].includes(access.state)
+        ? <PartnerApplicationJourney view={view} onSignOut={() => { void signOut(getAuth()); }} />
         : null}
     </main>
   );

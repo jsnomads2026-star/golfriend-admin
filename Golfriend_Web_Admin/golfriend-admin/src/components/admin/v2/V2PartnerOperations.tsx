@@ -107,7 +107,7 @@ export default function V2PartnerOperations({
         ))}
       </section>
       <section className="partner-grid">
-        <main>
+        <section className="panel-region">
           <div className="partner-tools">
             <input
               aria-label="Search partner requests"
@@ -207,7 +207,7 @@ export default function V2PartnerOperations({
               </table>
             </div>
           )}
-        </main>
+        </section>
         <aside className="partner-recent">
           <span>RECENT ACTIVITY</span>
           {summary.recent.map((r: any) => (
