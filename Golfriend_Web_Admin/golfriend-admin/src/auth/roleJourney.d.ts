@@ -47,3 +47,29 @@ export function isActiveAdminDoc(adminDoc: { role?: string; status?: string } | 
 export function isActiveDirectorDoc(adminDoc: { role?: string; status?: string } | null | undefined): boolean;
 
 export const STATE_COPY: Record<string, { title: string; tone: 'info' | 'error' }>;
+
+/** Applicant zone — a third authority zone that can never yield Portal access. */
+export interface ApplicantAccessInput {
+  authPending?: boolean;
+  user?: { uid?: string } | null;
+  roleLoading?: boolean;
+  resolveError?: boolean;
+  applicationDoc?: { id?: string; applicantUid?: string; status?: string } | null;
+  partnerDoc?: { status?: string; organizationId?: string; disabled?: boolean } | null;
+  requestedApplicationId?: string | null;
+  /** null means "not asserted" and fails closed, exactly like false. */
+  identityVerified?: boolean | null;
+}
+
+export interface ApplicantAccess {
+  state: string;
+  /** Derived from the server-owned partner document, never from application status. */
+  portalReady: boolean;
+  applicationId?: string | null;
+  applicationStatus?: string;
+  reason?: string;
+}
+
+export const APPLICANT_STATES: string[];
+export const NON_PORTAL_APPLICATION_STATUSES: string[];
+export function resolveApplicantAccess(input?: ApplicantAccessInput): ApplicantAccess;

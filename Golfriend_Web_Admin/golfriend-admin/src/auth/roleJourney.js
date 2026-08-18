@@ -176,3 +176,72 @@ export const STATE_COPY = {
   unauthorized: { title: 'This account is not authorized for this portal.', tone: 'error' },
   suspended: { title: 'This account’s access is currently suspended.', tone: 'error' },
 };
+
+/**
+ * Applicant zone (`/apply/*`).
+ *
+ * This is deliberately a THIRD authority zone, not a relaxation of the partner one. It never
+ * yields Portal access: an applicant's own application — draft, submitted, information-needed,
+ * pending or rejected — grants exactly the right to see and edit that application. Portal
+ * authority comes only from the server-owned b2b_partners document written by the approval
+ * transaction, which is why `portalReady` is derived from partnerDoc and never from
+ * applicationDoc.
+ */
+export const APPLICANT_STATES = [
+  'auth_pending', 'signed_out', 'verification_required', 'role_resolving', 'error',
+  'ready', 'submitted', 'information_needed', 'rejected', 'suspended', 'approved',
+];
+
+/** Application statuses that are emphatically NOT Portal authority. */
+export const NON_PORTAL_APPLICATION_STATUSES = ['draft', 'submitted', 'under_review', 'info_needed', 'rejected', 'suspended'];
+
+export function resolveApplicantAccess(input = {}) {
+  const {
+    authPending, user, roleLoading, resolveError,
+    applicationDoc = null, partnerDoc = null, requestedApplicationId = null,
+    identityVerified = null,
+  } = input;
+
+  if (authPending) return { state: 'auth_pending', portalReady: false };
+  if (!user || !user.uid) return { state: 'signed_out', portalReady: false };
+  if (resolveError) return { state: 'error', portalReady: false };
+  if (roleLoading) return { state: 'role_resolving', portalReady: false };
+
+  // Reading the explanation is public; saving or submitting requires verified identity.
+  // `identityVerified === null` means the caller did not assert either way — fail closed.
+  if (identityVerified !== true) return { state: 'verification_required', portalReady: false };
+
+  // Portal readiness is a SERVER fact: an active partner document with an organization.
+  const portalReady =
+    partnerDoc?.status === 'active_partner' &&
+    partnerDoc?.disabled !== true &&
+    typeof partnerDoc?.organizationId === 'string' &&
+    partnerDoc.organizationId.trim() !== '';
+
+  if (!applicationDoc) return { state: portalReady ? 'approved' : 'ready', portalReady, applicationId: null };
+
+  // An applicant may only ever address its own application.
+  const ownerUid = applicationDoc.applicantUid;
+  if (typeof ownerUid === 'string' && ownerUid !== user.uid) {
+    return { state: 'error', portalReady: false, reason: 'cross_applicant_denied' };
+  }
+  const applicationId = typeof applicationDoc.id === 'string' ? applicationDoc.id : null;
+  if (requestedApplicationId !== null && applicationId !== null && requestedApplicationId !== applicationId) {
+    return { state: 'error', portalReady: false, reason: 'cross_applicant_denied' };
+  }
+
+  const status = String(applicationDoc.status || 'draft');
+  const byStatus = {
+    draft: 'ready', submitted: 'submitted', under_review: 'submitted',
+    info_needed: 'information_needed', rejected: 'rejected', suspended: 'suspended',
+    approved: portalReady ? 'approved' : 'submitted',
+  };
+  return {
+    state: byStatus[status] || 'ready',
+    // An approved application whose activation transaction has not yet written the partner
+    // document is NOT Portal-ready. Approval alone is not entry.
+    portalReady: status === 'approved' ? portalReady : false,
+    applicationId,
+    applicationStatus: status,
+  };
+}

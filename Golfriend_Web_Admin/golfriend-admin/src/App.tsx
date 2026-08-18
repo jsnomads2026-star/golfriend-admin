@@ -7,6 +7,12 @@ import { resolvePortalAccess, STATE_COPY } from './auth/roleJourney.js';
 import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
+import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
+import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
+import { partnerApplicationService } from './components/B2B/partnerApplicationService';
+import { resolveApplicantAccess } from './auth/roleJourney.js';
+import { applicantCopy, type ApplicantView } from './i18n/partner/applicant';
+import { useLocale } from './i18n/hooks.ts';
 import CourseAvailabilityV2 from './components/B2B/CourseAvailabilityV2';
 import PlayBookingLifecycleV2 from './components/B2B/PlayBookingLifecycleV2';
 import BookingOperationsReportV2 from './components/B2B/BookingOperationsReportV2';
@@ -72,9 +78,109 @@ export default function App() {
         <Route path="/portal" element={<Dashboard mode="partner" />} />
         <Route path="/portal/:organizationId/*" element={<ScopedPartnerPortal />} />
         <Route path="/portal/*" element={<Dashboard mode="partner" />} />
+
+        {/* Applicant zone. A third authority zone: it can render an application, and it can
+            never render the Portal. Portal entry comes only from the server-owned partner
+            document written by the approval transaction. */}
+        <Route path="/apply/small-business" element={<ApplicantZone intent="small_business" />} />
+        <Route path="/apply/enterprise" element={<ApplicantZone intent="enterprise" />} />
+        <Route path="/apply/status" element={<ApplicantZone view="status" />} />
+        <Route path="/apply/:applicationId/documents" element={<ApplicantZone view="documents" />} />
+        <Route path="/apply/:applicationId/agreement" element={<ApplicantZone view="agreement" />} />
+        <Route path="/apply/:applicationId/review" element={<ApplicantZone view="review" />} />
+        <Route path="/invitation/accept" element={<InvitationAcceptanceRoute />} />
+
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>
+  );
+}
+
+function ApplicantZone({ intent = null, view = 'application' }: { intent?: 'small_business' | 'enterprise' | null; view?: ApplicantView }) {
+  const { applicationId } = useParams();
+  return <Applicant intent={intent} view={view} requestedApplicationId={applicationId ?? null} />;
+}
+
+function InvitationAcceptanceRoute() {
+  // The token is validated by the server and is single-use and expiring. No email or URL
+  // field on this page grants authority; it only carries the opaque token to the callable.
+  return <PartnerInvitationAcceptance />;
+}
+
+// ---- Applicant zone -------------------------------------------------------------
+// Renders an application and NEVER the Portal. Portal readiness is a server fact read from
+// b2b_partners/{uid}; an approved application alone does not open the Portal, so the two are
+// resolved separately and only `portalReady` offers the entry link.
+function Applicant({ intent, view, requestedApplicationId }: { intent: 'small_business' | 'enterprise' | null; view: ApplicantView; requestedApplicationId: string | null }) {
+  const copy = applicantCopy(useLocale());
+  const isOnline = useOnlineStatus();
+  const [user, setUser] = useState<any>(null);
+  const [authPending, setAuthPending] = useState(true);
+  const [applicationDoc, setApplicationDoc] = useState<any>(null);
+  const [partnerDoc, setPartnerDoc] = useState<any>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
+  const [resolveError, setResolveError] = useState(false);
+
+  useEffect(() => onAuthStateChanged(getAuth(), (next) => { setUser(next); setAuthPending(false); }), []);
+
+  useEffect(() => {
+    if (!user?.uid) { setApplicationDoc(null); setPartnerDoc(null); return; }
+    let active = true;
+    setRoleLoading(true); setResolveError(false);
+    (async () => {
+      try {
+        const [application, partner] = await Promise.all([
+          partnerApplicationService.load().catch(() => null),
+          getDoc(doc(db, 'b2b_partners', user.uid)).then((s) => (s.exists() ? s.data() : null)).catch(() => null),
+        ]);
+        if (!active) return;
+        setApplicationDoc(application ?? null);
+        setPartnerDoc(partner ?? null);
+      } catch {
+        if (active) setResolveError(true);   // never surface a raw provider error
+      } finally {
+        if (active) setRoleLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [user?.uid]);
+
+  const access = resolveApplicantAccess({
+    authPending, user, roleLoading, resolveError,
+    applicationDoc, partnerDoc, requestedApplicationId,
+    // Contact verification is the server's gate for saving/submitting; the client mirrors it
+    // only to render honestly.
+    identityVerified: user ? user.emailVerified === true : null,
+  });
+
+  const heading = intent === 'enterprise' ? copy.enterprise : intent === 'small_business' ? copy.smallBusiness : copy[view === 'status' ? 'status' : view === 'documents' ? 'documents' : view === 'agreement' ? 'agreement' : view === 'review' ? 'review' : 'status'];
+
+  const message =
+    !isOnline ? copy.offline :
+    access.state === 'auth_pending' || access.state === 'role_resolving' ? copy.loading :
+    access.state === 'signed_out' ? copy.signInRequired :
+    access.state === 'verification_required' ? copy.verifyRequired :
+    access.state === 'error' ? copy.error :
+    access.state === 'submitted' ? copy.submitted :
+    access.state === 'information_needed' ? copy.informationNeeded :
+    access.state === 'rejected' ? copy.rejected :
+    access.state === 'suspended' ? copy.suspended :
+    access.state === 'approved' ? copy.approved :
+    access.state === 'ready' ? copy.ready : copy.unknown;
+
+  const liveRole = access.state === 'error' || access.state === 'rejected' || access.state === 'suspended' ? 'alert' : 'status';
+
+  return (
+    <main id="main" className="applicant-zone" aria-labelledby="applicant-heading">
+      <h1 id="applicant-heading">{heading}</h1>
+      {intent ? <p className="applicant-boundary" role="note">{copy.notAuthority}</p> : null}
+      <p role={liveRole} aria-live="polite">{message}</p>
+      <p className="applicant-legal">{copy.legalPending}</p>
+      {access.portalReady ? <a className="applicant-portal" href="/portal">{copy.enterPortal}</a> : null}
+      {access.state === 'ready' || access.state === 'submitted' || access.state === 'information_needed'
+        ? <PartnerApplicationJourney onSignOut={() => { void signOut(getAuth()); }} />
+        : null}
+    </main>
   );
 }
 
