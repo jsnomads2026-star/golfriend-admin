@@ -4,7 +4,9 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 let checks = 0;
 const test = (name, fn) => { fn(); checks += 1; console.log(`ok ${checks} - ${name}`); };
 const runtime=read('functions/src/partnerOnboardingRuntime.ts'), index=read('functions/src/index.ts'), app=read('src/App.tsx'), journey=read('src/components/B2B/PartnerApplicationJourney.tsx'), admin=read('src/components/admin/v2/V2PartnerApplications.tsx'), service=read('src/components/B2B/partnerApplicationService.ts'), firestore=read('partner-onboarding.firestore.rules'), storage=read('partner-onboarding.storage.rules');
-test('ten callables enforce App Check',()=>assert.equal((runtime.match(/enforceAppCheck: true/g)||[]).length,10));
+// Proportional, not a frozen count: a new callable must ALSO enforce App Check, and pinning
+// the number just meant the next one silently changed the expected total.
+test('every onboarding callable enforces App Check',()=>{const calls=(runtime.match(/onCall\(/g)||[]).length,guarded=(runtime.match(/enforceAppCheck: true/g)||[]).length;assert.ok(calls>0,'no callables found');assert.equal(guarded,calls,`${calls-guarded} callable(s) do not enforce App Check`);});
 test('fixed server collections',()=>assert.match(runtime,/partner_applications_v2/));
 test('client cannot select collection',()=>assert.doesNotMatch(service,/collection\s*\(/));
 test('authenticated ownership deterministic',()=>assert.match(runtime,/applicationId\(uid\)/));

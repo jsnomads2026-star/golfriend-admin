@@ -16,6 +16,10 @@ export const STATUSES=["draft","submitted","changes_requested","approved","activ
 export type SmallBusinessStatus=typeof STATUSES[number];
 const forbidden=new Set(["role","approval","approvedBy","verified","verificationState","representativeUid","adminUid","price","amount","currency","entitlement","revenue","memberId","memberEmail","memberPhone","targetMemberIds","rawLocation","latitude","longitude"]);
 export const digest=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
+/** The one derivation of a representative actor reference. Activation and the Small Business
+ * runtime must agree on it exactly, or an activated partner would authenticate as a different
+ * actor than the one recorded on its own business record. */
+export const representativeActorRef=(uid:string)=>`actor_${digest(uid).slice(0,32)}`;
 export function strictId(v:unknown,label="ID"){const x=String(v||"");if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$/.test(x))throw new Error(`${label}_INVALID`);return x}
 export function strictVersion(v:unknown,label="VERSION"){if(!Number.isSafeInteger(v)||Number(v)<0)throw new Error(`${label}_INVALID`);return Number(v)}
 const txt=(v:unknown,label:string,max=500)=>{const x=String(v||"").trim();if(!x||x.length>max||/[\u0000-\u001f]/.test(x))throw new Error(`${label}_INVALID`);return x};

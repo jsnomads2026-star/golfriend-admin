@@ -168,7 +168,6 @@ test("Admin decision uses decision and maps reactivate server-side", () => {
 test("all Small Business backend collections deny direct clients", () => {
   for (const collection of [
     "small_businesses",
-    "small_business_representative_bindings",
     "small_business_commands",
     "small_business_profile_corrections",
     "small_business_profile_correction_receipts",

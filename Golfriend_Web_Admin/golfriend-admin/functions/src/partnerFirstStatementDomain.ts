@@ -23,22 +23,58 @@ export const statementNumber = (organizationId: string) =>
   `GF-TRIAL-${hash(organizationId).slice(0, 10).toUpperCase()}`;
 
 /**
- * Final tier, decided from server-held records only.
+ * Organization shapes, decided by the SERVER from the application record.
  *
- * The applicant's selected intent and any client-supplied `tier` are deliberately ignored:
- * intent routes a form, it does not grant authority. Enterprise requires the contract
- * approval that carries the founding commission; everything else is Small Business.
+ * A course-shaped organization is an Enterprise relationship. That is a policy fact about the
+ * kind of business, not a commercial outcome of a signed contract, so it does not wait on a
+ * contract approval and an Admin cannot downgrade it: a real golf course was previously able
+ * to land on Small Business simply because the contract record had not been written yet.
  */
-export function resolveFinalTier(input: {applicationOrganizationType?: unknown; contractApproved?: unknown; contractCommissionBps?: unknown; adminTierDecision?: unknown}): PartnerTier {
-  const decision = String(input?.adminTierDecision || "");
-  // An Admin may override, but only with an explicit, recorded, valid value.
-  if (decision === "enterprise" || decision === "small_business") return decision;
-  const contracted = input?.contractApproved === true && Number(input?.contractCommissionBps) > 0;
-  const declared = String(input?.applicationOrganizationType || "").toLowerCase();
-  const enterpriseShaped = ["enterprise", "golf_course", "course", "master_host"].includes(declared);
-  return contracted && enterpriseShaped ? "enterprise" : "small_business";
+export const COURSE_SHAPED_ORGANIZATION_TYPES = [
+  "golf_course", "course", "enterprise", "master_host", "country_club", "resort_course",
+  "golf_resort", "golf_club", "driving_range_course",
+] as const;
+
+/**
+ * Small Business covers the legitimate non-course operations that serve golfers: organizers,
+ * cafes and restaurants, transport, accommodation and similar approved service categories.
+ * A course operator who ALSO runs one of these needs a separate Small Business application and
+ * a separately scoped, separately invoiced service relationship - it is never folded into the
+ * course partnership.
+ */
+export const SMALL_BUSINESS_ORGANIZATION_TYPES = [
+  "organizer", "event_organizer", "society_organizer", "golf_cafe", "cafe", "restaurant",
+  "transport", "transfer_operator", "accommodation", "hotel", "coach", "fitter", "repair_shop",
+  "retailer", "brand", "operator", "service_operator",
+] as const;
+
+export type OrganizationShape = "course" | "small_business" | "unclassified";
+
+export function classifyOrganizationShape(organizationType: unknown): OrganizationShape {
+  const declared = String(organizationType || "").trim().toLowerCase();
+  if ((COURSE_SHAPED_ORGANIZATION_TYPES as readonly string[]).includes(declared)) return "course";
+  if ((SMALL_BUSINESS_ORGANIZATION_TYPES as readonly string[]).includes(declared)) return "small_business";
+  return "unclassified";
 }
 
+/**
+ * Final tier, decided from server-held records only.
+ *
+ * The applicant selected intent and any client-supplied `tier` are deliberately ignored:
+ * intent routes a form, it does not grant authority.
+ *
+ *   course-shaped        -> enterprise, always. An Admin decision cannot downgrade it.
+ *   small-business shape -> small_business, unless an Admin explicitly records an upgrade.
+ *   unclassified         -> small_business (least privilege) unless an Admin explicitly decides.
+ */
+export function resolveFinalTier(input: {applicationOrganizationType?: unknown; contractApproved?: unknown; contractCommissionBps?: unknown; adminTierDecision?: unknown}): PartnerTier {
+  const shape = classifyOrganizationShape(input?.applicationOrganizationType);
+  if (shape === "course") return "enterprise";
+  const decision = String(input?.adminTierDecision || "");
+  // An Admin may override the remaining shapes, but only with an explicit, recorded, valid value.
+  if (decision === "enterprise" || decision === "small_business") return decision;
+  return "small_business";
+}
 export interface FirstStatementInput {
   organizationId: string;
   applicationId: string;

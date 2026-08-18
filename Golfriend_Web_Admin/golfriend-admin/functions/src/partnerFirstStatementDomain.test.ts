@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {buildFirstTrialStatement, resolveFinalTier, statementId, statementNumber, verifyStoredStatement} from "./partnerFirstStatementDomain.js";
+import {buildFirstTrialStatement, classifyOrganizationShape, resolveFinalTier, statementId, statementNumber, verifyStoredStatement} from "./partnerFirstStatementDomain.js";
 
 const DIGEST = "e16d5070c66bbf4b89beade4407b415def779076c71dbb48237db7b1157adc11";
 const base = {
@@ -9,14 +9,32 @@ const base = {
 };
 
 test("final tier is decided server-side and never from client-selected intent", () => {
-  // A Small Business applicant claiming to be enterprise, with no contract, stays small.
-  assert.equal(resolveFinalTier({applicationOrganizationType: "enterprise"}), "small_business");
-  assert.equal(resolveFinalTier({applicationOrganizationType: "enterprise", contractApproved: true, contractCommissionBps: 300}), "enterprise");
-  assert.equal(resolveFinalTier({applicationOrganizationType: "golf_cafe", contractApproved: true, contractCommissionBps: 300}), "small_business");
+  // A course-shaped organization IS an Enterprise relationship. It does not wait on a contract
+  // record: a real golf course used to land on Small Business purely because the approval had
+  // not been written yet.
+  assert.equal(resolveFinalTier({applicationOrganizationType: "golf_course"}), "enterprise");
+  assert.equal(resolveFinalTier({applicationOrganizationType: "enterprise"}), "enterprise");
+  assert.equal(resolveFinalTier({applicationOrganizationType: "country_club"}), "enterprise");
+  // ...and an Admin cannot downgrade a course to Small Business.
+  assert.equal(resolveFinalTier({applicationOrganizationType: "golf_course", adminTierDecision: "small_business"}), "enterprise");
+  // Small Business covers organizers, cafes, restaurants, transport, accommodation and
+  // similar approved service categories.
+  for (const type of ["golf_cafe", "restaurant", "organizer", "transport", "accommodation", "brand"]) {
+    assert.equal(resolveFinalTier({applicationOrganizationType: type, contractApproved: true, contractCommissionBps: 300}), "small_business", type);
+  }
+  // Least privilege for anything unclassified, and for absent evidence.
   assert.equal(resolveFinalTier({}), "small_business", "absent evidence must not grant Enterprise");
+  assert.equal(resolveFinalTier({applicationOrganizationType: "something_new"}), "small_business");
   // An Admin override must be an explicit valid value; junk falls back to derivation.
   assert.equal(resolveFinalTier({adminTierDecision: "enterprise"}), "enterprise");
   assert.equal(resolveFinalTier({adminTierDecision: "master_host", applicationOrganizationType: "golf_cafe"}), "small_business");
+});
+
+test("organization shape classification separates course from Small Business categories", () => {
+  assert.equal(classifyOrganizationShape("GOLF_COURSE"), "course");
+  assert.equal(classifyOrganizationShape("cafe"), "small_business");
+  assert.equal(classifyOrganizationShape(""), "unclassified");
+  assert.equal(classifyOrganizationShape(undefined), "unclassified");
 });
 
 test("Small Business first statement is $29.00 normal, $29.00 discount, $0.00 due", () => {

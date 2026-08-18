@@ -5,6 +5,7 @@ import {
   commandKey,
   correctionTransition,
   digest,
+  representativeActorRef,
   discoveryCard,
   normalizeProfile,
   normalizePromotion,
@@ -46,7 +47,7 @@ function uid(r: any) {
     throw new HttpsError("permission-denied", "Verified identity required.");
   return x;
 }
-const actor = (u: string) => `actor_${digest(u).slice(0, 32)}`;
+const actor = representativeActorRef;
 function current(x: any, now = Date.now()) {
   const start =
       x?.effectiveAt?.toMillis?.() ?? Date.parse(String(x?.effectiveAt || "")),
@@ -61,25 +62,36 @@ function current(x: any, now = Date.now()) {
     end > now
   );
 }
+/**
+ * Small Business representative authority, resolved from the ONE canonical partner identity.
+ *
+ * This used to read `small_business_representative_bindings`, a collection nothing in the
+ * product ever wrote. Activation issued `partner_identity_bindings` and `partner_memberships`
+ * instead, so every partner onboarded through the acquisition journey was permanently locked
+ * out of its own Portal. There is now a single organization/role authority: activation issues
+ * it, and this reader consumes it.
+ */
 async function representative(r: any, businessId?: string) {
   const u = uid(r),
-    matches = await db
-      .collection("small_business_representative_bindings")
-      .where("uid", "==", u)
-      .limit(2)
-      .get();
-  if (matches.size !== 1)
+    binding = await db.collection("partner_identity_bindings").doc(u).get();
+  if (!binding.exists)
     throw new HttpsError(
       "permission-denied",
-      "One active representative binding required.",
+      "An activated partner organization is required.",
     );
-  const snap = matches.docs[0],
-    x = snap.data(),
-    actorRef = actor(u);
+  const organizationId = String(binding.data()?.organizationId || ""),
+    membershipRef = db
+      .collection("partner_memberships")
+      .doc(`${organizationId}_${u}`),
+    membership = await membershipRef.get(),
+    x = membership.data(),
+    actorRef = representativeActorRef(u);
   if (
+    !membership.exists ||
     !current(x) ||
-    !Number.isSafeInteger(x.version) ||
-    (businessId && x.businessId !== businessId)
+    !Number.isSafeInteger(x?.version) ||
+    String(x?.businessId || "") !== organizationId ||
+    (businessId && x?.businessId !== businessId)
   )
     throw new HttpsError(
       "permission-denied",
@@ -88,12 +100,12 @@ async function representative(r: any, businessId?: string) {
   return {
     uid: u,
     actorRef,
-    businessId: String(x.businessId),
-    bindingVersion: x.version,
+    businessId: organizationId,
+    bindingVersion: x!.version,
     commandAuthority: {
-      ref: snap.ref,
+      ref: membershipRef,
       kind: "representative" as const,
-      businessId: String(x.businessId),
+      businessId: organizationId,
     },
   };
 }

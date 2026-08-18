@@ -51,8 +51,8 @@ test("Portal and Admin read the same stored receipt and never recalculate it", (
 
 test("cross-organization and unauthenticated access fail closed on both readers", () => {
   assert.match(src, /if\(requested&&requested!==orgId\)throw new HttpsError\("permission-denied","Cross-organization access denied\."\)/);
-  assert.match(src, /const uid=auth\(r\),membership=await member\(uid\)/, "partner reader requires an active membership");
-  assert.match(src, /await staff\(auth\(r\)\)/, "admin reader requires active staff");
+  assert.match(src, /const uid=await currentAccount\(r\),membership=await member\(uid\)/, "partner reader requires an active membership");
+  assert.match(src, /await staff\(await currentAccount\(r\)\)/, "admin reader requires active staff");
   assert.equal((src.match(/enforceAppCheck:true/g) || []).length >= 2, true);
 });
 
