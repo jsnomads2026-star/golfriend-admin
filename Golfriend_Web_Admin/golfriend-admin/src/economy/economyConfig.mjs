@@ -33,7 +33,55 @@ export const ECONOMY_POLICY_VERSIONS=deepFreeze([
     notice:'Initial Founder pricing authority. Commission is charged only under a signed, effective-dated agreement with verified activation.',
     prohibited:['OEM revenue','advertising revenue','commission on an unsigned course','commission backdated to a prior policy version'],
   },
+  {
+    version:'2026-08-18.v1',
+    effectiveFrom:'2026-08-18',
+    effectiveUntil:null,
+    approvedBy:'Founder',
+    /** Enterprise booking commission authority, unchanged from 2026-08-15.v1: 3%. */
+    bookingCommissionBps:300,
+    maxCommissionBps:300,
+    minCommissionBps:0,
+    /**
+     * Small Business founding subscription. Minor units of the stated currency, so no
+     * float ever reaches a statement. A future rate is a NEW version with its own
+     * effective date; Web, Portal and statements read this authority and are not rewritten.
+     */
+    smallBusinessSubscription:{currency:'USD',amountMinor:2900,period:'monthly'},
+    /** Worldwide free trial. 10000 bps = 100% discount, so nothing is due during it. */
+    trialDays:90,
+    trialDiscountBps:BASIS_POINT_SCALE,
+    /**
+     * The ONLY receivables Golfriend may invoice. This list is the overturn of the
+     * partner onboarding contract's `external_authority_required` default, and it is
+     * deliberately narrow: everything absent from it stays external money.
+     */
+    golfriendOwnedReceivables:['small_business_subscription','enterprise_attributed_commission','accepted_custom_work'],
+    notice:'Founding Small Business and Enterprise offers. Billing begins only after the 90-day trial, under an accepted agreement and verified activation. Contract wording has not completed legal review.',
+    prohibited:[
+      'OEM revenue','advertising revenue','commission on an unsigned course','commission backdated to a prior policy version',
+      'course tee-time payment','tournament entry fee','tournament prize','organizer funds','betting','stakes','escrow',
+      'Enterprise monthly subscription charged alongside attributed commission','commission on a booking without verified Golfriend attribution',
+      'Small Business booking commission','custom work billed without a separately accepted quote',
+    ],
+  },
 ]);
+
+/** Receivable kinds Golfriend may invoice on a given day. Absent kind → external money. */
+export function golfriendOwnedReceivables(at){const policy=economyPolicyFor(at);return policy?.golfriendOwnedReceivables??[];}
+
+/** Fail-closed: a receivable Golfriend is not authorized to invoice can never be billed. */
+export function isGolfriendOwnedReceivable(kind,at){return golfriendOwnedReceivables(at).includes(kind);}
+
+/** The Small Business subscription effective on a day, or null. Never a hardcoded literal. */
+export function smallBusinessSubscription(at){const policy=economyPolicyFor(at);return policy?.smallBusinessSubscription??null;}
+
+/** Trial terms effective on a day, or null. */
+export function trialTerms(at){
+  const policy=economyPolicyFor(at);
+  if(!policy||!Number.isInteger(policy.trialDays))return null;
+  return{days:policy.trialDays,discountBps:policy.trialDiscountBps};
+}
 
 /** The policy version effective on a given day, or null. Fail-closed: no day, no policy. */
 export function economyPolicyFor(at){

@@ -1,11 +1,16 @@
 import {createHash} from "node:crypto";
+import {BOOKING_COMMISSION_BPS} from "./partnerBillingDomain.js";
 
 export const PARTNER_SCHEMA = "golfriend.partner-application.v2";
 export const PARTNER_LOCALES = ["en", "th", "ko", "ja", "zh", "es", "fr", "de"] as const;
 export const PARTNER_STATES = ["draft", "submitted", "under_review", "info_needed", "approved", "rejected", "suspended"] as const;
 export const PARTNER_AGREEMENT_VERSION = "golfriend.course-partner.v1";
 export const PARTNER_AGREEMENT_DIGEST = "e16d5070c66bbf4b89beade4407b415def779076c71dbb48237db7b1157adc11";
-export const FOUNDING_COMMISSION_BPS = 300;
+/**
+ * Re-exported, never re-declared. A second literal here could silently diverge from the
+ * central pricing authority, so the rate has exactly one definition inside functions/.
+ */
+export const FOUNDING_COMMISSION_BPS = BOOKING_COMMISSION_BPS;
 export const PILOT_DAYS = 90;
 export const EVIDENCE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] as const;
 export const MAX_EVIDENCE_BYTES = 8 * 1024 * 1024;
