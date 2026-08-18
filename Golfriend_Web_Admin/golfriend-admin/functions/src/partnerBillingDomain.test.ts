@@ -34,12 +34,12 @@ test("Small Business trial statements show $29.00 normal, $29.00 discount and $0
   assert.equal(line.discountMinor, 2900);
   assert.equal(line.dueMinor, 0);
   assert.equal(line.discountReason, "trial_100_percent");
-  assert.deepEqual({ ...statement.totals }, { normalMinor: 2900, discountMinor: 2900, dueMinor: 0 });
+  assert.deepEqual({ ...statement.totals }, { normalMinor: 2900, discountMinor: 2900, dueMinor: 0, taxMinor: 0, payableMinor: 0 });
 });
 
 test("Small Business bills the normal subscription after the trial and never a commission", () => {
   const statement = buildPartnerStatement({ ...afterTrial, tier: "small_business" });
-  assert.deepEqual({ ...statement.totals }, { normalMinor: 2900, discountMinor: 0, dueMinor: 2900 });
+  assert.deepEqual({ ...statement.totals }, { normalMinor: 2900, discountMinor: 0, dueMinor: 2900, taxMinor: 0, payableMinor: 2900 });
   assert.equal(statement.lines.every(l => l.kind !== "enterprise_attributed_commission"), true);
   // Even if bookings are supplied, Small Business must fail closed rather than deduct commission.
   assert.throws(() => buildPartnerStatement({ ...afterTrial, tier: "small_business", attributedBookings: [booking("b1", 10000)] }), /SMALL_BUSINESS_COMMISSION_FORBIDDEN/);
@@ -50,13 +50,13 @@ test("Enterprise trial statements show the calculated commission fully discounte
   assert.equal(statement.lines.length, 2);
   // 3% of 20000 = 600, of 15000 = 450.
   assert.deepEqual(statement.lines.map(l => l.normalMinor), [600, 450]);
-  assert.deepEqual({ ...statement.totals }, { normalMinor: 1050, discountMinor: 1050, dueMinor: 0 });
+  assert.deepEqual({ ...statement.totals }, { normalMinor: 1050, discountMinor: 1050, dueMinor: 0, taxMinor: 0, payableMinor: 0 });
   assert.equal(statement.lines.every(l => l.discountReason === "trial_100_percent"), true);
 });
 
 test("Enterprise charges 3% only after the trial, and never a subscription alongside it", () => {
   const statement = buildPartnerStatement({ ...afterTrial, tier: "enterprise", attributedBookings: [booking("b1", 20000)] });
-  assert.deepEqual({ ...statement.totals }, { normalMinor: 600, discountMinor: 0, dueMinor: 600 });
+  assert.deepEqual({ ...statement.totals }, { normalMinor: 600, discountMinor: 0, dueMinor: 600, taxMinor: 0, payableMinor: 600 });
   assert.equal(statement.lines.some(l => l.kind === "small_business_subscription"), false, "Enterprise must not be double charged a subscription");
   assert.equal(commissionMinor(20000, BOOKING_COMMISSION_BPS), 600);
 });
