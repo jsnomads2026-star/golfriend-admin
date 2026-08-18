@@ -17,7 +17,22 @@ test('verified representative is staff-evidence backed',()=>assert.match(runtime
 test('agreement acceptance is server timestamped',()=>assert.match(runtime,/acceptedAt: at\(\)/));
 test('commission requires immutable approval record',()=>assert.match(runtime,/partner_contract_approvals/));
 test('unsigned candidates cannot invoice',()=>assert.match(runtime,/invoiceEligible: false/));
-test('applicant workflow preserved but not mounted as an authority fallback',()=>{assert.match(journey,/PartnerApplicationJourney/);assert.doesNotMatch(app,/PartnerApplicationJourney/);});
+// The applicant journey is ZONED, not absent. The frozen "never mounted" assertion made the
+// only applicant surface unreachable dead code, so no applicant could ever complete a real
+// application. The invariant that actually protects the Portal is: mounted beneath an explicit
+// APPLICANT route, and nowhere else. Route-class separation itself is proven behaviourally in
+// scripts/route-guard-verify.mjs; this check pins the mount site.
+test('applicant journey is mounted only inside the applicant zone',()=>{
+  assert.match(journey,/PartnerApplicationJourney/);
+  assert.match(app,/<Route path="\/apply\//,'explicit APPLICANT routes must exist');
+  const mounts=[...app.matchAll(/<PartnerApplicationJourney[\s/>]/g)];
+  assert.equal(mounts.length,1,'exactly one mount site');
+  const zone=app.indexOf('function Applicant(');
+  assert.ok(zone!==-1&&zone<mounts[0].index,'the mount must sit inside function Applicant(');
+  assert.doesNotMatch(app.slice(zone,mounts[0].index),/\nfunction /,'no other function may open between the applicant zone and the mount');
+  const dashboard=app.indexOf('function Dashboard(');
+  assert.ok(dashboard>mounts[0].index,'the privileged Dashboard must not contain the mount');
+});
 test('admin consumer mounted',()=>assert.match(app,/V2PartnerApplications/));
 test('callables exported',()=>['savePartnerApplicationDraftV2','uploadPartnerApplicationEvidenceV2','reviewPartnerApplicationV2'].forEach(name=>assert.match(index,new RegExp(name))));
 test('eight locale applicant selector',()=>assert.match(journey,/\["en", "th", "ko", "ja", "zh", "es", "fr", "de"\]/));
