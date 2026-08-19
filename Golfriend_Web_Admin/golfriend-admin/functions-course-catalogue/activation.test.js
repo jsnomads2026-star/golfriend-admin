@@ -70,6 +70,8 @@ test('guarded canary verifies binding metadata and restores disabled state in fi
   assert.match(canaryRunner,/binding\.version!==SECRET_VERSION/);
   assert.match(canaryRunner,/if\(checkpoint\.state!=='blocked'\)/);
   assert.match(canaryRunner,/canaryDetailsPerRun:0/);
+  assert.match(canaryRunner,/canaryJob\.name}:resume/);
+  assert.doesNotMatch(canaryRunner,/providerFunctions[^\n]*:resume/);
   const cleanup=canaryRunner.slice(canaryRunner.indexOf('}finally{'));
   assert.match(cleanup,/providerRequestsAllowed:false,canaryRequestsAllowed:false/);
   assert.match(cleanup,/state:'blocked'/);
