@@ -21,9 +21,19 @@ test('activation verifier rejects changed canonical key or value data',()=>{
 
 test('receipt-only mode writes one immutable receipt and never activates configuration',()=>{
   assert.match(producer,/RECEIPT_ONLY=process\.argv\.includes\('--write-receipt-only'\)/);
-  assert.match(producer,/if\(APPLY\|\|RECEIPT_ONLY\)await create\('course_catalogue_activation_receipts'/);
+  assert.match(producer,/if\(APPLY\|\|RECEIPT_ONLY\|\|SAFE_BIND\)await create\('course_catalogue_activation_receipts'/);
   assert.match(producer,/if\(APPLY\)await patch\('platform','golfApiCatalogueConfig'/);
   assert.doesNotMatch(producer,/if\(RECEIPT_ONLY\)[^\n]*golfApiCatalogueConfig/);
+});
+
+test('disabled binding mode is fail-closed and changes only receipt binding metadata',()=>{
+  assert.match(producer,/SAFE_BIND=process\.argv\.includes\('--bind-receipt-disabled'\)/);
+  assert.match(producer,/if\(config\.providerRequestsAllowed!==false\)throw Error\('PROVIDER_REQUESTS_MUST_REMAIN_DISABLED'\)/);
+  assert.match(producer,/if\(checkpoint\.state!=='blocked'\)throw Error\('CHECKPOINT_MUST_REMAIN_BLOCKED'\)/);
+  assert.match(producer,/matches\.length!==1\|\|matches\[0\]\.state!=='PAUSED'/);
+  assert.match(producer,/await patch\('platform','golfApiCatalogueConfig',\{requiredSecretVersion:SECRET_VERSION,bindingReceiptId:receiptId,updatedAt:verifiedAt\}\)/);
+  assert.doesNotMatch(producer,/if\(SAFE_BIND\)[^\n]*providerRequestsAllowed:true/);
+  assert.match(producer,/bindingState:'superseded',supersededByReceiptId:receiptId,supersededAt:verifiedAt/);
 });
 
 const services=['scheduledgolfapicatalogueincremental','scheduledgolfapicatalogueretries'];
