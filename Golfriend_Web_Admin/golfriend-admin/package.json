@@ -35,6 +35,7 @@
     "verify:coursepreview": "npm --prefix functions run test:preview",
     "preflight:golfapi": "node scripts/golf-api-commissioning-preflight.mjs",
     "test:golfapi-preflight": "node scripts/golf-api-commissioning-preflight.test.mjs",
+    "test:ingestion-diagnostic": "node scripts/course-ingestion-diagnostic.test.mjs",
     "verify:seed": "node scripts/lanec-seed-conformance-verify.mjs",
     "verify:nav": "node scripts/nav-reachability-verify.mjs",
     "verify:precommission": "node scripts/precommission-boundary-verify.mjs",

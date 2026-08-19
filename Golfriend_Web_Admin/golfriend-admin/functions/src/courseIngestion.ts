@@ -244,6 +244,7 @@ export const commitCourseRegionImport = onCall({
     estimatedCallsUsed: admin.firestore.FieldValue.increment(apiCallsUsed),
     lastCallAt: admin.firestore.FieldValue.serverTimestamp(),
     lastCommitJobId: jobId,
+    lastCommitAt: admin.firestore.FieldValue.serverTimestamp(),
     lastCommitResult: result,
   }, {merge: true});
 

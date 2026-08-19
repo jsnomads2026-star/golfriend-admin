@@ -47,7 +47,8 @@ export function healthOf(course) {
 export function summarizeCourses(courses) {
   const regions = new Set(courses.filter((c) => c.country !== 'Unknown').map((c) => `${c.country}|${c.region}`));
   const latest = courses.map((c) => c.lastSyncAt).filter(Boolean).sort().at(-1) || null;
-  return { total: courses.length, regions: regions.size, withCoordinates: courses.filter((c) => c.hasCoordinates).length,
+  const usable = courses.filter((c) => c.hasCoordinates && !c.requiresManualGPS).length;
+  return { total: courses.length, usable, regions: regions.size, withCoordinates: courses.filter((c) => c.hasCoordinates).length,
     missingCoordinates: courses.filter((c) => !c.hasCoordinates).length, incomplete: courses.filter((c) => c.incomplete).length, quality: courses.filter((c) => c.incomplete || c.stale).length,
     stale: courses.filter((c) => c.stale).length, duplicates: courses.filter((c) => c.duplicate).length, lastSuccessfulSync: latest };
 }
@@ -65,4 +66,23 @@ export function normalizeSyncResult(data) {
   if (!data || data.success !== true || data.mode !== 'preview') throw new Error('Preview response failed validation.');
   const summary = data.summary && typeof data.summary === 'object' ? data.summary : {};
   return { mode: 'preview', processed: Number(data.processed) || 0, productionWrites: 0, summary, results: Array.isArray(data.results) ? data.results : [], quota: data.quota ?? null };
+}
+
+export function normalizeIngestionStatus(raw) {
+  const empty = { source: 'golfapi.io v2.3', lastCommitAt: null, estimatedCallsUsed: null, added: null, skippedExisting: null, reviewRequired: null, failed: null, errors: null, lastCommitJobId: null };
+  if (!raw || typeof raw !== 'object') return empty;
+  const result = raw.lastCommitResult && typeof raw.lastCommitResult === 'object' ? raw.lastCommitResult : null;
+  const tsRaw = raw.lastCommitAt;
+  const tsMs = tsRaw && typeof tsRaw.toDate === 'function' ? tsRaw.toDate().getTime() : Date.parse(String(tsRaw || ''));
+  return {
+    source: 'golfapi.io v2.3',
+    lastCommitAt: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
+    estimatedCallsUsed: typeof raw.estimatedCallsUsed === 'number' ? raw.estimatedCallsUsed : null,
+    added: result ? (Number(result.added) || 0) : null,
+    skippedExisting: result ? (Number(result.skippedExisting) || 0) : null,
+    reviewRequired: result ? (Number(result.reviewRequired) || 0) : null,
+    failed: result ? (Number(result.failed) || 0) : null,
+    errors: result && Array.isArray(result.errors) ? result.errors.slice(0, 5) : null,
+    lastCommitJobId: typeof raw.lastCommitJobId === 'string' ? raw.lastCommitJobId : null,
+  };
 }

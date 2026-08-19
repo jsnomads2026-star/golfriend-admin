@@ -1,10 +1,11 @@
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../../firebaseConfig';
 
 export interface CourseOperationsService {
   loadCourses(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
+  loadIngestionStatus(): Promise<unknown>;
 }
 
 export const courseOperationsService: CourseOperationsService = {
@@ -16,5 +17,9 @@ export const courseOperationsService: CourseOperationsService = {
     const callable = httpsCallable(functions, 'syncCoursesFromProvider');
     const response = await callable(payload);
     return response.data;
+  },
+  async loadIngestionStatus() {
+    const snap = await getDoc(doc(db, 'platform', 'golfApiUsage'));
+    return snap.exists() ? snap.data() : null;
   },
 };
