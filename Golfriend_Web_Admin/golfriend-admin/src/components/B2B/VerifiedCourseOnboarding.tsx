@@ -25,9 +25,18 @@ export default function VerifiedCourseOnboarding(){
  if(phase==="unavailable")return <section><h2>{t.title}</h2><p role="alert">{t.unavailable}</p><p>{t.adminUnavailable}</p></section>;
  if(phase==="scope")return <section aria-labelledby={`${id}-scope-title`}><h2 id={`${id}-scope-title`}>{t.title}</h2><p>{t.chooseScope}</p><label htmlFor={`${id}-scope`}>{t.courseScope}<select id={`${id}-scope`} defaultValue="" onChange={e=>{const context=scopes[Number(e.target.value)];if(context){setDraft(x=>({...x,context,profile:{...x.profile,courseProfileAttemptId:profileAttempts.current[key(context)]||""}}));setAgreement(null);setAccepted(false);void load(context)}}}><option value="" disabled>{t.selectScope}</option>{scopes.map((x,index)=><option key={key(x)} value={index}>{x.organizationId} · {x.propertyId} · {x.courseId}</option>)}</select></label></section>;
  const status=view?.status??"draft",disabled=busy||locked.has(status)||view?.suspended===true,allDisclosed=Object.values(draft.disclosures).every(Boolean);
+ const currentStep=(() => {
+   if(status==="draft") return 0;
+   if(status==="submitted") return 3;
+   if(status==="under_review") return 4;
+   if(status==="changes_requested") return 2;
+   if(["approved_for_trial","trial_active","trial_expiring","trial_expired","conversion_review","active_partner","declined","suspended","withdrawn","unavailable"].includes(status)) return 4;
+   return 4;
+ })();
+ const boundedStep=Math.min(currentStep,t.stepLabels.length-1);
  return <section className="partner-application" aria-labelledby={`${id}-title`}>
   <header><h2 id={`${id}-title`}>{t.title}</h2><p>{t.intro}</p></header>
-  <nav aria-label={t.steps}><ol>{t.stepLabels.map((x,i)=><li key={x} aria-current={i===0?"step":undefined}>{x}</li>)}</ol></nav>
+  <nav aria-label={t.steps}><ol>{t.stepLabels.map((x,i)=><li key={x} aria-current={i===boundedStep?"step":undefined}>{x}</li>)}</ol></nav>
   <aside role="status" aria-live="polite"><strong>{t.status}: {(t.statuses as Record<string,string>)[status]??status}</strong><p>{t.truth}</p>{["changes_requested","approved_for_trial","conversion_review","declined","suspended"].includes(status)&&<p>{t.adminUnavailable}</p>}</aside>
   <form onSubmit={e=>{e.preventDefault();void run("save",()=>enterpriseCourseOnboardingService.saveDraft(draft.context,draft,view?.version??0,command("save")))}}>
    <fieldset disabled><legend>{t.scope}</legend>{field("context","membershipId",t.membershipId)}{field("context","organizationId",t.organizationId)}{field("context","propertyId",t.propertyId)}{field("context","courseId",t.courseId)}</fieldset>
