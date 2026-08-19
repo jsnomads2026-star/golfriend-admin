@@ -17,6 +17,7 @@ import {
   jhccDeliveryState,
   validateJhccPayload,
 } from '../src/components/admin/v2/acquisitionReportingModel.mjs';
+import { ADMIN_LOCALES } from '../src/components/admin/v2/adminNavigation.ts';
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const period = { start: '2026-07-01', end: '2026-07-31' };
@@ -176,6 +177,12 @@ assert.doesNotMatch(codeOnly(model + ui), /fetch\s*\(/);
 // False-claim vocabulary. "revenue" is permitted only in the limitation that excludes it.
 assert.doesNotMatch(model + ui, /JHCC received|transmission successful|delivered successfully|report sent|revenue total|revenue of/i);
 assert.match(ui, /Transmit to JHCC unavailable/);
+assert.match(ui, /const ACQUISITION_COPY:/);
+assert.match(ui, /ACQUISITION_COPY\[locale\]/);
+for (const locale of ADMIN_LOCALES) {
+  const found = new RegExp(`\\b${locale}:\\s*(\\{\\s*\\.{3}EN,|EN)`, 'i').test(ui);
+  assert.equal(found, true, `${locale} copy entry is present in ACQUISITION_COPY`);
+}
 assert.match(ui, /disabled=\{!transmitter\}/);
 assert.match(ui, /transmitter = null/);
 assert.match(ui, /authorization = null/);
