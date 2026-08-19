@@ -34,6 +34,8 @@ test('disabled binding mode is fail-closed and changes only receipt binding meta
   assert.match(producer,/await patch\('platform','golfApiCatalogueConfig',\{requiredSecretVersion:SECRET_VERSION,bindingReceiptId:receiptId,updatedAt:verifiedAt\}\)/);
   assert.doesNotMatch(producer,/if\(SAFE_BIND\)[^\n]*providerRequestsAllowed:true/);
   assert.match(producer,/bindingState:'superseded',supersededByReceiptId:receiptId,supersededAt:verifiedAt/);
+  assert.doesNotMatch(producer,/PREVIOUS_BINDING_RECEIPT_REQUIRED/);
+  assert.match(producer,/receipt\.bindingState!=='current'/);
 });
 
 const services=['scheduledgolfapicatalogueincremental','scheduledgolfapicatalogueretries'];
