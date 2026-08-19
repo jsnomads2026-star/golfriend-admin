@@ -8,7 +8,6 @@ import {
   query,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-import type { Lang } from './CourseInfo';
 
 // ─────────────────────────────────────────────────────────────
 // BookingHandoff — NON-FINANCIAL booking request/handoff for a
@@ -45,6 +44,8 @@ interface BookingMessage {
   createdAt?: { seconds?: number } | null;
 }
 
+type Lang = 'en' | 'th' | 'ko' | 'ja' | 'zh' | 'es' | 'fr' | 'de';
+
 const DICT: Record<Lang, Record<string, string>> = {
   en: {
     title: 'Request this tee-time',
@@ -55,20 +56,25 @@ const DICT: Record<Lang, Record<string, string>> = {
       'Booking a tee-time requires your Golfriend player account. Continue in the Golfriend app to sign in and complete this request — your bookings live there.',
     continueApp: 'Continue in the Golfriend app',
     requestBtn: 'Request booking',
+    requestBtnAria: 'Request this booking',
     requesting: 'Requesting…',
     booking_pending: 'Requested — awaiting course confirmation',
     booking_cancelled: 'Booking cancelled — the seat has been released',
     cancelBtn: 'Cancel booking',
+    cancelBtnAria: 'Cancel this booking request',
     cancelling: 'Cancelling…',
     messageTitle: 'Message the course',
     messagePlaceholder: 'Write a message to the course…',
+    messageInputAria: 'Message input for course',
     sendBtn: 'Send',
+    sendBtnAria: 'Send message',
     sending: 'Sending…',
     noMessages: 'No messages yet.',
     you: 'You',
     course: 'Course',
     errorGeneric: 'Could not complete the request. Please try again.',
     back: '← Back',
+    backAria: 'Return',
   },
   th: {
     title: 'ขอจองเวลาออกรอบนี้',
@@ -79,20 +85,199 @@ const DICT: Record<Lang, Record<string, string>> = {
       'การจองเวลาออกรอบต้องใช้บัญชีผู้เล่น Golfriend ของคุณ กรุณาดำเนินการต่อในแอป Golfriend เพื่อเข้าสู่ระบบและจองให้เสร็จสิ้น — การจองของคุณอยู่ที่นั่น',
     continueApp: 'ดำเนินการต่อในแอป Golfriend',
     requestBtn: 'ขอจอง',
+    requestBtnAria: 'ส่งคำขอจองนี้',
     requesting: 'กำลังส่งคำขอ…',
     booking_pending: 'ส่งคำขอแล้ว — รอสนามยืนยัน',
     booking_cancelled: 'ยกเลิกการจองแล้ว — คืนที่นั่งเรียบร้อย',
     cancelBtn: 'ยกเลิกการจอง',
+    cancelBtnAria: 'ยกเลิกคำขอจองนี้',
     cancelling: 'กำลังยกเลิก…',
     messageTitle: 'ส่งข้อความถึงสนาม',
     messagePlaceholder: 'เขียนข้อความถึงสนาม…',
+    messageInputAria: 'ช่องป้อนข้อความสำหรับส่งถึงสนาม',
     sendBtn: 'ส่ง',
+    sendBtnAria: 'ส่งข้อความ',
     sending: 'กำลังส่ง…',
     noMessages: 'ยังไม่มีข้อความ',
     you: 'คุณ',
     course: 'สนาม',
     errorGeneric: 'ไม่สามารถดำเนินการได้ กรุณาลองใหม่อีกครั้ง',
     back: '← ย้อนกลับ',
+    backAria: 'กลับ',
+  },
+  ko: {
+    title: '이 티타임을 요청하기',
+    when: '날짜/시간',
+    seatsLeft: '남은 좌석',
+    signInTitle: '예약하려면 로그인 필요',
+    signInBody:
+      '티타임 예약은 Golfriend 플레이어 계정이 필요합니다. Golfriend 앱에서 로그인하고 이 요청을 완료하세요. 예약은 해당 앱에서 관리됩니다.',
+    continueApp: 'Golfriend 앱에서 계속',
+    requestBtn: '요청',
+    requestBtnAria: '이 예약을 요청',
+    requesting: '요청 중…',
+    booking_pending: '요청됨 — 코스 확인 대기',
+    booking_cancelled: '예약이 취소되었습니다. 좌석이 반환되었습니다.',
+    cancelBtn: '예약 취소',
+    cancelBtnAria: '이 예약을 취소',
+    cancelling: '취소 중…',
+    messageTitle: '코스에 메시지 보내기',
+    messagePlaceholder: '코스에 보낼 메시지를 입력하세요…',
+    messageInputAria: '코스 메시지 입력',
+    sendBtn: '전송',
+    sendBtnAria: '메시지 전송',
+    sending: '전송 중…',
+    noMessages: '아직 메시지가 없습니다.',
+    you: '본인',
+    course: '코스',
+    errorGeneric: '요청을 완료할 수 없습니다. 다시 시도해 주세요.',
+    back: '← 뒤로',
+    backAria: '돌아가기',
+  },
+  ja: {
+    title: 'このティータイムをリクエスト',
+    when: '日時',
+    seatsLeft: '残り席',
+    signInTitle: '予約するにはサインイン',
+    signInBody:
+      'ティータイムを予約するにはGolfriendのプレイヤーアカウントが必要です。継続してサインインしこのリクエストを完了するにはGolfriendアプリを開いてください。予約情報はそちらで管理されます。',
+    continueApp: 'Golfriendアプリで続行',
+    requestBtn: 'リクエスト',
+    requestBtnAria: 'この予約をリクエスト',
+    requesting: 'リクエスト中…',
+    booking_pending: 'リクエスト送信済み — コースの確認待ち',
+    booking_cancelled: '予約がキャンセルされました — 席が解放されました',
+    cancelBtn: '予約をキャンセル',
+    cancelBtnAria: 'この予約をキャンセル',
+    cancelling: 'キャンセル中…',
+    messageTitle: 'コースにメッセージ',
+    messagePlaceholder: 'コースへメッセージを書く…',
+    messageInputAria: 'コース送信用のメッセージ入力',
+    sendBtn: '送信',
+    sendBtnAria: 'メッセージを送信',
+    sending: '送信中…',
+    noMessages: 'まだメッセージはありません。',
+    you: 'あなた',
+    course: 'コース',
+    errorGeneric: 'リクエストを完了できません。再試行してください。',
+    back: '← 戻る',
+    backAria: '戻る',
+  },
+  zh: {
+    title: '请求此时间段',
+    when: '时间',
+    seatsLeft: '剩余席位',
+    signInTitle: '请先登录以预订',
+    signInBody:
+      '预订时间段需要您的 Golfriend 玩家账号。请在 Golfriend 应用中登录并完成此请求，您的预订记录保留在该应用中。',
+    continueApp: '在 Golfriend 应用中继续',
+    requestBtn: '请求',
+    requestBtnAria: '请求此预订',
+    requesting: '请求中…',
+    booking_pending: '请求已提交 — 等待球场确认',
+    booking_cancelled: '预订已取消 — 座位已释放',
+    cancelBtn: '取消预订',
+    cancelBtnAria: '取消此预订',
+    cancelling: '取消中…',
+    messageTitle: '给球场发消息',
+    messagePlaceholder: '写给球场的消息…',
+    messageInputAria: '球场消息输入',
+    sendBtn: '发送',
+    sendBtnAria: '发送消息',
+    sending: '发送中…',
+    noMessages: '尚无消息。',
+    you: '你',
+    course: '球场',
+    errorGeneric: '无法完成请求，请重试。',
+    back: '← 返回',
+    backAria: '返回',
+  },
+  es: {
+    title: 'Solicitar este horario',
+    when: 'Cuándo',
+    seatsLeft: 'Plazas restantes',
+    signInTitle: 'Inicia sesión para reservar',
+    signInBody:
+      'Reservar un horario requiere tu cuenta de jugador Golfriend. Continúa en la app de Golfriend para iniciar sesión y completar esta solicitud; tus reservas están allí.',
+    continueApp: 'Continuar en la app de Golfriend',
+    requestBtn: 'Solicitar',
+    requestBtnAria: 'Solicitar esta reserva',
+    requesting: 'Solicitando…',
+    booking_pending: 'Solicitud enviada — pendiente de confirmación del campo',
+    booking_cancelled: 'Reserva cancelada — el asiento fue liberado',
+    cancelBtn: 'Cancelar reserva',
+    cancelBtnAria: 'Cancelar esta reserva',
+    cancelling: 'Cancelando…',
+    messageTitle: 'Enviar mensaje al campo',
+    messagePlaceholder: 'Escribe un mensaje al campo…',
+    messageInputAria: 'Entrada de mensaje al campo',
+    sendBtn: 'Enviar',
+    sendBtnAria: 'Enviar mensaje',
+    sending: 'Enviando…',
+    noMessages: 'Aún no hay mensajes.',
+    you: 'Tú',
+    course: 'Campo',
+    errorGeneric: 'No se pudo completar la solicitud. Intenta nuevamente.',
+    back: '← Volver',
+    backAria: 'Volver',
+  },
+  fr: {
+    title: 'Demander ce créneau',
+    when: 'Quand',
+    seatsLeft: 'places restantes',
+    signInTitle: 'Connectez-vous pour réserver',
+    signInBody:
+      'La réservation d’un départ nécessite votre compte joueur Golfriend. Continuez dans l’application Golfriend pour vous connecter et finaliser cette demande — vos réservations y sont stockées.',
+    continueApp: 'Continuer dans l\'application Golfriend',
+    requestBtn: 'Demander',
+    requestBtnAria: 'Demander cette réservation',
+    requesting: 'Demande en cours…',
+    booking_pending: 'Demandé — en attente de confirmation du parcours',
+    booking_cancelled: 'Réservation annulée — la place a été libérée',
+    cancelBtn: 'Annuler la réservation',
+    cancelBtnAria: 'Annuler cette réservation',
+    cancelling: 'Annulation…',
+    messageTitle: 'Envoyer un message au parcours',
+    messagePlaceholder: 'Écris un message au parcours…',
+    messageInputAria: 'Champ de message au parcours',
+    sendBtn: 'Envoyer',
+    sendBtnAria: 'Envoyer le message',
+    sending: 'Envoi…',
+    noMessages: 'Aucun message pour le moment.',
+    you: 'Vous',
+    course: 'Parcours',
+    errorGeneric: 'Impossible de terminer la demande. Réessayez.',
+    back: '← Retour',
+    backAria: 'Retour',
+  },
+  de: {
+    title: 'Diese Tischnummer anfragen',
+    when: 'Wann',
+    seatsLeft: 'freie Plätze',
+    signInTitle: 'Zum Buchen anmelden',
+    signInBody:
+      'Für eine Tischebuchung ist Ihr Golfriend-Spieleraccount erforderlich. Bitte fahren Sie in der Golfriend-App fort, um sich anzumelden und diese Anfrage abzuschließen — Ihre Buchungen liegen dort.',
+    continueApp: 'In der Golfriend-App fortfahren',
+    requestBtn: 'Anfragen',
+    requestBtnAria: 'Diese Buchung anfragen',
+    requesting: 'Anfrage läuft…',
+    booking_pending: 'Angefragt — auf Bestätigung des Kurses warten',
+    booking_cancelled: 'Buchung storniert — der Platz wurde freigegeben',
+    cancelBtn: 'Buchung stornieren',
+    cancelBtnAria: 'Diese Buchung stornieren',
+    cancelling: 'Wird storniert…',
+    messageTitle: 'Nachricht an Kurs senden',
+    messagePlaceholder: 'Nachricht an den Kurs schreiben…',
+    messageInputAria: 'Nachrichteneingabe für Kurs',
+    sendBtn: 'Senden',
+    sendBtnAria: 'Nachricht senden',
+    sending: 'Wird gesendet…',
+    noMessages: 'Noch keine Nachrichten.',
+    you: 'Sie',
+    course: 'Kurs',
+    errorGeneric: 'Vorgang konnte nicht abgeschlossen werden. Bitte erneut versuchen.',
+    back: '← Zurück',
+    backAria: 'Zurück',
   },
 };
 
@@ -158,7 +343,11 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
   return (
     <div style={styles.card}>
       {onBack && (
-        <button style={styles.backBtn} onClick={onBack}>
+        <button
+          style={styles.backBtn}
+          onClick={onBack}
+          aria-label={t('backAria')}
+        >
           {t('back')}
         </button>
       )}
@@ -182,7 +371,9 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
         <div style={styles.handoff}>
           <p style={styles.handoffTitle}>{t('signInTitle')}</p>
           <p style={styles.handoffBody}>{t('signInBody')}</p>
-          <div style={styles.appBadge}>{t('continueApp')}</div>
+          <div style={styles.appBadge} aria-label={t('continueApp')}>
+            {t('continueApp')}
+          </div>
         </div>
       )}
 
@@ -195,6 +386,7 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
           }}
           onClick={handleRequest}
           disabled={phase === 'requesting'}
+          aria-label={t('requestBtnAria')}
         >
           {phase === 'requesting' ? t('requesting') : t('requestBtn')}
         </button>
@@ -326,6 +518,7 @@ function ActiveBooking({
         }}
         onClick={handleCancel}
         disabled={cancelling}
+        aria-label={t('cancelBtnAria')}
       >
         {cancelling ? t('cancelling') : t('cancelBtn')}
       </button>
@@ -367,7 +560,7 @@ function ActiveBooking({
               if (e.key === 'Enter' && !sending) handleSend();
             }}
             placeholder={t('messagePlaceholder')}
-            aria-label={t('messageTitle')}
+            aria-label={t('messageInputAria')}
           />
           <button
             style={{
@@ -376,6 +569,7 @@ function ActiveBooking({
             }}
             onClick={handleSend}
             disabled={sending || !draft.trim()}
+            aria-label={t('sendBtnAria')}
           >
             {sending ? t('sending') : t('sendBtn')}
           </button>
