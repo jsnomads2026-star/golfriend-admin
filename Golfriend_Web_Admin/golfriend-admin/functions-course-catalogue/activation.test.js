@@ -71,14 +71,28 @@ test('guarded canary verifies binding metadata and restores disabled state in fi
   assert.match(canaryRunner,/d\.activationRevisionBindingsMatch\(receipt\.functionRevisions,expectedServices,service,liveRevisions\[service\]\)/);
   assert.match(canaryRunner,/binding\.version!==SECRET_VERSION/);
   assert.match(canaryRunner,/if\(checkpoint\.state!=='blocked'\)/);
+  assert.match(canaryRunner,/config\.canaryRequestsAllowed!==false/);
+  assert.match(canaryRunner,/currentDocument:\{updateTime\}/);
+  assert.match(canaryRunner,/let canaryJob=null,runId=null,result=null,armed=false/);
+  assert.match(canaryRunner,/if\(job\.state!=='PAUSED'\)throw Error\(`SCHEDULER_NOT_PAUSED/);
   assert.match(canaryRunner,/canaryDetailsPerRun:0/);
   assert.match(canaryRunner,/canaryJob\.name}:resume/);
   assert.doesNotMatch(canaryRunner,/providerFunctions[^\n]*:resume/);
   const cleanup=canaryRunner.slice(canaryRunner.indexOf('}finally{'));
+  assert.match(cleanup,/if\(armed\)/);
   assert.match(cleanup,/providerRequestsAllowed:false,canaryRequestsAllowed:false/);
   assert.match(cleanup,/state:'blocked'/);
   assert.match(cleanup,/:pause/);
-  assert.equal((canaryRunner.match(/canaryJob\.name}:pause/g)||[]).length,1);
+  assert.equal((canaryRunner.match(/job\.name}:pause/g)||[]).length,1);
+});
+
+test('guarded canary requires durable completed settlement evidence',()=>{
+  assert.match(canaryRunner,/get\('golf_api_quota_evidence',result\.providerEvidenceId\)/);
+  assert.match(canaryRunner,/reservation\.status!=='completed'/);
+  assert.match(canaryRunner,/IMMUTABLE_QUOTA_EVIDENCE_INVALID/);
+  assert.match(canaryRunner,/DURABLE_PROVIDER_OBSERVATION_INVALID/);
+  assert.match(canaryRunner,/QUOTA_LEDGER_TRANSITION_INVALID/);
+  assert.match(canaryRunner,/result\.quotaAfter\.weightedCompleted,result\.quotaBefore\.weightedCompleted\+\.1/);
 });
 
 test('deployed-state evidence includes paused canary and current activation revision binding',()=>{
