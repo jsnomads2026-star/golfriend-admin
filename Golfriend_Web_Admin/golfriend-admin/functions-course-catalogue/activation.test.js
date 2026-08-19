@@ -102,6 +102,14 @@ test('deployed-state evidence includes paused canary and current activation revi
   assert.match(deployedState,/activationBinding:/);
 });
 
+test('activation metadata binds calibration provider authority without inventing a calibration scheduler',()=>{
+  assert.match(producer,/runGolfApiCalibrationCanary/);
+  assert.match(producer,/scheduled=\['scheduledGolfApiCatalogueIncremental','scheduledGolfApiCatalogueRetries','scheduledGolfApiCatalogueCanary'\]/);
+  assert.match(deployedState,/runGolfApiCalibrationCanary/);
+  assert.match(canaryRunner,/calibrationFunction='runGolfApiCalibrationCanary'/);
+  assert.doesNotMatch(producer,/scheduled=\[[^\]]*runGolfApiCalibrationCanary/);
+});
+
 test('failed canary reconciliation records an immutable blocker without ledger mutation',()=>{
   assert.match(failedCanaryReconciliation,/d\.assessCanaryAccountingEvidence\(source\)/);
   assert.match(failedCanaryReconciliation,/blocked_insufficient_immutable_evidence/);

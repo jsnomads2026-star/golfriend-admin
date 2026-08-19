@@ -22,6 +22,8 @@ try{
   await assertFails(getDoc(doc(signedIn,'golf_api_pending_settlements','reservation-1')));
   await assertFails(getDoc(doc(signedIn,'course_catalogue_activation_receipts','receipt-1')));
   await assertFails(getDoc(doc(signedIn,'golf_api_canary_receipts','receipt-1')));
+  await assertFails(getDoc(doc(signedIn,'golf_api_calibration_receipts','receipt-1')));
+  await assertFails(getDoc(doc(signedIn,'golf_api_calibration_proposals','proposal-1')));
   await assertFails(getDoc(doc(signedIn,'golf_api_canary_reconciliation_receipts','receipt-1')));
   await assertFails(getDoc(doc(signedIn,'course_catalogue_deployed_state_receipts','receipt-1')));
   assert.ok(true);

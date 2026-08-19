@@ -99,6 +99,8 @@ service cloud.firestore {
     match /course_catalogue_page_cache/{document=**} { allow read, write: if false; }
     match /course_catalogue_activation_receipts/{document=**} { allow read, write: if false; }
     match /golf_api_canary_receipts/{document=**} { allow read, write: if false; }
+    match /golf_api_calibration_receipts/{document=**} { allow read, write: if false; }
+    match /golf_api_calibration_proposals/{document=**} { allow read, write: if false; }
     match /golf_api_canary_reconciliation_receipts/{document=**} { allow read, write: if false; }
     match /course_catalogue_deployed_state_receipts/{document=**} { allow read, write: if false; }
   }
