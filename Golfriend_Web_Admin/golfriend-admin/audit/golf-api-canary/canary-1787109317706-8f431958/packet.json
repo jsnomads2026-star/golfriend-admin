@@ -1,0 +1,150 @@
+{
+  "schema": "golfriend.golf-api-canary-operational-evidence.v1",
+  "immutable": true,
+  "canonicalization": "recursive-lexicographic-json-v1",
+  "capturedAt": "2026-08-19T03:22:11.701Z",
+  "projectId": "golfriend-v2",
+  "region": "asia-southeast1",
+  "providerRequestsDuringExport": 0,
+  "secretValueAccessed": false,
+  "sourceReads": [
+    {"path":"course_catalogue_activation_receipts/rotation-2-e9095a6dda494571","found":true,"createTime":"2026-08-19T03:05:51.919726Z","updateTime":"2026-08-19T03:05:51.919726Z"},
+    {"path":"golf_api_canary_receipts/canary-1787109317706-8f431958","found":true,"createTime":"2026-08-19T03:15:23.645017Z","updateTime":"2026-08-19T03:15:23.645017Z"},
+    {"path":"golf_api_quota_evidence/canary-1787109317706-8f431958-20291da5-c734-41ed-9d62-cc6600a69466","found":true,"createTime":"2026-08-19T03:15:23.380220Z","updateTime":"2026-08-19T03:15:23.380220Z"},
+    {"path":"golf_api_quota_reservations/20291da5-20291da5-c734-41ed-9d62-cc6600a69466","found":false,"note":"requested ID contains a duplicated prefix"},
+    {"path":"golf_api_quota_reservations/20291da5-c734-41ed-9d62-cc6600a69466","found":true,"createTime":"2026-08-19T03:15:19.892804Z","updateTime":"2026-08-19T03:15:23.380220Z","note":"reservation ID referenced by immutable quota evidence"},
+    {"path":"golf_api_quota/2026-08","found":true,"createTime":"2026-08-17T07:15:49.279153Z","updateTime":"2026-08-19T03:15:23.380220Z"},
+    {"path":"platform/golfApiCatalogueConfig","found":true,"createTime":"2026-08-19T00:00:07.590916Z","updateTime":"2026-08-19T03:15:23.776086Z"},
+    {"path":"course_acquisition_checkpoints/golf-api","found":true,"createTime":"2026-08-17T07:15:49.441317Z","updateTime":"2026-08-19T03:15:23.810449Z"},
+    {"path":"cloudfunctions.googleapis.com/v2/projects/golfriend-v2/locations/asia-southeast1/functions","found":true},
+    {"path":"run.googleapis.com/v2/projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueincremental","found":true},
+    {"path":"run.googleapis.com/v2/projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueretries","found":true},
+    {"path":"run.googleapis.com/v2/projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicataloguecanary","found":true},
+    {"path":"cloudscheduler.googleapis.com/v1/projects/golfriend-v2/locations/asia-southeast1/jobs","found":true}
+  ],
+  "activationReceipt": {
+    "documentId": "rotation-2-e9095a6dda494571",
+    "state": "verified",
+    "bindingState": "current",
+    "immutable": true,
+    "payload": {
+      "projectId": "golfriend-v2",
+      "secretName": "GOLF_API_KEY",
+      "secretVersion": "2",
+      "secretVersionState": "ENABLED",
+      "functionRevisions": {
+        "scheduledgolfapicatalogueincremental": "scheduledgolfapicatalogueincremental-00010-wez",
+        "scheduledgolfapicataloguecanary": "scheduledgolfapicataloguecanary-00004-zos",
+        "scheduledgolfapicatalogueretries": "scheduledgolfapicatalogueretries-00005-xom"
+      },
+      "verifiedAt": "2026-08-19T03:05:52.948Z"
+    },
+    "digest": "e9095a6dda4945716575f3bd7dfcabbaac6ca37180fee7372d92bb956acdc5f0"
+  },
+  "canaryReceipt": {
+    "schema": "golfriend.golf-api-canary-receipt.v1",
+    "projectId": "golfriend-v2",
+    "runId": "canary-1787109317706-8f431958",
+    "receiptId": "canary-1787109317706-8f431958",
+    "bindingReceiptId": "rotation-2-e9095a6dda494571",
+    "requestedPath": "/api/v2.3/clubs?pageSize=200",
+    "detailsPerRun": 0,
+    "providerRequestCount": 1,
+    "weightedAmount": 0.1,
+    "responseValidation": {"reason":null,"valid":true,"clubCount":200,"numAllClubs":29440,"requestedPageSize":200,"apiRequestsLeft":3902.3},
+    "providerRemaining": 3902.3,
+    "responseDigest": "715f7aac5c3f1cdd9a198f806f321d9f185cd129dbf6b2d38e73a70f3831f103",
+    "providerEvidenceId": "canary-1787109317706-8f431958-20291da5-c734-41ed-9d62-cc6600a69466",
+    "quotaBefore": {"weightedReleased":0,"configuredBudget":500,"weightedReserved":0,"emergencyReserve":100,"weightedFailed":0.1,"weightedCompleted":94.29999999999998,"providerReportedRemaining":3907.7},
+    "quotaAfter": {"weightedCompleted":94.39999999999998,"emergencyReserve":100,"weightedReserved":0,"configuredBudget":500,"weightedReleased":0,"providerReportedRemaining":3902.3,"weightedFailed":0.1},
+    "recordCountsBefore": {"quarantine":1,"courses":3348,"retries":38129},
+    "recordCountsAfter": {"quarantine":1,"retries":38129,"courses":3348},
+    "zeroCourseWrites": true,
+    "startedAt": "2026-08-19T03:15:19.539Z",
+    "completedAt": "2026-08-19T03:15:23.612Z",
+    "failure": null,
+    "immutable": true,
+    "serverCreatedAt": "2026-08-19T03:15:23.633Z",
+    "digest": "b03008cd238f18c85f7ab787aa2c66c8a9127888b0adc4b642a6c113240e7f9b"
+  },
+  "quotaEvidence": {
+    "documentId": "canary-1787109317706-8f431958-20291da5-c734-41ed-9d62-cc6600a69466",
+    "payload": {
+      "schema": "golfriend.golf-api-quota-evidence.v1",
+      "runId": "canary-1787109317706-8f431958",
+      "reservationId": "20291da5-c734-41ed-9d62-cc6600a69466",
+      "cost": 0.1,
+      "providerReportedRemaining": 3902.3,
+      "responseDigest": "715f7aac5c3f1cdd9a198f806f321d9f185cd129dbf6b2d38e73a70f3831f103",
+      "observedAt": "2026-08-19T03:15:23.070Z",
+      "immutable": true
+    },
+    "derivedDigest": "d1bb625ee443ddabd50c4501a754348bfe27b31642449e3b6809317e2fcabc5d"
+  },
+  "reservation": {
+    "documentId": "20291da5-c734-41ed-9d62-cc6600a69466",
+    "schema": "golfriend.golf-api-reservation.v1",
+    "reservationId": "20291da5-c734-41ed-9d62-cc6600a69466",
+    "runId": "canary-1787109317706-8f431958",
+    "pathDigest": "b3732b739280514b1eb9747487dbe5fcbf56100f153dd200e838b7515b14993a",
+    "cost": 0.1,
+    "status": "completed",
+    "providerReportedRemaining": 3902.3,
+    "responseDigest": "715f7aac5c3f1cdd9a198f806f321d9f185cd129dbf6b2d38e73a70f3831f103",
+    "createdAt": "2026-08-19T03:15:19.883Z",
+    "requestStartedAt": "2026-08-19T03:15:19.979Z",
+    "responseObservedAt": "2026-08-19T03:15:23.070Z",
+    "settledAt": "2026-08-19T03:15:23.373Z",
+    "expiresAt": "2026-08-19T03:17:19.858Z"
+  },
+  "quotaLedger": {
+    "documentId": "2026-08",
+    "schema": "golfriend.golf-api-quota-ledger.v3",
+    "configuredBudget": 500,
+    "emergencyReserve": 100,
+    "weightedCompleted": 94.39999999999998,
+    "weightedFailed": 0.1,
+    "weightedReserved": 0,
+    "weightedReleased": 0,
+    "providerReportedRemaining": 3902.3,
+    "providerEvidenceAt": "2026-08-19T03:15:23.373Z",
+    "lastSettledRunId": "canary-1787109317706-8f431958",
+    "providerRequestsAllowed": false,
+    "rotationSecretVersion": "2",
+    "updatedAt": "2026-08-19T03:15:23.373Z"
+  },
+  "finalSafetyState": {
+    "configuration": {
+      "bindingReceiptId": "rotation-2-e9095a6dda494571",
+      "canaryBindingReceiptId": "rotation-2-e9095a6dda494571",
+      "providerRequestsAllowed": false,
+      "canaryRequestsAllowed": false,
+      "enabled": false,
+      "canaryState": "consumed",
+      "canaryRunId": "canary-1787109317706-8f431958",
+      "canaryDetailsPerRun": 0,
+      "requiredSecretVersion": "2"
+    },
+    "checkpoint": {
+      "state": "blocked",
+      "providerRequestsAllowed": false,
+      "leaseToken": null,
+      "leaseExpiresAtMs": 0,
+      "stopReason": "CANARY_COMPLETE",
+      "updatedAt": "2026-08-19T03:15:25.239Z"
+    }
+  },
+  "deployedMetadata": {
+    "providerFunctions": {
+      "scheduledGolfApiCatalogueIncremental": {"state":"ACTIVE","service":"scheduledgolfapicatalogueincremental","revisionResource":"projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueincremental/revisions/scheduledgolfapicatalogueincremental-00010-wez","secretBinding":{"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}},
+      "scheduledGolfApiCatalogueRetries": {"state":"ACTIVE","service":"scheduledgolfapicatalogueretries","revisionResource":"projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueretries/revisions/scheduledgolfapicatalogueretries-00005-xom","secretBinding":{"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}},
+      "scheduledGolfApiCatalogueCanary": {"state":"ACTIVE","service":"scheduledgolfapicataloguecanary","revisionResource":"projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicataloguecanary/revisions/scheduledgolfapicataloguecanary-00004-zos","secretBinding":{"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}}
+    },
+    "schedulers": {
+      "scheduledGolfApiCatalogueIncremental": {"state":"PAUSED","schedule":"every day 02:20","timeZone":"Asia/Bangkok"},
+      "scheduledGolfApiCatalogueRetries": {"state":"PAUSED","schedule":"every day 03:10","timeZone":"Asia/Bangkok"},
+      "scheduledGolfApiCatalogueCanary": {"state":"PAUSED","schedule":"0 0 1 1 *","timeZone":"Asia/Bangkok","lastAttemptTime":"2026-08-19T03:15:17.933576Z"}
+    }
+  },
+  "packetDigest": "91142bade1bd8926dbe4b09289f2dd13c2b3c8fb39ab14da527021b7cae186f3"
+}
