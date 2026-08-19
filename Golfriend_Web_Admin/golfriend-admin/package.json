@@ -45,6 +45,7 @@
     "verify:small-business-surfaces": "node scripts/small-business-surfaces-verify.mjs",
     "verify:small-business-subscription-ui": "node scripts/small-business-subscription-ui-verify.mjs",
     "verify:enterprise-commercial-ui": "node scripts/enterprise-commercial-ui-verify.mjs",
+    "verify:enterprise-receivables-ui": "node scripts/enterprise-receivables-ui-verify.mjs",
     "verify:small-business-monday-world": "node --test scripts/small-business-monday-world.test.mjs && node scripts/small-business-monday-world.mjs",
     "test:small-business-monday-consumer": "node --test scripts/small-business-monday-portal-consumer.test.mjs",
     "gate:i18n": "npm run test:i18n && npm run verify:enterprise-member-admin-locale",

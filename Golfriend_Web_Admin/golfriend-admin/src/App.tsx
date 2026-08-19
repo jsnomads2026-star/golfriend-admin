@@ -55,6 +55,7 @@ import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
 import V2PartnerApplications from './components/admin/v2/V2PartnerApplications';
 import V2PartnerAuthority from './components/admin/v2/V2PartnerAuthority';
+import EnterpriseReceivablesAdmin from './components/admin/v2/EnterpriseReceivablesAdmin';
 import V2EnterpriseMemberRequests from './components/admin/v2/V2EnterpriseMemberRequests';
 import V2SmallBusinessReview from './components/admin/v2/V2SmallBusinessReview';
 import V2SmallBusinessReadiness from './components/admin/v2/V2SmallBusinessReadiness';
@@ -400,7 +401,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
     {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
     {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingProviderPublicationV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerApplications />}
-    {activeArea === 'partners' && <V2PartnerAuthority />}
+    {activeArea === 'partners' && <><V2PartnerAuthority /><EnterpriseReceivablesAdmin /></>}
     {activeArea === 'analytics' && <V2CountryUserAnalytics />}
     {activeArea === 'tee-analytics' && <V2TeeEconomyAnalytics />}
     {activeArea === 'partners' && <V2PartnerOperations />}

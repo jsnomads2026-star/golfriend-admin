@@ -454,6 +454,7 @@ import BookingProviderPublicationV2 from './BookingProviderPublicationV2';
 import EnterpriseReporting from './enterprise/EnterpriseReporting';
 import BillingBoundary from './enterprise/BillingBoundary';
 import EnterpriseCommercialOperations from './enterprise/EnterpriseCommercialOperations';
+import EnterpriseReceivablesCourse from './enterprise/EnterpriseReceivablesCourse';
 import EnterprisePartnerSupport from './enterpriseSupport/EnterprisePartnerSupport';
 
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
@@ -640,7 +641,7 @@ export default function EnterpriseDashboard({ partnerData }: PartnerDashboardPro
         {activeTab === 'venues' && <><VerifiedCourseOnboarding /><PartnerAuthorityConsole /><CourseAvailabilityV2 /><VenueManager partnerUid={authUid} /></>}
         {activeTab === 'staff' && <StaffRoles partnerUid={authUid} />}
         {activeTab === 'reporting' && <EnterpriseReporting partnerUid={authUid} />}
-        {activeTab === 'billing' && <><BillingBoundary partnerUid={authUid} /><EnterpriseCommercialOperations /></>}
+        {activeTab === 'billing' && <><BillingBoundary partnerUid={authUid} /><EnterpriseCommercialOperations /><EnterpriseReceivablesCourse /></>}
         {activeTab === 'support' && <EnterprisePartnerSupport />}
       </main>
     </div>
