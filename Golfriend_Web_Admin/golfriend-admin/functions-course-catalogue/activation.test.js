@@ -18,3 +18,10 @@ test('activation verifier rejects changed canonical key or value data',()=>{
   assert.equal(d.activationReceiptMatches({...payload,functionRevisions:{service:'revision-b'}},receiptDigest),false);
   assert.equal(d.activationReceiptMatches({...payload,unexpected:'value'},receiptDigest),false);
 });
+
+test('receipt-only mode writes one immutable receipt and never activates configuration',()=>{
+  assert.match(producer,/RECEIPT_ONLY=process\.argv\.includes\('--write-receipt-only'\)/);
+  assert.match(producer,/if\(APPLY\|\|RECEIPT_ONLY\)await create\('course_catalogue_activation_receipts'/);
+  assert.match(producer,/if\(APPLY\)await patch\('platform','golfApiCatalogueConfig'/);
+  assert.doesNotMatch(producer,/if\(RECEIPT_ONLY\)[^\n]*golfApiCatalogueConfig/);
+});
