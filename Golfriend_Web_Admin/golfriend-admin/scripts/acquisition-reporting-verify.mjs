@@ -176,17 +176,147 @@ assert.doesNotMatch(codeOnly(model + ui), /firebase|firestore|addDoc|setDoc|upda
 assert.doesNotMatch(codeOnly(model + ui), /fetch\s*\(/);
 // False-claim vocabulary. "revenue" is permitted only in the limitation that excludes it.
 assert.doesNotMatch(model + ui, /JHCC received|transmission successful|delivered successfully|report sent|revenue total|revenue of/i);
-assert.match(ui, /Transmit to JHCC unavailable/);
-assert.match(ui, /const ACQUISITION_COPY:/);
 assert.match(ui, /ACQUISITION_COPY\[locale\]/);
+assert.match(ui, /const ACQUISITION_COPY:/);
+assert.match(ui, /const STAGE_LABELS:\s*Record<AdminLocale, LocaleMap>/);
+assert.match(ui, /const CONTRACT_STATE_LABELS:\s*Record<AdminLocale, LocaleMap>/);
+assert.match(ui, /const ATTRIBUTION_LABELS:\s*Record<AdminLocale, LocaleMap>/);
+
+const extractObjectBlock = (source, anchor) => {
+  const anchorIndex = source.indexOf(anchor);
+  if (anchorIndex < 0) return '';
+  const openIndex = source.indexOf('{', anchorIndex);
+  if (openIndex < 0) return '';
+
+  let depth = 0;
+  let inString = false;
+  let quoteChar = '';
+  let escaped = false;
+
+  for (let i = openIndex; i < source.length; i += 1) {
+    const char = source[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === quoteChar) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      inString = true;
+      quoteChar = char;
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(openIndex + 1, i);
+      }
+    }
+  }
+  return '';
+};
 for (const locale of ADMIN_LOCALES) {
   const found = new RegExp(`\\b${locale}:\\s*(\\{\\s*\\.{3}EN,|EN)`, 'i').test(ui);
   assert.equal(found, true, `${locale} copy entry is present in ACQUISITION_COPY`);
+  const localeAnchor = locale === 'en' ? 'const EN = {' : `${locale}: {`;
+  const block = extractObjectBlock(
+    ui,
+    localeAnchor.includes('const EN') ? 'const EN = {' : `  ${localeAnchor}`,
+  );
+  if (block === '') {
+    throw new Error(`Unable to extract copy block for locale ${locale}`);
+  }
+  const baseCopyBlock = extractObjectBlock(ui, 'const EN = {');
+  const required = [
+    'previewSub:',
+    'header:',
+    'title:',
+    'description:',
+    'previewTitle:',
+    'periodStart:',
+    'periodEnd:',
+    'generate:',
+    'fail:',
+    'loading:',
+    'reload:',
+    'reportStatusNo:',
+    'reportStatusSuffix:',
+    'reportStatusPrefix:',
+    'statusScreen:',
+    'statusAuthorization:',
+    'statusTransmitter:',
+    'statusGenerated:',
+    'prospects:',
+    'countries:',
+    'commissionEffective:',
+    'opportunityEvidenceOnly:',
+    'byCountry:',
+    'byCourse:',
+    'country:',
+    'prospectsHeader:',
+    'commissionEffectiveHeader:',
+    'attribution:',
+    'bookingInterest:',
+    'confirmedBookings:',
+    'course:',
+    'countryRegion:',
+    'stage:',
+    'contract:',
+    'commission:',
+    'contacts:',
+    'nextFollowUp:',
+    'withheld:',
+    'partial:',
+    'noSchedule:',
+    'jhccContract:',
+    'privacyStatus:',
+    'privacyOk:',
+    'privacyBlocked:',
+    'deliveryStatus:',
+    'deliveryStatusFallback:',
+    'gatePrivacy:',
+    'gateAuthorization:',
+    'gateTransmitter:',
+    'stateYes:',
+    'stateNo:',
+    'stateApproved:',
+    'stateNotApproved:',
+    'stateMounted:',
+    'stateNotMounted:',
+    'downloadTxt:',
+    'downloadCsv:',
+    'copyJson:',
+    'copied:',
+    'copyBlocked:',
+    'transmitUnavailable:',
+  ];
+  for (const token of required) {
+    const effectiveHasToken =
+      block.includes(token) || (locale !== 'en' && baseCopyBlock.includes(token));
+    assert.equal(effectiveHasToken, true, `${locale} copy includes ${token}`);
+  }
+  if (locale !== 'en') {
+    assert.doesNotMatch(block, /Golfriend Admin manages Golfriend\\. Golfriend/);
+  }
 }
 assert.match(ui, /disabled=\{!transmitter\}/);
 assert.match(ui, /transmitter = null/);
 assert.match(ui, /authorization = null/);
-assert.match(ui, /JHCC receives oversight reporting\s*\n?\s*only and is never the booking engine or a payment processor/);
+assert.match(ui, /No authorization record|no_authorization_record/);
 assert.match(css, /@media\(max-width:700px\)/);
 assert.match(css, /:focus-visible/);
 assert.match(css, /min-height:44px/);
