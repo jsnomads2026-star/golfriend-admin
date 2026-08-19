@@ -15,6 +15,8 @@ const requiredKeys = [
   'empty',
   'noSlots',
   'openTeeTimes',
+  'openTeeTimesLoaded',
+  'loadingErrorRetry',
   'book',
   'seatsLeft',
   'error',
@@ -84,6 +86,7 @@ const renderUsedKeys = [
   'empty',
   'noSlots',
   'openTeeTimes',
+  'openTeeTimesLoaded',
   'book',
   'seatsLeft',
   'error',
@@ -97,7 +100,16 @@ for (const key of renderUsedKeys) {
 }
 
 for (const locale of locales.filter((l) => l !== 'en')) {
-  const compareKeys = ['heading', 'sub', 'loading', 'empty', 'error', 'openTeeTimes'];
+  const compareKeys = [
+    'heading',
+    'sub',
+    'loading',
+    'empty',
+    'error',
+    'openTeeTimes',
+    'openTeeTimesLoaded',
+    'loadingErrorRetry',
+  ];
   for (const key of compareKeys) {
     assert.notEqual(
       valueInBlock(locale, key),
@@ -111,5 +123,15 @@ assert.ok(source.includes("aria-label={t('language')}") || source.includes("aria
 assert.ok(source.includes("aria-label={t('backAria')}") || source.includes("aria-label={`${t('backAria')}"), 'back accessibility label missing');
 assert.ok(source.includes("aria-label={`${t('courseCardAria')}"), 'course card accessible label missing');
 assert.ok(source.includes("aria-label={`${t('requestSlotAria')}"), 'slot request accessible label missing');
+assert.ok(source.includes('const loadCourses'), 'load retry should use existing loading mechanism');
+assert.ok(source.includes("onClick={loadCourses}"), 'retry button should invoke existing load mechanism');
+assert.ok(source.includes("role=\"status\""), 'status role missing for loading/ready async states');
+assert.ok(source.includes("role=\"alert\""), 'error state should expose alert role');
+assert.ok(
+  source.includes("aria-label={t('loadingErrorRetry')}") &&
+    source.includes("t('loadingErrorRetry')") &&
+    source.includes("loadingErrorRetry')"),
+  'retry button must have clear localized label'
+);
 
 console.log('CourseDiscovery locale verification PASS: 8 locales and localized copy keys verified.');

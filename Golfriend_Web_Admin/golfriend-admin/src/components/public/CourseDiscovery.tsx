@@ -35,6 +35,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: 'No courses are available right now.',
     noSlots: 'No open tee-times for this course right now.',
     openTeeTimes: 'Open tee-times',
+    openTeeTimesLoaded: 'Courses loaded. Open tee-times available.',
     book: 'Request',
     seatsLeft: 'seats left',
     error: 'Could not load courses. Please try again later.',
@@ -54,6 +55,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: 'ยังไม่มีสนามให้บริการในขณะนี้',
     noSlots: 'ยังไม่มีเวลาออกรอบที่ว่างสำหรับสนามนี้',
     openTeeTimes: 'เวลาออกรอบที่ว่าง',
+    openTeeTimesLoaded: 'โหลดสนามเสร็จแล้ว พร้อมเวลาออกรอบที่ว่าง',
     book: 'ขอจอง',
     seatsLeft: 'ที่นั่งเหลือ',
     error: 'ไม่สามารถโหลดสนามได้ กรุณาลองใหม่ภายหลัง',
@@ -73,6 +75,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: '현재 사용할 수 있는 코스가 없습니다.',
     noSlots: '현재 이 코스의 오픈 티타임이 없습니다.',
     openTeeTimes: '오픈 티타임',
+    openTeeTimesLoaded: '코스를 불러왔습니다. 오픈 티타임을 사용할 수 있습니다.',
     book: '요청',
     seatsLeft: '남은 좌석',
     error: '코스를 불러올 수 없습니다. 나중에 다시 시도해 주세요.',
@@ -92,6 +95,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: '現在、利用可能なコースがありません。',
     noSlots: 'このコースの空きティータイムは現在ありません。',
     openTeeTimes: '空きティータイム',
+    openTeeTimesLoaded: 'コースを読み込みました。空きティータイムあり。',
     book: 'リクエスト',
     seatsLeft: '残り席',
     error: 'コースを読み込めません。しばらくしてから再試行してください。',
@@ -111,6 +115,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: '目前没有可用球场。',
     noSlots: '此球场目前无可用开球时间。',
     openTeeTimes: '可用开球时间',
+    openTeeTimesLoaded: '已加载球场，可用开球时间已更新。',
     book: '请求',
     seatsLeft: '剩余席位',
     error: '无法加载球场，请稍后重试。',
@@ -130,6 +135,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: 'No hay campos disponibles en este momento.',
     noSlots: 'No hay horarios abiertos para este campo en este momento.',
     openTeeTimes: 'Horarios abiertos',
+    openTeeTimesLoaded: 'Campos cargados. Horarios abiertos disponibles.',
     book: 'Solicitar',
     seatsLeft: 'asientos disponibles',
     error: 'No se pudieron cargar los campos. Intenta de nuevo más tarde.',
@@ -149,6 +155,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: 'Aucun parcours n’est disponible pour le moment.',
     noSlots: 'Aucun départ ouvert pour ce parcours pour l’instant.',
     openTeeTimes: 'Départs ouverts',
+    openTeeTimesLoaded: 'Parcours chargés. Départs ouverts disponibles.',
     book: 'Demander',
     seatsLeft: 'places disponibles',
     error: 'Impossible de charger les parcours. Veuillez réessayer plus tard.',
@@ -168,6 +175,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     empty: 'Zurzeit sind keine Kurse verfügbar.',
     noSlots: 'Für diesen Platz sind aktuell keine offenen Teezeiten vorhanden.',
     openTeeTimes: 'Offene Teezeiten',
+    openTeeTimesLoaded: 'Kurse geladen. Offene Teezeiten verfügbar.',
     book: 'Anfragen',
     seatsLeft: 'freie Plätze',
     error: 'Kurse konnten nicht geladen werden. Bitte später erneut versuchen.',
@@ -202,36 +210,33 @@ export default function CourseDiscovery() {
   const t = (k: string) => DICT[lang][k] ?? k;
   const childLang = lang === 'en' || lang === 'th' ? lang : 'en';
 
+  const loadCourses = async () => {
+    setStatus('loading');
+    try {
+      const courseSnap = await getDocs(collection(db, 'courses'));
+      const courseList: PublicCourse[] = courseSnap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<PublicCourse, 'id'>),
+      }));
+
+      const slotSnap = await getDocs(
+        query(collection(db, 'tee_time_slots'), where('status', '==', 'open'))
+      );
+      const slotList: PublicSlot[] = slotSnap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<PublicSlot, 'id'>),
+      }));
+
+      setCourses(courseList);
+      setSlots(slotList);
+      setStatus('ready');
+    } catch (e) {
+      setStatus('error');
+    }
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const courseSnap = await getDocs(collection(db, 'courses'));
-        const courseList: PublicCourse[] = courseSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<PublicCourse, 'id'>),
-        }));
-
-        const slotSnap = await getDocs(
-          query(collection(db, 'tee_time_slots'), where('status', '==', 'open'))
-        );
-        const slotList: PublicSlot[] = slotSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<PublicSlot, 'id'>),
-        }));
-
-        if (!cancelled) {
-          setCourses(courseList);
-          setSlots(slotList);
-          setStatus('ready');
-        }
-      } catch (e) {
-        if (!cancelled) setStatus('error');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void loadCourses();
   }, []);
 
   const bookableByCourse = useMemo(() => {
@@ -344,9 +349,33 @@ export default function CourseDiscovery() {
           </div>
         </div>
 
-        {status === 'loading' && <p style={styles.muted}>{t('loading')}</p>}
-        {status === 'error' && <p style={styles.muted}>{t('error')}</p>}
-        {status === 'ready' && courses.length === 0 && <p style={styles.muted}>{t('empty')}</p>}
+        {status === 'loading' && (
+          <p role="status" aria-live="polite" style={styles.muted}>
+            {t('loading')}
+          </p>
+        )}
+        {status === 'error' && (
+          <div role="alert" aria-live="assertive" style={styles.muted}>
+            <p>{t('error')}</p>
+            <button
+              style={styles.retry}
+              onClick={loadCourses}
+              aria-label={t('loadingErrorRetry')}
+            >
+              {t('loadingErrorRetry')}
+            </button>
+          </div>
+        )}
+        {status === 'ready' && courses.length === 0 && (
+          <p role="status" aria-live="polite" style={styles.muted}>
+            {t('empty')}
+          </p>
+        )}
+        {status === 'ready' && courses.length > 0 && (
+          <p role="status" aria-live="polite" style={styles.muted}>
+            {t('openTeeTimesLoaded')}
+          </p>
+        )}
 
         {status === 'ready' && courses.length > 0 && (
           <div style={styles.courseGrid}>
@@ -436,6 +465,17 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${theme.gold}`,
     borderRadius: '999px',
     padding: '4px 10px',
+  },
+  retry: {
+    marginTop: '10px',
+    background: 'transparent',
+    border: `1px solid ${theme.gold}`,
+    color: theme.gold,
+    padding: '8px 14px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '13px',
   },
   backLink: {
     background: 'transparent',
