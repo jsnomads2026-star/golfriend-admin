@@ -89,6 +89,7 @@ service cloud.firestore {
     match /golf_api_quota/{document=**} { allow read, write: if false; }
     match /golf_api_quota_reservations/{document=**} { allow read, write: if false; }
     match /golf_api_quota_evidence/{document=**} { allow read, write: if false; }
+    match /golf_api_pending_settlements/{document=**} { allow read, write: if false; }
     match /course_acquisition_checkpoints/{document=**} { allow read, write: if false; }
     match /course_catalogue_runs/{document=**} { allow read, write: if false; }
     match /course_catalogue_failures/{document=**} { allow read, write: if false; }
@@ -98,6 +99,7 @@ service cloud.firestore {
     match /course_catalogue_page_cache/{document=**} { allow read, write: if false; }
     match /course_catalogue_activation_receipts/{document=**} { allow read, write: if false; }
     match /golf_api_canary_receipts/{document=**} { allow read, write: if false; }
+    match /golf_api_canary_reconciliation_receipts/{document=**} { allow read, write: if false; }
     match /course_catalogue_deployed_state_receipts/{document=**} { allow read, write: if false; }
   }
 }

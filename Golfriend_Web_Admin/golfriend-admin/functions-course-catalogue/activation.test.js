@@ -2,6 +2,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),d=require('./domain');
 const producer=fs.readFileSync(path.join(__dirname,'..','scripts','activate-course-catalogue-after-rotation.mjs'),'utf8');
 const canaryRunner=fs.readFileSync(path.join(__dirname,'..','scripts','run-guarded-golf-api-canary.mjs'),'utf8');
+const deployedState=fs.readFileSync(path.join(__dirname,'..','scripts','record-course-catalogue-deployed-state.mjs'),'utf8');
+const failedCanaryReconciliation=fs.readFileSync(path.join(__dirname,'..','scripts','reconcile-failed-canary-accounting.mjs'),'utf8');
 const verifier=fs.readFileSync(path.join(__dirname,'index.js'),'utf8');
 
 test('activation producer and verifier share the canonical domain digest',()=>{
@@ -77,4 +79,18 @@ test('guarded canary verifies binding metadata and restores disabled state in fi
   assert.match(cleanup,/state:'blocked'/);
   assert.match(cleanup,/:pause/);
   assert.equal((canaryRunner.match(/canaryJob\.name}:pause/g)||[]).length,1);
+});
+
+test('deployed-state evidence includes paused canary and current activation revision binding',()=>{
+  assert.match(deployedState,/scheduledGolfApiCatalogueCanary/);
+  assert.match(deployedState,/d\.activationReceiptMatches\(activationPayload,activation\.digest\)/);
+  assert.match(deployedState,/d\.activationRevisionBindingsMatch\(activation\.functionRevisions,expectedServices,value\.service,value\.revision\)/);
+  assert.match(deployedState,/activationBinding:/);
+});
+
+test('failed canary reconciliation records an immutable blocker without ledger mutation',()=>{
+  assert.match(failedCanaryReconciliation,/d\.assessCanaryAccountingEvidence\(source\)/);
+  assert.match(failedCanaryReconciliation,/blocked_insufficient_immutable_evidence/);
+  assert.match(failedCanaryReconciliation,/mutationApplied:false/);
+  assert.doesNotMatch(failedCanaryReconciliation,/patch\('golf_api_quota'/);
 });

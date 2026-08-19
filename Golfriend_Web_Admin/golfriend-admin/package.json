@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "verify:course-catalogue-predeploy": "node --check functions-course-catalogue/index.js && node --test functions-course-catalogue/domain.test.js functions-course-catalogue/runtime.test.js functions-course-catalogue/activation.test.js && node functions-course-catalogue/selection-proof.js && firebase emulators:exec --only firestore --project demo-golfriend-v2-course-catalogue \"node scripts/course-catalogue-rules-emulator.mjs\"",
+    "verify:course-catalogue-predeploy": "node --check functions-course-catalogue/index.js && node --test functions-course-catalogue/domain.test.js functions-course-catalogue/provider-lifecycle.test.js functions-course-catalogue/runtime.test.js functions-course-catalogue/activation.test.js && node functions-course-catalogue/selection-proof.js && firebase emulators:exec --only firestore --project demo-golfriend-v2-course-catalogue \"node scripts/course-catalogue-rules-emulator.mjs\"",
     "verify:course-catalogue-admin": "node scripts/course-catalogue-admin-verify.mjs && npm run build",
     "gate:authority": "node scripts/authority-gate.mjs",
     "gate:dead-route": "node scripts/dead-route-gate.mjs",
