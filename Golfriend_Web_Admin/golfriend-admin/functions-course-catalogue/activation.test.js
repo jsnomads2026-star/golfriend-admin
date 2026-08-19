@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),d=require('./domain');
 const producer=fs.readFileSync(path.join(__dirname,'..','scripts','activate-course-catalogue-after-rotation.mjs'),'utf8');
+const canaryRunner=fs.readFileSync(path.join(__dirname,'..','scripts','run-guarded-golf-api-canary.mjs'),'utf8');
 const verifier=fs.readFileSync(path.join(__dirname,'index.js'),'utf8');
 
 test('activation producer and verifier share the canonical domain digest',()=>{
@@ -61,4 +62,16 @@ test('malformed full-path mismatch and unexpected binding reject',()=>{
   assert.equal(d.activationRevisionBindingsMatch({...shortBindings,scheduledgolfapicatalogueincremental:wrongServicePath},services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),false);
   assert.equal(d.activationRevisionBindingsMatch({...shortBindings,unexpectedservice:'unexpectedservice-00001-bad'},services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),false);
   assert.equal(d.activationRevisionBindingsMatch({...shortBindings,scheduledgolfapicatalogueincremental:'not/a/revision'},services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),false);
+});
+
+test('guarded canary verifies binding metadata and restores disabled state in finally',()=>{
+  assert.match(canaryRunner,/d\.activationReceiptMatches\(receiptPayload\(receipt\),receipt\.digest\)/);
+  assert.match(canaryRunner,/d\.activationRevisionBindingsMatch\(receipt\.functionRevisions,expectedServices,service,liveRevisions\[service\]\)/);
+  assert.match(canaryRunner,/binding\.version!==SECRET_VERSION/);
+  assert.match(canaryRunner,/if\(checkpoint\.state!=='blocked'\)/);
+  assert.match(canaryRunner,/canaryDetailsPerRun:0/);
+  const cleanup=canaryRunner.slice(canaryRunner.indexOf('}finally{'));
+  assert.match(cleanup,/providerRequestsAllowed:false,canaryRequestsAllowed:false/);
+  assert.match(cleanup,/state:'blocked'/);
+  assert.match(cleanup,/:pause/);
 });

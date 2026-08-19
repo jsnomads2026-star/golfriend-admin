@@ -20,6 +20,7 @@ try{
   await assertFails(getDoc(doc(signedIn,'golf_api_quota','2026-08')));
   await assertFails(getDoc(doc(signedIn,'golf_api_quota_reservations','reservation-1')));
   await assertFails(getDoc(doc(signedIn,'course_catalogue_activation_receipts','receipt-1')));
+  await assertFails(getDoc(doc(signedIn,'golf_api_canary_receipts','receipt-1')));
   await assertFails(getDoc(doc(signedIn,'course_catalogue_deployed_state_receipts','receipt-1')));
   assert.ok(true);
   console.log('Course catalogue rules emulator checks completed.');
