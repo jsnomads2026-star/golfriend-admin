@@ -78,5 +78,20 @@ service cloud.firestore {
     match /small_business_engagements/{document=**} { allow read, write: if false; }
     match /small_business_report_events/{document=**} { allow read, write: if false; }
     match /small_business_jhcc_preparations/{document=**} { allow read, write: if false; }
+    // Canonical course catalogue is application-readable but server-owned.
+    match /courses/{courseId} {
+      allow get, list: if request.auth != null;
+      allow create, update, delete: if false;
+    }
+    // Provider credentials, quota, leases, retries, dead letters, and receipts are
+    // projected through the App Check-protected Director callable only.
+    match /platform/{document=**} { allow read, write: if false; }
+    match /golf_api_quota/{document=**} { allow read, write: if false; }
+    match /course_acquisition_checkpoints/{document=**} { allow read, write: if false; }
+    match /course_catalogue_runs/{document=**} { allow read, write: if false; }
+    match /course_catalogue_failures/{document=**} { allow read, write: if false; }
+    match /course_catalogue_dead_letters/{document=**} { allow read, write: if false; }
+    match /golf_api_record_quarantine/{document=**} { allow read, write: if false; }
+    match /course_catalogue_count_receipts/{document=**} { allow read, write: if false; }
   }
 }
