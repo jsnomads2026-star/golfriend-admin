@@ -22,13 +22,27 @@ assert.equal(preview.productionWrites,0); assert.equal(preview.quota,null);
 const ui=fs.readFileSync(new URL('../src/components/admin/v2/V2CourseOperations.tsx',import.meta.url),'utf8');
 const service=fs.readFileSync(new URL('../src/components/admin/v2/courseOperationsService.ts',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
+const uiRuntime = ui.slice(ui.indexOf('type Filter'));
+const enFragments = [
+  'COURSE AUTHORITY',
+  'Data quality filters',
+  'SERVER-AUTHORIZED CALLABLE',
+  'Versions',
+  'trusted/manual lock',
+  'updated: course.updatedAt',
+  'Manual lock',
+];
+for (const fragment of enFragments) {
+  assert.doesNotMatch(uiRuntime, new RegExp(fragment));
+}
 assert.match(app,/activeArea === 'courses' && <V2CourseOperations/);
-assert.match(ui,/confirm_preview/); assert.match(ui,/mode:'preview'/); assert.match(ui,/confirm_apply/); assert.match(ui,/mode:'apply'/);
-assert.match(ui,/preview\?\.results\.filter\(\(row\)=>row\.result==='updated'\)/); assert.match(ui,/mode:'apply',courseIds/);
+assert.match(ui,/confirm_preview/); assert.match(ui,/mode:\s*'preview'/); assert.match(ui,/confirm_apply/); assert.match(ui,/mode:\s*'apply'/);
+assert.match(ui,/preview\?\.\s*results\s*\.filter\(\(row\)\s*=>\s*row\.result\s*===\s*'updated'\)/);
+assert.match(ui,/mode:\s*'apply',\s*courseIds/);
 assert.doesNotMatch(ui,/service\.sync\(\{mode:'apply',limit\}\)/);
-assert.match(ui,/runState==='confirm_preview'[\s\S]*onClick=\{\(\)=>void runPreview\(\)\}/);
-assert.match(ui,/runState==='confirm_apply'[\s\S]*onClick=\{\(\)=>void runApply\(\)\}/);
-assert.match(ui,/loadState==='loading'/); assert.match(ui,/loadState==='error'/); assert.match(ui,/visible.length===0/); assert.match(ui,/runState==='partial'/); assert.match(ui,/runState==='error'/); assert.match(ui,/quotaUnknown/); assert.match(ui,/growthBlocked/);
+assert.match(ui,/runState\s*===\s*'confirm_preview'[\s\S]*onClick=\{\s*\(\)\s*=>\s*void runPreview\(\)\s*\}/);
+assert.match(ui,/runState\s*===\s*'confirm_apply'[\s\S]*onClick=\{\s*\(\)\s*=>\s*void runApply\(\)\s*\}/);
+assert.match(ui,/loadState\s*===\s*'loading'/); assert.match(ui,/loadState\s*===\s*'error'/); assert.match(ui,/visible\.length\s*===\s*0/); assert.match(ui,/runState\s*===\s*'partial'/); assert.match(ui,/runState\s*===\s*'error'/); assert.match(ui,/quotaUnknown/); assert.match(ui,/growthBlocked/);
 assert.match(service,/httpsCallable\(functions, 'syncCoursesFromProvider'\)/);
 assert.doesNotMatch(ui+service,/GOLF_API_KEY|golfapi\.io|Authorization\s*:|Bearer\s+/i);
 assert.doesNotMatch(service,/fetch\s*\(/);
