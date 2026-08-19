@@ -32,7 +32,7 @@ import TournamentTV from './components/admin/TournamentTV';
 import TournamentGovernancePanel from './components/B2B/TournamentGovernancePanel';
 import EventGenesisConsole from './components/admin/EventGenesisConsole';
 // SponsorOnboardingWizard QUARANTINED (dead code w/ client ledger writes) — not routed.
-import SponsorDashboard from './components/admin/sponsors/SponsorDashboard';
+import EnterpriseOperationalWorkflows from './components/B2B/enterprise/EnterpriseOperationalWorkflows';
 import LiveAutomationLog from './components/admin/LiveAutomationLog';
 import SupportModerationHub from './components/admin/SupportModerationHub';
 import PartnerVault from './components/admin/PartnerVault';
@@ -411,7 +411,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
     {activeArea === 'partners' && <AdminTrialDecisions />}
     {activeArea === 'partners' && <PartnerIngestion />}
     {activeArea === 'marketing' && <V2MarketingLibrary />}
-    {activeArea === 'advertising' && <SponsorDashboard />}
+    {activeArea === 'advertising' && <EnterpriseOperationalWorkflows />}
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
     {activeArea === 'reports' && <V2AdminReports />}
     {activeArea === 'reports' && <V2AcquisitionReport />}
@@ -497,7 +497,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
 
         {/* 🔥 RENDER OEM HUB */}
         {activeTab === 'vendors' && <VendorControlSystem />}
-        {activeTab === 'adhub' && <SponsorDashboard />}
+        {activeTab === 'adhub' && <EnterpriseOperationalWorkflows />}
         {activeTab === 'forge' && <OemProductForge />}
         {activeTab === 'fulfillment' && <PolicyUnavailable feature="Order Fulfillment" category="prohibited-financial" callable="updateFulfillmentOrder" />}
         {activeTab === 'crm' && <BuyerCustomerCRM />}

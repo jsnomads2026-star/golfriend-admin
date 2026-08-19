@@ -69,6 +69,15 @@ service cloud.firestore {
     match /enterprise_invoice_delivery_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_booking_audit_receipts/{document=**} { allow read, write: if false; }
     match /enterprise_commercial_rate_limits/{document=**} { allow read, write: if false; }
+    match /enterprise_campaigns/{document=**} { allow read, write: if false; }
+    match /enterprise_campaign_entitlements/{document=**} { allow read, write: if false; }
+    match /enterprise_partner_leads/{document=**} { allow read, write: if false; }
+    match /enterprise_lead_conversations/{document=**} { allow read, write: if false; }
+    match /enterprise_tournament_day/{document=**} { allow read, write: if false; }
+    match /enterprise_upload_authorizations/{document=**} { allow read, write: if false; }
+    match /enterprise_operation_commands/{document=**} { allow read, write: if false; }
+    match /enterprise_operation_receipts/{document=**} { allow read, write: if false; }
+    match /tournament_certified_results/{document=**} { allow read, write: if false; }
     match /small_businesses/{document=**} { allow read, write: if false; }
     match /small_business_representative_bindings/{document=**} { allow read, write: if false; }
     match /small_business_commands/{document=**} { allow read, write: if false; }
