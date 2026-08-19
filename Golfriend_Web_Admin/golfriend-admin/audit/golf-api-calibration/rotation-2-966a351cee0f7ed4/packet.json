@@ -1,0 +1,123 @@
+{
+  "schema": "golfriend.golf-api-calibration-deployment-evidence.v1",
+  "immutable": true,
+  "canonicalization": "recursive-lexicographic-json-v1",
+  "capturedAt": "2026-08-19T03:57:48.997Z",
+  "projectId": "golfriend-v2",
+  "region": "asia-southeast1",
+  "sourceCommit": "f8d394c1f824daa9384271f74091ede97ae87499",
+  "deployment": {
+    "result": "success",
+    "selected": [
+      "functions:course-catalogue:armGolfApiCalibrationCanary",
+      "functions:course-catalogue:runGolfApiCalibrationCanary",
+      "firestore:rules"
+    ],
+    "providerRequests": 0,
+    "calibrationCalls": 0,
+    "canaryCalls": 0,
+    "secretValueAccessed": false
+  },
+  "secretMetadata": {
+    "name": "GOLF_API_KEY",
+    "version": "2",
+    "state": "ENABLED",
+    "createTime": "2026-08-17T07:12:53.365738Z"
+  },
+  "activationReceipt": {
+    "documentId": "rotation-2-966a351cee0f7ed4",
+    "createTime": "2026-08-19T03:56:52.016925Z",
+    "updateTime": "2026-08-19T03:56:52.016925Z",
+    "state": "verified",
+    "bindingState": "current",
+    "immutable": true,
+    "payload": {
+      "projectId": "golfriend-v2",
+      "secretName": "GOLF_API_KEY",
+      "secretVersion": "2",
+      "secretVersionState": "ENABLED",
+      "functionRevisions": {
+        "rungolfapicalibrationcanary": "rungolfapicalibrationcanary-00001-joj",
+        "scheduledgolfapicataloguecanary": "scheduledgolfapicataloguecanary-00004-zos",
+        "scheduledgolfapicatalogueincremental": "scheduledgolfapicatalogueincremental-00010-wez",
+        "scheduledgolfapicatalogueretries": "scheduledgolfapicatalogueretries-00005-xom"
+      },
+      "verifiedAt": "2026-08-19T03:56:52.835Z"
+    },
+    "digest": "966a351cee0f7ed4bf41f5b7d8f17873470a870bbdf1c57de9b8e9a78654b512"
+  },
+  "previousActivationReceipt": {
+    "documentId": "rotation-2-e9095a6dda494571",
+    "immutable": true,
+    "bindingState": "superseded",
+    "supersededByReceiptId": "rotation-2-966a351cee0f7ed4",
+    "supersededAt": "2026-08-19T03:56:52.835Z",
+    "digest": "e9095a6dda4945716575f3bd7dfcabbaac6ca37180fee7372d92bb956acdc5f0"
+  },
+  "providerFunctions": {
+    "scheduledGolfApiCatalogueIncremental": {
+      "state": "ACTIVE",
+      "service": "scheduledgolfapicatalogueincremental",
+      "revisionResource": "projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueincremental/revisions/scheduledgolfapicatalogueincremental-00010-wez",
+      "updateTime": "2026-08-19T03:04:56.928835458Z",
+      "secretBinding": {"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}
+    },
+    "scheduledGolfApiCatalogueRetries": {
+      "state": "ACTIVE",
+      "service": "scheduledgolfapicatalogueretries",
+      "revisionResource": "projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueretries/revisions/scheduledgolfapicatalogueretries-00005-xom",
+      "updateTime": "2026-08-19T03:05:03.237564110Z",
+      "secretBinding": {"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}
+    },
+    "scheduledGolfApiCatalogueCanary": {
+      "state": "ACTIVE",
+      "service": "scheduledgolfapicataloguecanary",
+      "revisionResource": "projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicataloguecanary/revisions/scheduledgolfapicataloguecanary-00004-zos",
+      "updateTime": "2026-08-19T03:05:06.515254861Z",
+      "secretBinding": {"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}
+    },
+    "runGolfApiCalibrationCanary": {
+      "state": "ACTIVE",
+      "service": "rungolfapicalibrationcanary",
+      "revisionResource": "projects/golfriend-v2/locations/asia-southeast1/services/rungolfapicalibrationcanary/revisions/rungolfapicalibrationcanary-00001-joj",
+      "updateTime": "2026-08-19T03:55:55.499923481Z",
+      "secretBinding": {"key":"GOLF_API_KEY","secret":"GOLF_API_KEY","version":"2"}
+    }
+  },
+  "calibrationArmFunction": {
+    "name": "armGolfApiCalibrationCanary",
+    "state": "ACTIVE",
+    "service": "armgolfapicalibrationcanary",
+    "revisionResource": "projects/golfriend-v2/locations/asia-southeast1/services/armgolfapicalibrationcanary/revisions/armgolfapicalibrationcanary-00001-wem",
+    "updateTime": "2026-08-19T03:56:03.987680994Z",
+    "secretBindings": []
+  },
+  "schedulers": {
+    "scheduledGolfApiCatalogueIncremental": {"state":"PAUSED","schedule":"every day 02:20","timeZone":"Asia/Bangkok"},
+    "scheduledGolfApiCatalogueRetries": {"state":"PAUSED","schedule":"every day 03:10","timeZone":"Asia/Bangkok"},
+    "scheduledGolfApiCatalogueCanary": {"state":"PAUSED","schedule":"0 0 1 1 *","timeZone":"Asia/Bangkok","lastAttemptTime":"2026-08-19T03:15:17.933576Z"}
+  },
+  "calibrationSchedulerMatches": [],
+  "closedState": {
+    "configuration": {
+      "bindingReceiptId": "rotation-2-966a351cee0f7ed4",
+      "requiredSecretVersion": "2",
+      "providerRequestsAllowed": false,
+      "canaryRequestsAllowed": false,
+      "calibrationRequestsAllowed": {"fieldPresent":false,"effectiveValue":false},
+      "enabled": false,
+      "updateTime": "2026-08-19T03:56:52.086978Z",
+      "updatedAt": "2026-08-19T03:56:52.835Z"
+    },
+    "checkpoint": {
+      "state": "blocked",
+      "providerRequestsAllowed": false,
+      "leaseToken": null,
+      "leaseExpiresAtMs": 0,
+      "updateTime": "2026-08-19T03:15:23.810449Z",
+      "updatedAt": "2026-08-19T03:15:25.239Z"
+    }
+  },
+  "configurationFieldsChanged": ["bindingReceiptId","requiredSecretVersion","updatedAt"],
+  "packetDigest": "487ff81c88f0e5f1490d058a7dede9d99b00a4dca58d48f689f9743c30ed6bfd"
+}
