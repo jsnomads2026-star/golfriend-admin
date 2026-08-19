@@ -24,7 +24,11 @@ ok("idempotent immutable receipts", runtime.includes("reconciliationReceiptId") 
 ok("audit before export response", runtime.indexOf("await ref.create") < runtime.indexOf("privacySafeExport(report,format)"));
 ok("deny all receipt rules", ["booking_reconciliation_receipts", "booking_report_export_receipts", "booking_report_access_audits"].every((x) => rules.includes(x)));
 ok("all eight locales", ["th:", "ko:", "ja:", "zh:", "es:", "fr:", "de:"].every((x) => ui.includes(x)));
-ok("accessible states and table", /role="status"/.test(ui) && /role="alert"/.test(ui) && /aria-labelledby/.test(ui) && /tabIndex=\{0\}/.test(ui));
+ok("localized filter label set", /all:\"/.test(ui) && /statusMap/.test(ui) && /retry:\"/.test(ui));
+ok("localized table headers", ui.includes("copy.table.organization") && ui.includes("copy.table.course") && ui.includes("copy.table.timeZone") && ui.includes("copy.table.capacity"));
+ok("localized status rendering", /getStatusLabel/.test(ui) && /STATUS_OPTIONS/.test(ui));
+ok("accessible labels", ui.includes("aria-label={copy.retry}") && ui.includes("aria-label={copy.csv}") && ui.includes("aria-label={copy.reconcile}") && ui.includes("aria-label={copy.lookup}"));
+ok("loading/empty/error retries localized", ui.includes('role="status"') && ui.includes('role="alert"') && ui.includes("copy.loading") && ui.includes("copy.empty") && ui.includes("copy.error") && ui.includes("copy.retry"));
 ok("mounted admin", app.includes("<BookingOperationsReportV2 admin"));
 ok("mounted small portal", small.includes("<BookingOperationsReportV2"));
 ok("mounted enterprise portal", enterprise.includes("<BookingOperationsReportV2"));
