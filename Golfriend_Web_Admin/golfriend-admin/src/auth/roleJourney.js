@@ -100,6 +100,30 @@ export const JOURNEY_STATES = [
  * }} input
  * @returns {{ state: string, surface?: 'admin'|'small'|'enterprise'|'partner', role?: string }}
  */
+/**
+ * Why an admin surface withheld access. This is PRESENTATION ONLY — every value below
+ * carries exactly the same (zero) privilege, and `state` stays 'unauthorized' in each
+ * case. It exists so the founder-bootstrap path can say "access pending, contact your
+ * administrator" to a correctly authenticated user who simply has no admin_users record
+ * yet, instead of the flat "not authorized" that reads as a rejection of the person.
+ *
+ * It must never be used to widen access, and no caller may branch to a privileged
+ * surface on it.
+ */
+export const ADMIN_NO_RECORD = 'no_admin_record';
+export const ADMIN_RECORD_NOT_ACTIVE = 'admin_record_not_active';
+
+/**
+ * Presentation key for an access result. 'access_pending' is returned only for an
+ * authenticated user with NO server-owned record; every other admin denial keeps the
+ * existing unauthorized copy. Returns null when the result is not an admin denial.
+ */
+export function adminAccessPresentation(access) {
+  if (!access || access.surface !== 'admin') return null;
+  if (access.state !== 'unauthorized') return null;
+  return access.reason === ADMIN_NO_RECORD ? 'access_pending' : 'unauthorized';
+}
+
 export function resolvePortalAccess(input = {}) {
   const {
     mode, authPending, user, roleLoading, resolveError, adminDoc, partnerDoc,
@@ -117,7 +141,7 @@ export function resolvePortalAccess(input = {}) {
     // functions/src/authority.ts. These two must agree: if this branch authorized a status
     // the server denies, the portal would render an admin shell whose every action then
     // failed, which reads to the user as a broken product rather than as a denial.
-    if (!adminDoc) return { state: 'unauthorized', surface: 'admin' };
+    if (!adminDoc) return { state: 'unauthorized', surface: 'admin', reason: ADMIN_NO_RECORD };
     const status = normalizeStaffStatus(adminDoc.status);
     if (status !== null && KNOWN_INACTIVE_ADMIN_STATUSES.includes(status)) {
       return { state: 'suspended', surface: 'admin' };
@@ -125,10 +149,10 @@ export function resolvePortalAccess(input = {}) {
     // Anything not canonically active — missing, blank, malformed or simply unrecognized —
     // is unauthorized. It is NOT reported as 'suspended', because we do not know that.
     if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) {
-      return { state: 'unauthorized', surface: 'admin' };
+      return { state: 'unauthorized', surface: 'admin', reason: ADMIN_RECORD_NOT_ACTIVE };
     }
     if (!isCanonicalAdminRole(adminDoc.role)) {
-      return { state: 'unauthorized', surface: 'admin' };
+      return { state: 'unauthorized', surface: 'admin', reason: ADMIN_RECORD_NOT_ACTIVE };
     }
     return { state: 'authorized', surface: 'admin', role: adminDoc.role };
   }

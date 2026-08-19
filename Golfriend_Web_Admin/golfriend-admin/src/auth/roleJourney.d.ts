@@ -26,9 +26,21 @@ export interface PortalAccess {
   surface?: 'admin' | 'small' | 'enterprise' | 'partner';
   role?: string;
   organizationId?: string;
+  /** Presentation-only denial reason. Never widens access. */
+  reason?: string;
 }
 
 export function resolvePortalAccess(input?: PortalAccessInput): PortalAccess;
+
+/** Presentation-only admin denial reasons. Both carry identical (zero) privilege. */
+export const ADMIN_NO_RECORD: string;
+export const ADMIN_RECORD_NOT_ACTIVE: string;
+
+/**
+ * 'access_pending' only for an authenticated user with no server-owned admin_users
+ * record; 'unauthorized' for every other admin denial; null when not an admin denial.
+ */
+export function adminAccessPresentation(access?: PortalAccess | null): 'access_pending' | 'unauthorized' | null;
 
 export const ACTIVE_ADMIN_STATUSES: string[];
 export const KNOWN_INACTIVE_ADMIN_STATUSES: string[];

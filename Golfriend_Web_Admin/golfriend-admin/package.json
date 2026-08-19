@@ -14,6 +14,7 @@
     "gate:a11y": "node scripts/portal-a11y-gate.mjs",
     "verify:admin-gateway": "node scripts/admin-gateway-integration-verify.mjs",
     "verify:admin-local-auth": "node scripts/admin-local-auth-fixture-verify.mjs",
+    "test:admin-founder-access": "node --test scripts/admin-founder-access.test.mjs",
     "verify:admin-controls": "node scripts/admin-controls-verify.mjs && npm --prefix functions run test:admin-controls",
     "verify:admin-controls-emulator": "node scripts/admin-controls-emulator.mjs",
     "verify:jhcc-finance": "node scripts/admin-jhcc-finance-verify.mjs && npm --prefix functions run test:finance-report",

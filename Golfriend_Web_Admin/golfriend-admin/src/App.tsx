@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db } from './firebaseConfig';
-import { resolvePortalAccess, STATE_COPY } from './auth/roleJourney.js';
+import { db, APP_CHECK_ACTIVE } from './firebaseConfig';
+import { resolvePortalAccess, adminAccessPresentation, STATE_COPY } from './auth/roleJourney.js';
+import { FOUNDER_ACCESS } from './i18n/admin/founderAccess.ts';
 import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
 import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
@@ -227,7 +228,9 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authFailed, setAuthFailed] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<'sent' | 'unavailable' | null>(null);
   const t = useT(ACCESS_STATES);
+  const ft = useT(FOUNDER_ACCESS as unknown as Record<string, Record<string, string>>);
 
   const [activeTab, setActiveTab] = useState<'photos' | 'escrow' | 'ledger' | 'fiat' | 'bank' | 'courses' | 'teetimes' | 'coursesync' | 'teesheet' | 'tournaments' | 'genesis' | 'sponsor' | 'adhub' | 'automation' | 'support' | 'bookingoversight' | 'bookingaudit' | 'vault' | 'vendors' | 'forge' | 'fulfillment' | 'crm' | 'b2b' | 'hr'>('courses');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -305,11 +308,28 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthFailed(false);
+    setRecoveryNotice(null);
     try {
       await signInWithEmailAndPassword(getAuth(), email, password);
     } catch {
       // Honest, provider-error-free copy.
       setAuthFailed(true);
+    }
+  };
+
+  // Recovery uses the standard Firebase Auth reset mail. The SAME neutral notice is
+  // shown whether or not the address resolves to an account, so this form cannot be
+  // used to enumerate staff accounts. Recovery restores a password; it never grants
+  // authority — that still comes only from an active admin_users record.
+  const handleRecovery = async () => {
+    setAuthFailed(false);
+    const address = email.trim();
+    if (!address) { setRecoveryNotice('unavailable'); return; }
+    try {
+      await sendPasswordResetEmail(getAuth(), address);
+      setRecoveryNotice('sent');
+    } catch {
+      setRecoveryNotice('sent');
     }
   };
 
@@ -352,8 +372,36 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
             <button type="submit" style={{padding: '12px', backgroundColor: '#d4af37', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
               {t('adminSignIn')}
             </button>
+            <button type="button" onClick={() => { void handleRecovery(); }} aria-label={ft('forgotPassword')}
+              style={{padding: '8px', background: 'none', border: 'none', color: '#d4af37', fontSize: '12px', textDecoration: 'underline', cursor: 'pointer'}}>
+              {ft('forgotPassword')}
+            </button>
+            <p style={{color: '#888', fontSize: '11px', textAlign: 'center', margin: 0}}>{ft('recoveryPrompt')}</p>
+            {recoveryNotice && (
+              <p role="status" aria-live="polite" style={{color: '#8fd18f', fontSize: '12px', textAlign: 'center', margin: 0}}>
+                {recoveryNotice === 'sent' ? ft('recoverySent') : ft('recoveryUnavailable')}
+              </p>
+            )}
           </form>
         </div>
+      </div>
+    );
+  }
+
+  // A correctly authenticated user with NO server-owned admin_users record is in the
+  // founder/staff bootstrap state, not a rejection: their access is pending an
+  // administrator binding their UID. This carries exactly the same (zero) privilege as
+  // any other denial — it changes only what the person is told.
+  if (adminAccessPresentation(access) === 'access_pending') {
+    return (
+      <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}
+        role="status" aria-live="polite">
+        <h1 style={{...styles.logo, color: '#d4af37'}}>{ft('accessPendingTitle')}</h1>
+        <p style={{color: '#ccc', maxWidth: '420px', textAlign: 'center', lineHeight: 1.5}}>{ft('accessPendingDetail')}</p>
+        <button onClick={executeSecureLogout}
+          style={{marginTop: '16px', padding: '12px 24px', backgroundColor: '#333', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
+          {t('signOut')}
+        </button>
       </div>
     );
   }
@@ -386,10 +434,10 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
     status: adminData?.status ?? null,
     scope: null,
     requestVersion: null,
-    // App Check is not provisioned in this repository, so this is UNKNOWN (null) rather
-    // than claimed as verified. Reporting true would assert an attestation that does not
-    // exist; reporting false would disable every surface.
-    appCheck: null,
+    // Reported from the actual attestation state of this build (see firebaseConfig.ts).
+    // False means "no provider installed" — surfaces that require attestation disable
+    // themselves rather than issuing calls the server would reject.
+    appCheck: APP_CHECK_ACTIVE,
     online: isOnline,
   };
 

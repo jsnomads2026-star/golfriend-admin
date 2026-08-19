@@ -3,7 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
-import { CustomProvider, initializeAppCheck } from 'firebase/app-check';
+import { CustomProvider, ReCaptchaV3Provider, initializeAppCheck } from 'firebase/app-check';
 import { resolveFirebaseTarget, resolveEmulatorEndpoints } from './firebaseTarget.js';
 
 // ==========================================
@@ -37,6 +37,32 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
 export const storage = getStorage(app);
+
+// ==========================================
+// App Check attestation.
+//
+// Callables that enforce App Check (the Golf API calibration controls among them)
+// reject any call from a build with no attestation. The site key is a PUBLIC,
+// non-secret value supplied at build time as VITE_FIREBASE_APPCHECK_SITE_KEY.
+//
+// This FAILS CLOSED in both directions and never lies about its state: with no site
+// key we do not initialize a provider and `APP_CHECK_ACTIVE` stays false, so the
+// surfaces that require attestation disable themselves rather than issuing calls that
+// the server will reject. We never substitute a stand-in provider outside the
+// development-only emulator branch below — doing so would claim an attestation that
+// does not exist.
+// ==========================================
+const APP_CHECK_SITE_KEY = (env.VITE_FIREBASE_APPCHECK_SITE_KEY || '').trim();
+let appCheckActive = false;
+if (!USING_EMULATORS && APP_CHECK_SITE_KEY) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  });
+  appCheckActive = true;
+}
+/** True only when a real attestation provider is installed for this build. */
+export const APP_CHECK_ACTIVE = appCheckActive || USING_EMULATORS;
 
 // Development-only precommission emulator wiring. All four services are pinned to
 // the local emulator; there is no production endpoint in this mode.
