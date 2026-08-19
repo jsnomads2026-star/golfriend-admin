@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Mandatory operational rule: after every deployment of either provider
+// function, regenerate and independently verify a new activation receipt.
+// A receipt bound to an earlier Cloud Run revision must never activate traffic.
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),PROJECT='golfriend-v2',REGION='asia-southeast1',ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`,APPLY=process.argv.includes('--apply-after-claude-pass'),versionArg=process.argv.find(value=>value.startsWith('--secret-version=')),SECRET_VERSION=versionArg?.split('=')[1];

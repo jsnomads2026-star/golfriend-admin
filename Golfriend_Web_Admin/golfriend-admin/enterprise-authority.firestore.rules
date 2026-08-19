@@ -97,5 +97,6 @@ service cloud.firestore {
     match /course_catalogue_count_receipts/{document=**} { allow read, write: if false; }
     match /course_catalogue_page_cache/{document=**} { allow read, write: if false; }
     match /course_catalogue_activation_receipts/{document=**} { allow read, write: if false; }
+    match /course_catalogue_deployed_state_receipts/{document=**} { allow read, write: if false; }
   }
 }
