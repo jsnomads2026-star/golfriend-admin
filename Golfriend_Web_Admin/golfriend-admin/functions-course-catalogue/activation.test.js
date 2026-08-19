@@ -76,4 +76,5 @@ test('guarded canary verifies binding metadata and restores disabled state in fi
   assert.match(cleanup,/providerRequestsAllowed:false,canaryRequestsAllowed:false/);
   assert.match(cleanup,/state:'blocked'/);
   assert.match(cleanup,/:pause/);
+  assert.equal((canaryRunner.match(/canaryJob\.name}:pause/g)||[]).length,1);
 });
