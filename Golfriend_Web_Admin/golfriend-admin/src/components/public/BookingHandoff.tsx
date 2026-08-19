@@ -68,6 +68,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     you: 'You',
     course: 'Course',
     errorGeneric: 'Could not complete the request. Please try again.',
+    retryRequest: 'Retry request',
+    retryCancel: 'Retry cancel',
+    retrySend: 'Retry send',
     back: '← Back',
   },
   th: {
@@ -92,6 +95,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     you: 'คุณ',
     course: 'สนาม',
     errorGeneric: 'ไม่สามารถดำเนินการได้ กรุณาลองใหม่อีกครั้ง',
+    retryRequest: 'ลองใหม่อีกครั้งเพื่อขอจอง',
+    retryCancel: 'ลองใหม่อีกครั้งเพื่อยกเลิก',
+    retrySend: 'ลองใหม่อีกครั้งเพื่อส่ง',
     back: '← ย้อนกลับ',
   },
 };
@@ -113,10 +119,14 @@ interface Props {
 
 type Phase = 'idle' | 'requesting' | 'pending' | 'cancelled' | 'error';
 
+type FailureAction = 'request' | 'cancel' | 'send' | null;
+
 export default function BookingHandoff({ slot, lang, onBack }: Props) {
   const t = (k: string) => DICT[lang][k] ?? k;
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [failureAction, setFailureAction] = useState<FailureAction>(null);
+  const [statusMsg, setStatusMsg] = useState<string>('');
 
   const user = getAuth().currentUser;
   const signedIn = !!user;
@@ -135,14 +145,19 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
     if (!signedIn) return; // guard: never book without an authenticated user
     setPhase('requesting');
     setErrorMsg('');
+    setFailureAction(null);
+    setStatusMsg(t('requesting'));
     try {
       const fn = httpsCallable(getFunctions(), 'requestBooking');
       const res = await fn({ slotId: slot.id });
       const data = (res.data || {}) as { success?: boolean; status?: string };
       if (data.success && data.status === 'pending') {
         setPhase('pending');
+        setStatusMsg(t('booking_pending'));
       } else {
         setPhase('error');
+        setFailureAction('request');
+        setStatusMsg('');
         setErrorMsg(t('errorGeneric'));
       }
     } catch (err: unknown) {
@@ -151,9 +166,14 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
           ? String((err as { message?: string }).message)
           : t('errorGeneric');
       setPhase('error');
+      setFailureAction('request');
+      setStatusMsg('');
       setErrorMsg(message || t('errorGeneric'));
     }
   };
+
+  const requestRetryLabel = t('retryRequest');
+  const requestAriaRetryLabel = `${requestRetryLabel} ${slot.courseName || slot.courseId}`;
 
   return (
     <div style={styles.card}>
@@ -200,12 +220,22 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
         </button>
       )}
 
+      {statusMsg && (
+        <p role="status" aria-live="polite" style={styles.statusRow}>
+          {statusMsg}
+        </p>
+      )}
+
       {phase === 'pending' && (
-        <div style={styles.pending}>✓ {t('booking_pending')}</div>
+        <div role="status" aria-live="polite" style={styles.pending}>
+          ✓ {t('booking_pending')}
+        </div>
       )}
 
       {phase === 'cancelled' && (
-        <div style={styles.cancelled}>{t('booking_cancelled')}</div>
+        <div role="status" aria-live="polite" style={styles.cancelled}>
+          {t('booking_cancelled')}
+        </div>
       )}
 
       {/* Active booking → cancel + live message thread */}
@@ -214,12 +244,27 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
           bookingId={bookingId}
           uid={uid}
           lang={lang}
-          onCancelled={() => setPhase('cancelled')}
+          onCancelled={() => {
+            setPhase('cancelled');
+            setStatusMsg(t('booking_cancelled'));
+          }}
         />
       )}
 
       {phase === 'error' && errorMsg && (
-        <div style={styles.error}>{errorMsg}</div>
+        <div style={styles.error} role="alert" aria-live="assertive">
+          {errorMsg}
+          {failureAction === 'request' && (
+            <button
+              type="button"
+              onClick={handleRequest}
+              aria-label={requestAriaRetryLabel}
+              style={styles.retryBtn}
+            >
+              {requestRetryLabel}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -247,6 +292,8 @@ function ActiveBooking({
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [failureAction, setFailureAction] = useState<FailureAction>(null);
+  const [statusMsg, setStatusMsg] = useState<string>('');
   const threadRef = useRef<HTMLDivElement | null>(null);
 
   // Live thread stream (read-only) ordered by createdAt.
@@ -279,17 +326,22 @@ function ActiveBooking({
 
   const handleCancel = async () => {
     setCancelling(true);
+    setFailureAction(null);
     setErrorMsg('');
+    setStatusMsg(t('cancelling'));
     try {
       const fn = httpsCallable(getFunctions(), 'cancelBooking');
       await fn({ bookingId });
+      setStatusMsg(t('booking_cancelled'));
       onCancelled();
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'message' in err
           ? String((err as { message?: string }).message)
           : t('errorGeneric');
+      setFailureAction('cancel');
       setErrorMsg(message || t('errorGeneric'));
+      setStatusMsg('');
     } finally {
       setCancelling(false);
     }
@@ -299,17 +351,22 @@ function ActiveBooking({
     const text = draft.trim();
     if (!text) return;
     setSending(true);
+    setFailureAction(null);
     setErrorMsg('');
+    setStatusMsg(t('sending'));
     try {
       const fn = httpsCallable(getFunctions(), 'sendBookingMessage');
       await fn({ bookingId, text });
+      setStatusMsg('');
       setDraft(''); // thread updates live via onSnapshot
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'message' in err
           ? String((err as { message?: string }).message)
           : t('errorGeneric');
+      setFailureAction('send');
       setErrorMsg(message || t('errorGeneric'));
+      setStatusMsg('');
     } finally {
       setSending(false);
     }
@@ -329,6 +386,11 @@ function ActiveBooking({
       >
         {cancelling ? t('cancelling') : t('cancelBtn')}
       </button>
+      {statusMsg && !failureAction && statusMsg === t('cancelling') && (
+        <p role="status" aria-live="polite" style={styles.statusRow}>
+          {statusMsg}
+        </p>
+      )}
 
       <div style={styles.messageBox}>
         <p style={styles.messageTitle}>{t('messageTitle')}</p>
@@ -380,9 +442,36 @@ function ActiveBooking({
             {sending ? t('sending') : t('sendBtn')}
           </button>
         </div>
+        {statusMsg && !errorMsg && statusMsg !== t('cancelling') && (
+          <p role="status" aria-live="polite" style={styles.statusRow}>
+            {statusMsg}
+          </p>
+        )}
       </div>
 
-      {errorMsg && <div style={styles.error}>{errorMsg}</div>}
+      {errorMsg && <div style={styles.error} role="alert" aria-live="assertive">
+        {errorMsg}
+        {failureAction === 'cancel' && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            aria-label={t('retryCancel')}
+            style={styles.retryBtn}
+          >
+            {t('retryCancel')}
+          </button>
+        )}
+        {failureAction === 'send' && (
+          <button
+            type="button"
+            onClick={handleSend}
+            aria-label={t('retrySend')}
+            style={styles.retryBtn}
+          >
+            {t('retrySend')}
+          </button>
+        )}
+      </div>}
     </div>
   );
 }
@@ -545,5 +634,26 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${theme.danger}`,
     color: theme.danger,
     fontSize: '14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  statusRow: {
+    marginTop: '8px',
+    color: theme.text,
+    fontSize: '14px',
+    fontWeight: 600,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    background: 'transparent',
+    border: `1px solid ${theme.danger}`,
+    color: theme.danger,
+    borderRadius: '8px',
+    padding: '10px 12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '13px',
   },
 };
