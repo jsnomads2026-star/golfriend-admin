@@ -25,3 +25,28 @@ test('receipt-only mode writes one immutable receipt and never activates configu
   assert.match(producer,/if\(APPLY\)await patch\('platform','golfApiCatalogueConfig'/);
   assert.doesNotMatch(producer,/if\(RECEIPT_ONLY\)[^\n]*golfApiCatalogueConfig/);
 });
+
+const services=['scheduledgolfapicatalogueincremental','scheduledgolfapicatalogueretries'];
+const shortBindings={scheduledgolfapicatalogueincremental:'scheduledgolfapicatalogueincremental-00009-lof',scheduledgolfapicatalogueretries:'scheduledgolfapicatalogueretries-00004-zep'};
+
+test('full resource-path receipt revision matches short simulated K_REVISION',()=>{
+  const bindings={...shortBindings,scheduledgolfapicatalogueincremental:`projects/golfriend-v2/locations/asia-southeast1/services/scheduledgolfapicatalogueincremental/revisions/${shortBindings.scheduledgolfapicatalogueincremental}`};
+  assert.equal(d.activationRevisionBindingsMatch(bindings,services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),true);
+});
+
+test('short-name receipt revision matches short simulated K_REVISION',()=>{
+  assert.equal(d.activationRevisionBindingsMatch(shortBindings,services,'scheduledgolfapicatalogueretries',shortBindings.scheduledgolfapicatalogueretries),true);
+  assert.match(producer,/d\.normalizeRevisionIdentity\(service\.latestReadyRevision,serviceName\)/);
+  assert.match(verifier,/d\.activationRevisionBindingsMatch\(receipt\.functionRevisions,PROVIDER_REVISION_SERVICES,process\.env\.K_SERVICE,process\.env\.K_REVISION\)/);
+});
+
+test('changed revision binding rejects',()=>{
+  assert.equal(d.activationRevisionBindingsMatch({...shortBindings,scheduledgolfapicatalogueretries:'scheduledgolfapicatalogueretries-00005-bad'},services,'scheduledgolfapicatalogueretries',shortBindings.scheduledgolfapicatalogueretries),false);
+});
+
+test('malformed full-path mismatch and unexpected binding reject',()=>{
+  const wrongServicePath=`projects/golfriend-v2/locations/asia-southeast1/services/other-service/revisions/${shortBindings.scheduledgolfapicatalogueincremental}`;
+  assert.equal(d.activationRevisionBindingsMatch({...shortBindings,scheduledgolfapicatalogueincremental:wrongServicePath},services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),false);
+  assert.equal(d.activationRevisionBindingsMatch({...shortBindings,unexpectedservice:'unexpectedservice-00001-bad'},services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),false);
+  assert.equal(d.activationRevisionBindingsMatch({...shortBindings,scheduledgolfapicatalogueincremental:'not/a/revision'},services,'scheduledgolfapicatalogueincremental',shortBindings.scheduledgolfapicatalogueincremental),false);
+});
