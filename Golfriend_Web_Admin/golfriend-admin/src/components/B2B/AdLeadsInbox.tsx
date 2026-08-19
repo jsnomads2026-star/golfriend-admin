@@ -16,6 +16,60 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const sanitizeAvatar = (value?: string | null) =>
+    value && !value.includes('via.placeholder.com') ? value : '';
+
+  const initialsFromName = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase();
+    }
+    return name.trim().slice(0, 2).toUpperCase() || '?';
+  };
+
+  const deterministicAvatarColor = (seed: string) => {
+    const palette = ['#d4af37', '#4b9cd3', '#7a6ff0', '#2f9e44', '#f08c3b', '#2d9c95', '#d9480f', '#6f42c1'];
+    const normalized = seed || 'default';
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i++) hash = (hash + normalized.charCodeAt(i) * (i + 1)) % palette.length;
+    return palette[hash];
+  };
+
+  const renderAvatar = (label: string, imageUrl: string, size: number) => {
+    if (imageUrl) {
+      return (
+        <img
+          src={imageUrl}
+          alt={`${label} avatar`}
+          style={{ width: `${size}px`, height: `${size}px`, borderRadius: `${size / 2}px`, border: '1px solid #333' }}
+        />
+      );
+    }
+
+    const initials = initialsFromName(label);
+    const backgroundColor = deterministicAvatarColor(label);
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          borderRadius: `${size / 2}px`,
+          border: '1px solid #333',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor,
+          color: '#000',
+          fontWeight: 'bold',
+          fontSize: `${Math.max(10, Math.floor(size / 2.4))}px`,
+        }}
+      >
+        {initials}
+      </span>
+    );
+  };
+
   // --- WEB ATTACHMENT PIPELINE ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -42,7 +96,7 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
         fileName: !isImage ? file.name : null,
         senderId: partnerUid,
         senderNickname: 'Enterprise Partner', 
-        photo_url: 'https://via.placeholder.com/150', 
+        photo_url: null,
         createdAt: serverTimestamp()
       });
 
@@ -84,7 +138,7 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
           id: doc.id, 
           golferId,
           golferName: details.nickname || data.name || 'Anonymous Golfer',
-          golferPhoto: details.photo_url || 'https://via.placeholder.com/50',
+          golferPhoto: sanitizeAvatar(details.photo_url),
           ...data 
         };
       });
@@ -137,7 +191,7 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
         text: payloadText,
         senderId: partnerUid,
         senderNickname: 'Enterprise Partner', // Fallback, could pull from auth.currentUser.displayName
-        photo_url: 'https://via.placeholder.com/150', // Replace with business logo later
+        photo_url: null, // Replaced with local deterministic fallback in UI rendering
         createdAt: serverTimestamp()
       });
 
@@ -156,7 +210,18 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
   };
 
   return (
-    <div style={{ display: 'flex', height: '75vh', backgroundColor: '#111', border: '1px solid #333', borderRadius: '12px', overflow: 'hidden', color: '#fff' }}>
+    <>
+      <style>{`
+        .adleads-row:focus-visible {
+          outline: 2px solid #d4af37;
+          outline-offset: -2px;
+        }
+        .adleads-action-btn:focus-visible {
+          outline: 2px solid #d4af37;
+          outline-offset: 2px;
+        }
+      `}</style>
+      <div style={{ display: 'flex', height: '75vh', backgroundColor: '#111', border: '1px solid #333', borderRadius: '12px', overflow: 'hidden', color: '#fff' }}>
       
       {/* LEFT PANEL: The Leads Rolodex */}
       <div style={{ width: '320px', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a' }}>
@@ -175,11 +240,21 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
               <div 
                 key={lead.id} 
                 onClick={() => setSelectedLead(lead)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open conversation with ${lead.golferName}`}
+                className="adleads-row"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedLead(lead);
+                  }
+                }}
                 style={{ padding: '15px 20px', borderBottom: '1px solid #222', cursor: 'pointer', backgroundColor: selectedLead?.id === lead.id ? '#1a1a1a' : 'transparent', transition: '0.2s' }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <img src={lead.golferPhoto} alt="Avatar" style={{ width: '24px', height: '24px', borderRadius: '12px', border: '1px solid #333' }} />
+                    {renderAvatar(lead.golferName, lead.golferPhoto, 24)}
                     <span style={{ fontWeight: 'bold', fontSize: '14px', color: selectedLead?.id === lead.id ? '#d4af37' : '#fff' }}>{lead.golferName}</span>
                   </div>
                 </div>
@@ -203,8 +278,8 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
           <>
             {/* Chat Header */}
             <div style={{ padding: '20px', borderBottom: '1px solid #222', backgroundColor: '#0a0a0a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img src={selectedLead.golferPhoto} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '20px', border: '1px solid #333' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {renderAvatar(selectedLead.golferName, selectedLead.golferPhoto, 40)}
                 <div>
                   <h4 style={{ margin: 0, fontSize: '16px', color: '#fff' }}>{selectedLead.golferName}</h4>
                   <div style={{ fontSize: '12px', color: '#4CAF50', marginTop: '4px', display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -279,12 +354,14 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
                     ref={fileInputRef} 
                     style={{ display: 'none' }} 
                     onChange={handleFileUpload}
+                    aria-label={`Attach file for ${selectedLead.golferName}`}
                   />
                   <button 
                     type="button" 
                     onClick={() => fileInputRef.current?.click()}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: '#d4af37', padding: '0 5px' }}
-                    title="Attach File"
+                    className="adleads-action-btn"
+                    aria-label={`Attach file to message ${selectedLead.golferName}`}
                   >
                     📎
                   </button>
@@ -295,7 +372,13 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
                     placeholder={`Message ${selectedLead.golferName}...`}
                     style={{ flex: 1, padding: '14px', backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '24px', color: '#fff', outline: 'none' }}
                   />
-                  <button type="submit" disabled={!newMessage.trim()} style={{ padding: '0 24px', height: '46px', backgroundColor: newMessage.trim() ? '#4CAF50' : '#333', color: '#fff', border: 'none', borderRadius: '24px', fontWeight: 'bold', cursor: newMessage.trim() ? 'pointer' : 'not-allowed', transition: '0.2s' }}>
+                  <button
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    style={{ padding: '0 24px', height: '46px', backgroundColor: newMessage.trim() ? '#4CAF50' : '#333', color: '#fff', border: 'none', borderRadius: '24px', fontWeight: 'bold', cursor: newMessage.trim() ? 'pointer' : 'not-allowed', transition: '0.2s' }}
+                    aria-label={`Send message to ${selectedLead.golferName}`}
+                    className="adleads-action-btn"
+                  >
                     SEND
                   </button>
                 </form>
@@ -305,5 +388,6 @@ export default function AdLeadsInbox({ partnerUid }: AdLeadsInboxProps) {
         )}
       </div>
     </div>
+    </>
   );
 }
