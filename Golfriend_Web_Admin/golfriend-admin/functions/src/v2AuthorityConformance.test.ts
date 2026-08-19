@@ -39,7 +39,7 @@ check('no process.env God-Mode/bypass identifier anywhere', () => {
 });
 
 // ---- RETAINED (approved V2): must authorize via server-owned module ----
-const RETAINED_STAFF = ['adminResolveBooking', 'syncCoursesFromProvider', 'setManualCourseCoordinates'];
+const RETAINED_STAFF = ['adminResolveBooking', 'setManualCourseCoordinates'];
 const RETAINED_DIRECTOR = ['applyModerationStrike'];
 
 for (const name of RETAINED_STAFF) {
@@ -58,7 +58,7 @@ for (const name of RETAINED_DIRECTOR) {
 }
 
 // ---- EXCLUDED (quarantined): must be fail-closed, no authority, no financial ----
-const QUARANTINED = ['resolveEscrow', 'adminOverrideUser', 'adminManagePartner', 'logPlatformExpense', 'resolvePhotoValidation', 'updateFulfillmentOrder', 'drawRaffleWinner', 'manageTournamentOps', 'checkInFlight'];
+const QUARANTINED = ['syncCoursesFromProvider', 'resolveEscrow', 'adminOverrideUser', 'adminManagePartner', 'logPlatformExpense', 'resolvePhotoValidation', 'updateFulfillmentOrder', 'drawRaffleWinner', 'manageTournamentOps', 'checkInFlight'];
 for (const name of QUARANTINED) {
   check(`quarantined ${name}: fail-closed, no privileged/financial authority`, () => {
     const body = bodyOf(name);

@@ -1,1 +1,15 @@
-{"indexes":[],"fieldOverrides":[]}
+{
+  "indexes": [
+    {"collectionGroup":"matches","queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"startsAt","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"matchJoinRequests","queryScope":"COLLECTION","fields":[{"fieldPath":"matchId","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"v2_course_discovery","queryScope":"COLLECTION","fields":[{"fieldPath":"snapshotVersion","order":"ASCENDING"},{"fieldPath":"normalizedName","order":"ASCENDING"},{"fieldPath":"courseId","order":"ASCENDING"}]},
+    {"collectionGroup":"v2_course_discovery","queryScope":"COLLECTION","fields":[{"fieldPath":"snapshotVersion","order":"ASCENDING"},{"fieldPath":"countryKey","order":"ASCENDING"},{"fieldPath":"normalizedName","order":"ASCENDING"},{"fieldPath":"courseId","order":"ASCENDING"}]},
+    {"collectionGroup":"v2_course_discovery","queryScope":"COLLECTION","fields":[{"fieldPath":"snapshotVersion","order":"ASCENDING"},{"fieldPath":"cityKey","order":"ASCENDING"},{"fieldPath":"normalizedName","order":"ASCENDING"},{"fieldPath":"courseId","order":"ASCENDING"}]},
+    {"collectionGroup":"courses","queryScope":"COLLECTION","fields":[{"fieldPath":"country","order":"ASCENDING"},{"fieldPath":"displayName","order":"ASCENDING"}]},
+    {"collectionGroup":"courses","queryScope":"COLLECTION","fields":[{"fieldPath":"freshnessState","order":"ASCENDING"},{"fieldPath":"coordinateValidity","order":"ASCENDING"}]},
+    {"collectionGroup":"courses","queryScope":"COLLECTION","fields":[{"fieldPath":"migrationState","order":"ASCENDING"},{"fieldPath":"country","order":"ASCENDING"}]},
+    {"collectionGroup":"course_catalogue_failures","queryScope":"COLLECTION","fields":[{"fieldPath":"retryState","order":"ASCENDING"},{"fieldPath":"nextRetryAt","order":"ASCENDING"}]},
+    {"collectionGroup":"golf_api_quota_reservations","queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"expiresAt","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": []
+}

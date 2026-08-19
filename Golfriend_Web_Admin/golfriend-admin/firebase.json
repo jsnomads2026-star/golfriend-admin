@@ -35,7 +35,7 @@
       "codebase": "course-catalogue",
       "runtime": "nodejs20",
       "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"],
-      "predeploy": ["node --check \"$RESOURCE_DIR/index.js\"", "node --test \"$RESOURCE_DIR/domain.test.js\"", "node \"$RESOURCE_DIR/selection-proof.js\""]
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR/..\" run verify:course-catalogue-predeploy"]
     }
   ],
   "firestore": {

@@ -5,5 +5,6 @@ const exportsFound = [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((
 const prohibited = ['acquireCourseCandidates', 'syncCoursesFromProvider', 'nightlyCourseHealer', 'queryGolfApi'];
 if (exportsFound.length !== 1 || exportsFound[0] !== 'getCourseAcquisitionDashboard') throw Error(`EXPORT_SELECTION_INVALID:${exportsFound.join(',')}`);
 for (const name of prohibited) if (source.includes(name)) throw Error(`PROHIBITED_FUNCTION_PRESENT:${name}`);
-if (/defineSecret|golfapi|https?:\/\//i.test(source)) throw Error('PROVIDER_CAPABILITY_PRESENT');
-console.log('course-read selection proof PASS: one read-only export, zero provider capability');
+if (/defineSecret|golfapi|https?:\/\/|\.collection\(|\.get\(/i.test(source)) throw Error('DATA_OR_PROVIDER_CAPABILITY_PRESENT');
+if (!source.includes('FULL_COLLECTION_DASHBOARD_RETIRED_USE_CATALOGUE_STATUS')) throw Error('DASHBOARD_NOT_FAIL_CLOSED');
+console.log('course-read selection proof PASS: one fail-closed compatibility export, zero data or provider capability');

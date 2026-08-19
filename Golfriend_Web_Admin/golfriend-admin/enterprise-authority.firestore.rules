@@ -87,11 +87,15 @@ service cloud.firestore {
     // projected through the App Check-protected Director callable only.
     match /platform/{document=**} { allow read, write: if false; }
     match /golf_api_quota/{document=**} { allow read, write: if false; }
+    match /golf_api_quota_reservations/{document=**} { allow read, write: if false; }
+    match /golf_api_quota_evidence/{document=**} { allow read, write: if false; }
     match /course_acquisition_checkpoints/{document=**} { allow read, write: if false; }
     match /course_catalogue_runs/{document=**} { allow read, write: if false; }
     match /course_catalogue_failures/{document=**} { allow read, write: if false; }
     match /course_catalogue_dead_letters/{document=**} { allow read, write: if false; }
     match /golf_api_record_quarantine/{document=**} { allow read, write: if false; }
     match /course_catalogue_count_receipts/{document=**} { allow read, write: if false; }
+    match /course_catalogue_page_cache/{document=**} { allow read, write: if false; }
+    match /course_catalogue_activation_receipts/{document=**} { allow read, write: if false; }
   }
 }

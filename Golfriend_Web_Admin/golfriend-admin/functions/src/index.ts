@@ -1,12 +1,9 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target v1
 import vision from "@google-cloud/vision"; // 🔥 ADDED
-import { classifyCourseSync, isValidProviderId, type ProviderCourse } from "./courseSync.js";
-import { runSyncCoursesFromProviderPreview } from "./courseSyncPreview.js";
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
 import {
@@ -32,7 +29,6 @@ import { validateSubmission, applyReview, statusOnSubmit, canSubmit, isReviewDec
 import { FieldValue } from "firebase-admin/firestore";
 import { createOutreachStore } from "./outreachStore.js";
 import type { CallerContext as OutreachCallerContext } from "./outreachAuthority.js";
-export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 export {listMarketingAssets,getMarketingAssetHistory,createMarketingAsset,uploadMarketingAssetVersion,transitionMarketingAsset,getMarketingAssetDownload} from "./marketingAssetRuntime.js";
 export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerApplicationV2, uploadPartnerApplicationEvidenceV2, sendPartnerSupportMessageV2, listPartnerApplicationsV2, getPartnerApplicationAdminV2, sendAdminPartnerSupportMessageV2, reviewPartnerApplicationV2, getMyVerifiedCourseOnboardingV2, saveVerifiedCourseOnboardingDraftV2, acceptVerifiedCourseOnboardingAgreementV2, submitVerifiedCourseOnboardingV2, getPartnerAgreementV2, reviewPartnerApplicationEvidenceV2, approvePartnerContractV2} from "./partnerOnboardingRuntime.js";
 export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin,getPartnerTrialReceiptV1,getAdminPartnerTrialReceiptV1,cancelPartnerTrialV1} from "./partnerActivationRuntime.js";
@@ -56,13 +52,11 @@ export {getEnterpriseMemberRequestsAdminV1,getEnterpriseMemberRequestAdminV1,dec
 export {getEnterpriseMemberCommissioningAdminV1,proposeEnterpriseMemberDeliveryTemplateAdminV1,recordEnterpriseMemberTemplateApprovalAdminV1,activateEnterpriseMemberDeliveryTemplateAdminV1,rejectEnterpriseMemberDeliveryTemplateAdminV1,retireEnterpriseMemberDeliveryTemplateAdminV1,runEnterpriseMemberDeliveryDryRunAdminV1,validateEnterpriseMemberJHCCPortAdminV1} from "./enterpriseMemberCommissioningRuntime.js";
 export {getSmallBusinessPortalV1,saveSmallBusinessProfileV1,submitSmallBusinessProfileV1,submitSmallBusinessApplicationV1,withdrawSmallBusinessApplicationV1,getSmallBusinessProfileCorrectionV1,saveSmallBusinessProfileCorrectionV1,submitSmallBusinessProfileCorrectionV1,withdrawSmallBusinessProfileCorrectionV1,prepareSmallBusinessPromotionV1,createSmallBusinessSubscriptionIntentV1,discoverSmallBusinessesV1,getSmallBusinessDetailV1,recordSmallBusinessEngagementV1,prepareSmallBusinessInquiryV1,listSmallBusinessApplicationsAdminV1,getSmallBusinessApplicationAdminV1,decideSmallBusinessApplicationAdminV1,listSmallBusinessProfileCorrectionsAdminV1,getSmallBusinessProfileCorrectionAdminV1,decideSmallBusinessProfileCorrectionAdminV1,reviewSmallBusinessPromotionAdminV1,getSmallBusinessReportingAdminV1,prepareSmallBusinessJhccReportAdminV1} from "./smallBusinessRuntime.js";
 export {createSmallBusinessSubscriptionCheckoutV1,smallBusinessStripeWebhookV1,reconcileExpiredSmallBusinessTrialsV1,getSmallBusinessSubscriptionStateV1} from "./smallBusinessSubscriptionRuntime.js";
-export {listCourseSyncReceipts, recoverExpiredCourseIngestionJobs, getCourseIngestionOperations, prepareCourseIngestionRetry} from "./courseIngestion.js";
 export {getCountryUserAnalytics} from "./countryUserAnalytics.js";
 export {getTeeEconomyAnalytics} from "./teeEconomyAnalytics.js";
 export {getAdminControlProjectionV1,decidePartnerTrialAdminV1,previewEconomyConfigAdminV1,activateEconomyConfigAdminV1,rollbackEconomyConfigAdminV1} from "./adminControlRuntime.js";
 export {prepareAdminJhccFinanceReportV1,transmitAdminJhccFinanceReportV1,getAdminJhccFinanceDeliveryV1} from "./financeReportRuntime.js";
 export {getPartnerTournamentGovernanceV1,managePartnerTournamentGovernanceV1,getAdminTournamentGovernanceV1,manageAdminTournamentGovernanceV1} from "./tournamentGovernanceRuntime.js";
-export {getCourseAcquisitionDashboard,previewCourseAcquisitionPlan,acquireCourseCandidates,decideCourseCandidate,publishCourseCandidate,submitCourseCorrectionRequest} from "./courseAcquisition.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -74,107 +68,9 @@ const visionClient = new vision.ImageAnnotatorClient(); // 🔥 ADDED
 
 // 🔐 Pulls the key securely from Google Secret Manager
 // 🔐 Pulls the key securely from Google Secret Manager
-const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
 
 // ==========================================
 // 🌙 THE NIGHTLY HEALER (Runs every day at 3:00 AM)
-// ==========================================
-export const nightlyCourseHealer = onSchedule({
-  schedule: "0 3 * * *",
-  timeZone: "Asia/Bangkok", // Aligned to Pattaya local time
-  secrets: [GOLF_API_KEY],
-  memory: "512MiB"
-}, async (event) => {
-  console.log("🌙 NIGHTLY HEALER: Waking up...");
-
-  try {
-    const snapshot = await db.collection("courses").get();
-    const allCourses = snapshot.docs.map(doc => ({ docId: doc.id, ...(doc.data() as any) }));
-
-    const brokenCourses = allCourses.filter((c: any) => 
-      c.courseID && 
-      !c.courseID.startsWith("manual_") && 
-      c.requiresManualGPS !== true && // 🔥 THE FIX: Ignore quarantined courses
-      (!c.latitude || c.latitude === 0 || !c.lat || c.lat === 0)
-    );
-
-    console.log(`⚠️ Found ${brokenCourses.length} broken courses.`);
-    if (brokenCourses.length === 0) return console.log("✅ Vault is fully healed. Going back to sleep.");
-
-    // Limit to 50 per night to strictly protect your Golf API quota
-    const coursesToProcess = brokenCourses.slice(0, 50);
-    let healedCount = 0;
-    const apiKey = GOLF_API_KEY.value();
-    const headers = { 'Authorization': `Bearer ${apiKey}` };
-
-    for (let i = 0; i < coursesToProcess.length; i++) {
-      const target: any = coursesToProcess[i];
-      let exactLat = 0, exactLng = 0;
-      let greenGrid = [], bunkerGrid = [], waterGrid = [];
-
-      try {
-        const shellRes = await fetch(`https://www.golfapi.io/api/v2.3/courses/${target.courseID}`, { headers });
-        if (shellRes.ok) {
-          const shellData = await shellRes.json();
-          const shell = shellData.data || shellData;
-          if (shell.latitude && shell.longitude) {
-            exactLat = parseFloat(shell.latitude);
-            exactLng = parseFloat(shell.longitude);
-          }
-        }
-
-        const coordRes = await fetch(`https://www.golfapi.io/api/v2.3/coordinates/${target.courseID}`, { headers });
-        if (coordRes.ok) {
-          const coordData = await coordRes.json();
-          const gpsGrid = coordData.data || coordData;
-          greenGrid = gpsGrid.greens || [];
-          bunkerGrid = gpsGrid.bunkers || [];
-          waterGrid = gpsGrid.water || [];
-        }
-
-        if (exactLat !== 0 && exactLng !== 0) {
-          await db.collection("courses").doc(target.docId).set({
-            latitude: exactLat, longitude: exactLng,
-            lat: exactLat, lng: exactLng,
-            greenCoordinates: greenGrid, 
-            bunkerCoordinates: bunkerGrid, 
-            waterCoordinates: waterGrid,
-            apiImported: true, 
-            cachedAt: new Date().toISOString()
-          }, { merge: true });
-          
-          healedCount++;
-          console.log(`✅ HEALED: ${target.clubName}`);
-        } else {
-          // 🛑 QUARANTINE: Mark as un-healable to save API quota
-          await db.collection("courses").doc(target.docId).set({
-            requiresManualGPS: true,
-            lastHealAttempt: new Date().toISOString()
-          }, { merge: true });
-          console.log(`🛑 QUARANTINED: ${target.clubName} (No API Data)`);
-        }
-      } catch (err: any) {
-        console.error(`❌ FAILED on ${target.courseID}:`, err.message);
-        // Also quarantine on hard crash
-        await db.collection("courses").doc(target.docId).set({
-          requiresManualGPS: true,
-          lastHealAttempt: new Date().toISOString()
-        }, { merge: true });
-      }
-
-      if (i < coursesToProcess.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      }
-    }
-
-    console.log(`🏁 NIGHTLY HEALER COMPLETE. Restored ${healedCount} courses.`);
-  } catch (error) {
-    console.error("❌ CRITICAL HEALER FAILURE:", error);
-  }
-});
-
-// ==========================================
-// 🧹 THE WEEKLY JANITOR (Runs every Sunday at 4:00 AM)
 // ==========================================
 export const weeklyVaultJanitor = onSchedule({
   schedule: "0 4 * * 0",
@@ -1219,195 +1115,10 @@ const legacyManageEnterpriseStaff = onCall({ memory: "256MiB", enforceAppCheck: 
   }
 });
 void legacyManageEnterpriseStaff;
-// 🛰️ COURSE PROVIDER SYNC (Server-Authoritative, Credentialed)
-// ==========================================
-// Golf-API course coordinate sync moved fully server-side. The provider key is
-// read from Secret Manager and never reaches the client. Every course is matched
-// deterministically by provider id, coordinates are strictly validated, trusted
-// manual corrections are never silently overwritten, batches are bounded and
-// rate-limited with retry/backoff, last-known-good coordinates are preserved,
-// and each applied change is audited (source, provider id, fetch time, updater,
-// before/after). A "preview" mode returns the proposed diffs without writing.
-
-// Fetch with bounded exponential backoff on 429/5xx (and transport errors).
-async function fetchWithBackoff(url: string, headers: Record<string, string>, maxRetries = 3): Promise<Response | null> {
-  let attempt = 0;
-  let delayMs = 500;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    try {
-      const res = await fetch(url, { headers });
-      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
-        if (attempt >= maxRetries) return res;
-        await new Promise((r) => setTimeout(r, delayMs));
-        delayMs *= 2;
-        attempt += 1;
-        continue;
-      }
-      return res;
-    } catch (err) {
-      if (attempt >= maxRetries) throw err;
-      await new Promise((r) => setTimeout(r, delayMs));
-      delayMs *= 2;
-      attempt += 1;
-    }
-  }
-}
-
-interface CourseSyncResultRow {
-  courseId: string;
-  result: string;
-  message: string;
-  before?: { latitude: number | null; longitude: number | null };
-  after?: { latitude: number; longitude: number };
-}
-
-export const syncCoursesFromProvider = onCall(
-  { secrets: [GOLF_API_KEY], memory: "512MiB", timeoutSeconds: 300 },
-  async (request) => {
-    if (!request.auth || !request.auth.uid) {
-      throw new HttpsError('unauthenticated', 'You must be logged in.');
-    }
-    const callerUid = request.auth.uid;
-
-    // AUTHORIZATION: server-owned active platform staff ONLY, derived from the
-    // admin_users/{uid} document — the same authority as the approved portal
-    // role journey. No email break-glass / God-Mode / client role / env bypass.
-    // Fail-closed for missing, inactive, suspended or unauthorized staff records.
-    const adminSnap = await db.collection('admin_users').doc(callerUid).get();
-    if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
-      throw new HttpsError('permission-denied', 'Only active platform staff can run the course sync.');
-    }
-
-    const { mode, courseIds } = request.data || {};
-    if (mode !== 'preview' && mode !== 'apply') {
-      throw new HttpsError('invalid-argument', 'mode must be "preview" or "apply".');
-    }
-    // Bounded batch: explicit ids (deduped, capped) or a small auto-selected set
-    // of courses with broken/missing coordinates.
-    const limit = Math.min(Math.max(Number(request.data?.limit) || 10, 1), 25);
-
-    interface Target { docId: string; courseID: string; data: FirebaseFirestore.DocumentData; }
-    const targets: Target[] = [];
-
-    if (Array.isArray(courseIds) && courseIds.length > 0) {
-      const ids = Array.from(new Set(courseIds.filter((x: unknown) => isValidProviderId(x)))).slice(0, 25) as string[];
-      for (const id of ids) {
-        const snap = await db.collection('courses').doc(id).get();
-        if (snap.exists) targets.push({ docId: snap.id, courseID: id, data: snap.data() || {} });
-        else targets.push({ docId: id, courseID: id, data: {} });
-      }
-    } else {
-      const snap = await db.collection('courses').get();
-      for (const d of snap.docs) {
-        const c = d.data() as any;
-        const cid = c.courseID || d.id;
-        if (!isValidProviderId(cid)) continue;
-        if (c.requiresManualGPS === true) continue; // leave quarantined for manual flow
-        const hasCoords = Number(c.latitude) || Number(c.lat);
-        if (!hasCoords) targets.push({ docId: d.id, courseID: cid, data: c });
-        if (targets.length >= limit) break;
-      }
-    }
-
-    const apiKey = GOLF_API_KEY.value();
-    const headers = { Authorization: `Bearer ${apiKey}` };
-    const results: CourseSyncResultRow[] = [];
-    const nowIso = new Date().toISOString();
-
-    for (let i = 0; i < targets.length; i++) {
-      const t = targets[i];
-      let provider: ProviderCourse | null = null;
-      try {
-        const res = await fetchWithBackoff(`https://www.golfapi.io/api/v2.3/courses/${t.courseID}`, headers);
-        if (res && res.ok) {
-          const body: any = await res.json();
-          const shell = body.data || body;
-          if (shell && (shell.latitude !== undefined && shell.longitude !== undefined)) {
-            provider = { courseID: shell.courseID || shell.id || t.courseID, latitude: shell.latitude, longitude: shell.longitude };
-          } else {
-            provider = null; // missing coordinates
-          }
-        } else if (res && res.status === 404) {
-          provider = null;
-        } else {
-          results.push({ courseId: t.courseID, result: 'error', message: `Provider HTTP ${res ? res.status : 'no-response'} after retries.` });
-          continue;
-        }
-      } catch (err: any) {
-        results.push({ courseId: t.courseID, result: 'error', message: `Fetch failed: ${err?.message || 'unknown'}` });
-        continue;
-      }
-
-      const decision = mode === 'preview'
-        ? runSyncCoursesFromProviderPreview('preview', [{ courseId: t.courseID, existing: t.data }], new Map([
-          [t.courseID, { kind: 'response' as const, course: provider }],
-        ])).results[0]
-        : classifyCourseSync(t.courseID, t.data, provider);
-      const row: CourseSyncResultRow = { courseId: t.courseID, result: decision.result, message: decision.message, before: decision.before };
-      if (decision.after) row.after = decision.after;
-
-      if (mode === 'apply' && decision.result === 'updated' && decision.after) {
-        try {
-          await db.runTransaction(async (tx) => {
-            const ref = db.collection('courses').doc(t.docId);
-            const fresh = await tx.get(ref);
-            const cur = fresh.data() || {};
-            // Last-known-good preservation.
-            const lastKnownGood = {
-              latitude: cur.latitude ?? cur.lat ?? null,
-              longitude: cur.longitude ?? cur.lng ?? null,
-              at: cur.providerFetchedAt || cur.cachedAt || null,
-            };
-            tx.set(ref, {
-              latitude: decision.after!.latitude,
-              longitude: decision.after!.longitude,
-              lat: decision.after!.latitude,
-              lng: decision.after!.longitude,
-              gpsSource: 'golfapi',
-              providerId: t.courseID,
-              providerFetchedAt: nowIso,
-              updatedByUid: callerUid,
-              lastKnownGood,
-              apiImported: true,
-              cachedAt: nowIso,
-            }, { merge: true });
-
-            // Audit record: source, provider id, fetch time, updater, before/after.
-            const auditRef = db.collection('course_sync_audit').doc();
-            tx.set(auditRef, {
-              courseId: t.courseID,
-              source: 'golfapi',
-              providerId: t.courseID,
-              fetchedAt: nowIso,
-              updatedByUid: callerUid,
-              before: decision.before,
-              after: decision.after,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-          });
-          row.message = 'Coordinates updated from provider (audited).';
-        } catch (err: any) {
-          row.result = 'error';
-          row.message = `Write failed: ${err?.message || 'unknown'}`;
-        }
-      }
-
-      results.push(row);
-
-      // Rate limit between provider calls (backoff already handles 429 bursts).
-      if (i < targets.length - 1) await new Promise((r) => setTimeout(r, 400));
-    }
-
-    const summary = results.reduce((acc: Record<string, number>, r) => {
-      acc[r.result] = (acc[r.result] || 0) + 1;
-      return acc;
-    }, {});
-
-    logger.info(`🛰️ Course sync (${mode}) by ${callerUid}: ${JSON.stringify(summary)}`);
-    return { success: true, mode, processed: results.length, summary, results };
-  }
-);
+export const syncCoursesFromProvider = onCall({enforceAppCheck:true},async()=>{
+  // QUARANTINED (provider-authority): the shared course-catalogue scheduler is the sole provider path.
+  throw new HttpsError('unavailable','COURSE_PROVIDER_OPERATOR_PATH_RETIRED');
+});
 
 export const setManualCourseCoordinates = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'You must be logged in.');
