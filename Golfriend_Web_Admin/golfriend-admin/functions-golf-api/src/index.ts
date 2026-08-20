@@ -49,7 +49,7 @@ export const syncCoursesFromProvider = onCall({ region: REGION, secrets: [GOLF_A
     try {
       usage = await db.runTransaction(async (tx) => {
         const current = await tx.get(usageRef);
-        const next = nextUsage(monthKey(now), current.exists ? current.data() : null, targets.length);
+        const next = nextUsage(monthKey(now), current.exists ? current.data() ?? null : null, targets.length);
         tx.set(usageRef, { schema: 'golfriend.platform.golf-api-usage.v1', ...next, monthlyBudget: 100, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         return next;
       });
@@ -83,10 +83,11 @@ export const syncCoursesFromProvider = onCall({ region: REGION, secrets: [GOLF_A
     if (data.actorUid !== request.auth!.uid) throw new HttpsError('permission-denied', 'Only the previewing staff member can apply this preview.');
     if (data.status === 'applied') return { idempotent: true, results: data.appliedResults ?? [] };
     if (data.status !== 'previewed' || typeof data.expiresAt !== 'string' || Date.parse(data.expiresAt) < Date.now() || !Array.isArray(data.rows) || data.rows.length > 25) throw new HttpsError('failed-precondition', 'Preview is invalid or expired; create a new preview.');
-    const refs = data.rows.map((row) => courseCollection.doc(String((row as { courseId?: unknown }).courseId)));
+    const previewRows = data.rows as Array<{ courseId?: unknown; providerId?: unknown; provider?: ProviderCourse | null; result?: unknown }>;
+    const refs = previewRows.map((row) => courseCollection.doc(String(row.courseId)));
     const fresh = await Promise.all(refs.map((ref) => tx.get(ref)));
     const results = fresh.map((snapshot, index) => {
-      const row = data.rows![index] as { providerId?: unknown; provider?: ProviderCourse | null; result?: unknown };
+      const row = previewRows[index];
       if (!snapshot.exists || typeof row.providerId !== 'string' || row.result === 'error') return { courseId: snapshot.id, result: 'conflict', reason: 'Course or preview evidence is unavailable.' };
       const decision = classifyCourseSync(row.providerId, snapshot.data() as CourseRecord, row.provider ?? null);
       if (decision.result === 'updated' && decision.after) tx.set(snapshot.ref, { latitude: decision.after.latitude, longitude: decision.after.longitude, lat: decision.after.latitude, lng: decision.after.longitude, gpsSource: 'golfapi', providerId: row.providerId, providerFetchedAt: timestamp(), updatedByUid: request.auth!.uid, apiImported: true }, { merge: true });
@@ -107,5 +108,5 @@ export const getGolfApiSyncStatus = onCall({ region: REGION, memory: '256MiB' },
     usageRef.get(),
     auditCollection.orderBy('createdAt', 'desc').limit(10).get(),
   ]);
-  return buildGolfApiSyncStatus({ usage: usage.exists ? usage.data() : null, audits: audits.docs.map((item) => item.data()) });
+  return buildGolfApiSyncStatus({ usage: usage.exists ? usage.data() ?? null : null, audits: audits.docs.map((item) => item.data()) });
 });
