@@ -33,6 +33,27 @@ assert.match(service,/httpsCallable\(functions, 'syncCoursesFromProvider'\)/);
 assert.doesNotMatch(ui+service,/GOLF_API_KEY|golfapi\.io|Authorization\s*:|Bearer\s+/i);
 assert.doesNotMatch(service,/fetch\s*\(/);
 for(const locale of ['en','th','ko','ja','zh','es','fr','de']) assert.match(ui,new RegExp(`\\n  ${locale}:`));
+// The V2 course schema, as it actually exists in golfriend-v2-production-2ee34: the
+// V1 `cachedAt` retrieval time was migrated under the name `legacyCachedAt`, and
+// `source` became a provenance MAP rather than a string. Read with the V1 field names
+// only, every migrated record showed "[object Object]" as its data source and counted
+// as stale with no Updated date — 3,206 of 3,348 records misreported.
+const migrated = normalizeCourse('mig1', {
+  courseID: 'provider_mig', clubName: 'Danderyd Golf Club', country: 'Sweden', region: 'Stockholms län',
+  latitude: 59.4151243, longitude: 18.0195955,
+  legacyCachedAt: new Date(now.getTime() - 55 * 86400000).toISOString(),
+  provider: 'golf-api',
+  source: { provider: 'golf-api', sourceProject: 'golfriend-v1', sourceCollection: 'courses' },
+}, now);
+assert.equal(migrated.source, 'golf-api', 'a provenance map must not stringify into the data-source column');
+assert.equal(migrated.stale, false, 'legacyCachedAt is the migrated retrieval time and must count for freshness');
+assert.ok(migrated.updatedAt, 'a migrated record must report an Updated date');
+// The V1 shape still resolves exactly as before.
+const legacy = normalizeCourse('leg1', { courseID: 'p', clubName: 'River', country: 'Thailand', latitude: 12, longitude: 100, apiImported: true }, now);
+assert.equal(legacy.source, 'golfapi');
+const stringSource = normalizeCourse('str1', { courseID: 'p', clubName: 'River', country: 'Thailand', latitude: 12, longitude: 100, source: 'manual-entry' }, now);
+assert.equal(stringSource.source, 'manual-entry');
+
 // The Golf API status document must never decide whether the catalogue renders.
 // Loading both through one Promise.all made an absent or unreadable status document
 // report "catalogue could not be loaded" about a catalogue that had loaded fine —

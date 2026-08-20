@@ -8,7 +8,11 @@ const validCoordinates = (lat, lng) => lat !== null && lng !== null && lat >= -9
 export function normalizeCourse(id, record, now = new Date()) {
   const latitude = number(record, ['latitude', 'lat']);
   const longitude = number(record, ['longitude', 'lng']);
-  const updatedRaw = value(record, ['providerFetchedAt', 'cachedAt', 'updatedAt', 'lastUpdated']);
+  // `cachedAt` is what the V1 schema called the last provider retrieval; the V2
+  // migration carried the same value across under the name `legacyCachedAt`. Without
+  // it every migrated record has no recognised timestamp, so it reports "not
+  // available" in the Updated column and counts as stale — about data that is not.
+  const updatedRaw = value(record, ['providerFetchedAt', 'cachedAt', 'legacyCachedAt', 'updatedAt', 'lastUpdated']);
   const providerSyncRaw = value(record, ['providerFetchedAt']);
   const updatedMs = updatedRaw && typeof updatedRaw?.toDate === 'function' ? updatedRaw.toDate().getTime() : Date.parse(String(updatedRaw || ''));
   const hasCoordinates = validCoordinates(latitude, longitude);
@@ -16,7 +20,13 @@ export function normalizeCourse(id, record, now = new Date()) {
   const name = text(record, ['clubName', 'name', 'courseName'], 'Unnamed course');
   const country = text(record, ['country', 'countryName'], 'Unknown');
   const region = text(record, ['region', 'state', 'province', 'city'], 'Unknown');
-  const source = text(record, ['gpsSource', 'source'], record.apiImported ? 'golfapi' : 'unknown');
+  // `source` is a plain string in the V1 schema and a provenance MAP in the V2 one,
+  // whose `provider` names the same thing. Stringifying the map printed
+  // "[object Object]" in the Data source column of every migrated record.
+  const provenance = record.source && typeof record.source === 'object' ? record.source : null;
+  const source = text(record, ['gpsSource', 'provider'], '')
+    || (provenance ? text(provenance, ['provider'], '') : text(record, ['source'], ''))
+    || (record.apiImported ? 'golfapi' : 'unknown');
   const incomplete = name === 'Unnamed course' || country === 'Unknown' || !canonicalId;
   const stale = !Number.isFinite(updatedMs) || now.getTime() - updatedMs > STALE_AFTER_DAYS * 86400000;
   const duplicateKey = `${name.toLocaleLowerCase()}|${country.toLocaleLowerCase()}|${region.toLocaleLowerCase()}`;
