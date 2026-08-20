@@ -8,6 +8,7 @@ export const ADMIN_AREAS = [
   { id: 'marketing', label: 'Marketing assets' },
   { id: 'advertising', label: 'Advertising' },
   { id: 'exchange', label: 'OEM / Exchange publishing' },
+  { id: 'economy', label: 'Economy Master / Ledger' },
   { id: 'reports', label: 'Reports to JHCC' },
 ] as const;
 export type AdminArea = (typeof ADMIN_AREAS)[number]['id'];
