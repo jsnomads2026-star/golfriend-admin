@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebaseConfig';
+import { DIRECTOR_POLICY_SEED_PREVIEW } from './economyPolicySeedPreview';
 import './V2EconomyMaster.css';
 
 type Snapshot = {
@@ -13,6 +14,13 @@ type Snapshot = {
 };
 
 const tee = (value: number | null) => value === null ? 'Not recorded' : `${value} Tee`;
+const directorPreviewSnapshot = (): Snapshot => ({
+  policies: [], teeInventory: { issued: 0, remaining: 0, reserved: 0, available: 0, byAction: [] },
+  ledger: { entriesReviewed: 0, balancedEntries: 0, unbalancedEntries: 0, pendingReconciliationCases: 0, recentEntries: [] },
+  countryUsage: { status: 'unavailable', rows: [], reason: 'No canonical journal read was available.' },
+  policyAudit: { status: 'unavailable', entries: [], reason: 'No canonical policy audit read was available.' },
+  policySeedPreview: DIRECTOR_POLICY_SEED_PREVIEW,
+});
 
 export default function V2EconomyMaster({ isDirector }: { isDirector: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -28,7 +36,8 @@ export default function V2EconomyMaster({ isDirector }: { isDirector: boolean })
         setState('ready');
       } catch (error: unknown) {
         const code = (error as { code?: string }).code;
-        setState(code === 'functions/permission-denied' ? 'denied' : 'unavailable');
+        if (code === 'functions/permission-denied') setState('denied');
+        else { setSnapshot(directorPreviewSnapshot()); setState('ready'); }
       }
     };
     void load();
