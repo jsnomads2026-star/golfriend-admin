@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { isActiveDirector } from './authority.js';
 import { buildV2EconomyMasterSnapshot } from './economyMasterRead.js';
+import { V2_ECONOMY_POLICY_SEED_PREVIEW } from './economyPolicySeedPreview.js';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -23,5 +24,5 @@ export const getV2EconomyMasterSnapshot = onCall({ region: 'asia-southeast1', me
     db.collection('v2_economy_reconciliation_cases').limit(250).get(),
     db.collection('v2_economy_policy_change_audit').limit(100).get(),
   ]);
-  return buildV2EconomyMasterSnapshot({ policies: toDocuments(policies), lots: toDocuments(lots), journals: toDocuments(journals), reconciliationCases: toDocuments(reconciliationCases), policyAudit: toDocuments(policyAudit) });
+  return { ...buildV2EconomyMasterSnapshot({ policies: toDocuments(policies), lots: toDocuments(lots), journals: toDocuments(journals), reconciliationCases: toDocuments(reconciliationCases), policyAudit: toDocuments(policyAudit) }), policySeedPreview: V2_ECONOMY_POLICY_SEED_PREVIEW };
 });
