@@ -34,7 +34,14 @@ const firebaseConfig = resolveFirebaseTarget(ACTIVE_PROJECT, env);
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app);
+// Callables are REGIONAL: the SDK builds the endpoint from this value, and a
+// mismatch surfaces as "function not found" rather than as a configuration error.
+// V1's callables answer in us-central1 (the SDK default, which is why no region was
+// needed before). Every function deployed to the V2 project is asia-southeast1, so
+// the region has to follow the resolved target rather than the SDK default.
+const FUNCTIONS_REGION = ACTIVE_PROJECT === 'v2-preview' ? 'asia-southeast1' : 'us-central1';
+export const ACTIVE_FUNCTIONS_REGION = FUNCTIONS_REGION;
+export const functions = getFunctions(app, FUNCTIONS_REGION);
 export const storage = getStorage(app);
 
 // Development-only precommission emulator wiring. All four services are pinned to

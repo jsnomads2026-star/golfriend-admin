@@ -33,4 +33,27 @@ assert.match(service,/httpsCallable\(functions, 'syncCoursesFromProvider'\)/);
 assert.doesNotMatch(ui+service,/GOLF_API_KEY|golfapi\.io|Authorization\s*:|Bearer\s+/i);
 assert.doesNotMatch(service,/fetch\s*\(/);
 for(const locale of ['en','th','ko','ja','zh','es','fr','de']) assert.match(ui,new RegExp(`\\n  ${locale}:`));
-console.log('Course operations verification PASS: catalogue, health, filter, preview-bound apply, confirmation, state, quota, locale, route, and secret-boundary assertions.');
+// The Golf API status document must never decide whether the catalogue renders.
+// Loading both through one Promise.all made an absent or unreadable status document
+// report "catalogue could not be loaded" about a catalogue that had loaded fine —
+// which is exactly what the live V2 Admin showed, because platform/golfApiUsage is
+// denied by the deployed rules. Comments are stripped first so these assertions can
+// never be satisfied by prose describing them.
+const uiCode = ui.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+assert.doesNotMatch(uiCode, /Promise\.all\(\[service\.loadCourses\(\),\s*service\.loadIngestionStatus\(\)\]\)/,
+  'the catalogue and the optional status document must not share one all-or-nothing load');
+assert.match(uiCode, /catch\s*\{\s*setIngestionStatus\(normalizeIngestionStatus\(null\)\)/,
+  'a status document that cannot be read must degrade to "not available", not to an error state');
+assert.match(uiCode, /const rows = await service\.loadCourses\(\)[\s\S]*catch\s*\{\s*setLoadState\('error'\); return; \}/,
+  'only a catalogue failure may put the panel in the error state');
+
+// Callables are regional. Every function in the V2 project is asia-southeast1, so a
+// v2-preview build that used the SDK's us-central1 default would resolve an endpoint
+// that does not exist and fail as "not found".
+const cfg = fs.readFileSync(new URL('../src/firebaseConfig.ts', import.meta.url), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+assert.match(cfg, /ACTIVE_PROJECT === 'v2-preview' \? 'asia-southeast1' : 'us-central1'/);
+assert.match(cfg, /getFunctions\(app, FUNCTIONS_REGION\)/);
+assert.doesNotMatch(cfg, /getFunctions\(app\)/, 'the callable region must never fall back to the SDK default');
+
+console.log('Course operations verification PASS: catalogue, health, filter, preview-bound apply, confirmation, state, quota, locale, route, callable region, independent status load, and secret-boundary assertions.');

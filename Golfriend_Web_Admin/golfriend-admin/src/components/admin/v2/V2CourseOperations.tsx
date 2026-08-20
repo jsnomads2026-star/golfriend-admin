@@ -28,8 +28,34 @@ export default function V2CourseOperations({ service = courseOperationsService }
   const [limit,setLimit]=useState(10); const [runState,setRunState]=useState<RunState>('idle'); const [preview,setPreview]=useState<ReturnType<typeof normalizeSyncResult>|null>(null);
   const [ingestionStatus,setIngestionStatus]=useState<IngestionStatus|null>(null);
   const detailRef=useDialogFocus(Boolean(selected),()=>setSelected(null));
-  const load = useCallback(async () => { setLoadState('loading'); try { const [rows,status]=await Promise.all([service.loadCourses(),service.loadIngestionStatus()]); setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data)))); setIngestionStatus(normalizeIngestionStatus(status)); setLoadState('ready'); } catch { setLoadState('error'); } },[service]);
-  useEffect(()=>{void Promise.all([service.loadCourses(),service.loadIngestionStatus()]).then(([rows,status])=>{setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data))));setIngestionStatus(normalizeIngestionStatus(status));setLoadState('ready');},()=>setLoadState('error'));},[service]);
+  // The catalogue and the Golf API status document are two independent surfaces, and
+  // only the catalogue decides whether this panel can render. They used to be loaded
+  // through one Promise.all, so a status document that was absent or unreadable took
+  // the whole panel to the error state and reported "catalogue could not be loaded"
+  // about a catalogue that had in fact loaded. The status is optional: when it cannot
+  // be read, the pipeline column reports "not available", which is honest and already
+  // has copy for it.
+  const load = useCallback(async () => {
+    setLoadState('loading');
+    try {
+      const rows = await service.loadCourses();
+      setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data))));
+      setLoadState('ready');
+    } catch { setLoadState('error'); return; }
+    try { setIngestionStatus(normalizeIngestionStatus(await service.loadIngestionStatus())); }
+    catch { setIngestionStatus(normalizeIngestionStatus(null)); }
+  },[service]);
+  // Same split on first paint, expressed without a synchronous setState in the effect
+  // body: the two reads settle independently, so the status document cannot decide
+  // whether the catalogue renders.
+  useEffect(()=>{
+    service.loadCourses().then(
+      (rows)=>{setCourses(markDuplicates(rows.map((row)=>normalizeCourse(row.id,row.data))));setLoadState('ready');},
+      ()=>setLoadState('error'));
+    service.loadIngestionStatus().then(
+      (status)=>setIngestionStatus(normalizeIngestionStatus(status)),
+      ()=>setIngestionStatus(normalizeIngestionStatus(null)));
+  },[service]);
   const summary=useMemo(()=>summarizeCourses(courses),[courses]); const visible=useMemo(()=>filterCourses(courses,query,filter),[courses,query,filter]);
   const runPreview=async()=>{setRunState('running');try{const result=normalizeSyncResult(await service.sync({mode:'preview',limit}));setPreview(result);const rejected=(result.summary.conflict||0)+(result.summary.missing||0)+(result.summary.error||0);setRunState(rejected>0?'partial':'success');}catch{setRunState('error');}};
   const runApply=async()=>{const courseIds=preview?.results.filter((row)=>row.result==='updated').map((row)=>row.courseId).filter((id):id is string=>Boolean(id))||[];if(courseIds.length===0){setRunState('error');return;}setRunState('applying');try{await service.sync({mode:'apply',courseIds});setRunState('success');await load();}catch{setRunState('error');}};
