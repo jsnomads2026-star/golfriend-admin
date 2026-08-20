@@ -13,7 +13,6 @@ import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } 
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 import { buildV2EconomyMasterSnapshot } from "./economyMasterRead.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
-export {getAdminBookingStreamV2,adminResolveBookingV2 as adminResolveBooking,sendBookingMessageV2 as sendBookingMessage} from "./adminBookingCommunicationsRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
