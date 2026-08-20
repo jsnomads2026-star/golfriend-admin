@@ -9,6 +9,7 @@ type Snapshot = {
   ledger: { entriesReviewed: number; balancedEntries: number; unbalancedEntries: number; pendingReconciliationCases: number; recentEntries: Array<{ entryId: string; commandType: string; createdAt: string | null; policyVersion: string; debitTee: number; creditTee: number; balanced: boolean }> };
   countryUsage: { status: 'available' | 'unavailable'; rows: Array<{ countryCode: string; journalCount: number; teeVolume: number }>; reason?: string };
   policyAudit: { status: 'available' | 'unavailable'; entries: Array<{ id: string; policyVersion: string; actionType: string; reason: string | null; createdAt: string | null }>; reason?: string };
+  policySeedPreview: { approvalState: 'director_approval_required'; policyVersion: string; policyDigestSha256: string; documentId: string; asset: { code: string; settlementCurrency: string; unitPriceUsd: number }; teePacks: Array<{ id: string; teeCount: number; currency: string; priceUsd: number }>; lotRules: { promotionalTtlDays: number; consumptionOrder: string[] }; actions: Array<{ actionId: string; direction: 'earn' | 'spend' | 'reserve'; amountTee: number; lifecycle: { reserve: string; settle: string; release: string } }> };
 };
 
 const tee = (value: number | null) => value === null ? 'Not recorded' : `${value} Tee`;
@@ -36,6 +37,16 @@ export default function V2EconomyMaster({ isDirector }: { isDirector: boolean })
   if (state === 'loading') return <section className="economy-master-state" role="status">Loading the Director-only V2 economy read model…</section>;
   if (state === 'denied') return <section className="economy-master-state is-denied" role="alert"><h2>Director authority required</h2><p>This read-only Economy Master is server-gated to an active Director. No financial action is available here.</p></section>;
   if (state === 'unavailable' || !snapshot) return <section className="economy-master-state is-unavailable" role="alert"><h2>Canonical V2 economy read unavailable</h2><p>The Admin has no verified connection to the canonical V2 economy authority. No local, legacy, payment, or estimated data is substituted.</p></section>;
+  if (!snapshot.policies.length && !snapshot.ledger.recentEntries.length) {
+    const preview = snapshot.policySeedPreview;
+    return <div className="economy-master">
+      <header><div><span>DIRECTOR · READ-ONLY</span><h2>Economy Master / Ledger</h2><p>Director approval required before the first V2 Economy policy is created. No ledger balance or financial record is shown because none is claimed by this preview.</p></div><aside><b>Server-owned preview</b><small>The deployed Director-only callable supplies this immutable policy preview; it cannot create, settle, release, or price anything.</small></aside></header>
+      <section className="economy-master-card"><h3>Proposed Tee policy</h3><p className="economy-empty"><b>{preview.asset.code}</b> · ${preview.asset.unitPriceUsd.toFixed(2)} USD per Tee · policy <code>{preview.policyVersion}</code></p><p className="economy-empty">Promotional Tees expire after {preview.lotRules.promotionalTtlDays} days and are consumed first. Purchased and member-earned Tees do not expire.</p><p className="economy-empty">Digest <code>{preview.policyDigestSha256}</code><br />Proposed document <code>{preview.documentId}</code></p></section>
+      <section className="economy-master-card"><h3>Approved pack proposal</h3><table><thead><tr><th>Pack</th><th>Tees</th><th>Price</th></tr></thead><tbody>{preview.teePacks.map((pack) => <tr key={pack.id}><td><code>{pack.id}</code></td><td>{pack.teeCount}</td><td>${pack.priceUsd.toFixed(2)} {pack.currency}</td></tr>)}</tbody></table></section>
+      <section className="economy-master-card"><h3>Action inventory awaiting approval</h3><table><thead><tr><th>Action</th><th>Amount</th><th>Reserve</th><th>Settle</th><th>Release</th></tr></thead><tbody>{preview.actions.map((action) => <tr key={action.actionId}><td><code>{action.actionId}</code></td><td>{action.amountTee} Tee</td><td>{action.lifecycle.reserve}</td><td>{action.lifecycle.settle}</td><td>{action.lifecycle.release}</td></tr>)}</tbody></table></section>
+      <section className="economy-master-card"><h3>Creation gate</h3><p className="economy-empty">Director approval and separately authorized write-only creation are required. This deployed read model performs no financial writes and does not fabricate balances, lots, journals, reconciliations, or audit entries.</p></section>
+    </div>;
+  }
 
   return <div className="economy-master">
     <header><div><span>DIRECTOR · READ-ONLY</span><h2>Economy Master / Ledger</h2><p>Canonical V2 Tees only. This screen cannot price, issue, settle, reverse, or change policy.</p></div><aside><b>Live-data dependency</b><small>Requires the deployed `getV2EconomyMasterSnapshot` callable and canonical V2 economy records.</small></aside></header>

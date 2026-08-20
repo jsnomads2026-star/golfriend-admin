@@ -11,7 +11,7 @@
     "test:projection": "tsc && node lib/economyMasterRead.test.js",
     "test:isolation": "tsc && node lib/isolation.test.js",
     "test:bootstrap": "tsc && node lib/economyBootstrapPlan.test.js",
-    "test": "tsc && node lib/authority.test.js && node lib/economyMasterRead.test.js && node lib/economyBootstrapPlan.test.js && node lib/isolation.test.js"
+    "test": "tsc && node lib/authority.test.js && node lib/economyMasterRead.test.js && node lib/economyPolicySeedPreview.test.js && node lib/economyBootstrapPlan.test.js && node lib/isolation.test.js"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",
