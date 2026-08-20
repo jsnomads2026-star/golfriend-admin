@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import { adminBookingPermission, auditEvidence, communicationId, resolveStatus, validateMessageRequest, validateResolutionRequest } from "./adminBookingCommunicationsDomain.js";
+
+assert.equal(adminBookingPermission("Director", "resolve"), true);
+assert.equal(adminBookingPermission("Staff", "resolve"), false);
+assert.equal(adminBookingPermission("Staff", "message"), true);
+assert.equal(adminBookingPermission("", "read"), false);
+assert.deepEqual(resolveStatus("pending", "confirm"), { status: "confirmed", releaseSeat: false });
+assert.deepEqual(resolveStatus("pending", "reject"), { status: "rejected", releaseSeat: true });
+assert.deepEqual(resolveStatus("confirmed", "cancel"), { status: "cancelled", releaseSeat: true });
+assert.throws(() => resolveStatus("cancelled", "cancel"), /TRANSITION_DENIED/);
+assert.deepEqual(validateMessageRequest({ bookingId: "booking_123", locale: "en", message: "  Please confirm.  ", idempotencyKey: "msg_123" }), { bookingId: "booking_123", locale: "en", message: "Please confirm.", idempotencyKey: "msg_123" });
+assert.throws(() => validateMessageRequest({ bookingId: "booking_123", locale: "xx", message: "Hello", idempotencyKey: "msg_123" }), /LOCALE_INVALID/);
+assert.deepEqual(validateResolutionRequest({ bookingId: "booking_123", resolution: "reject", idempotencyKey: "resolve_123" }).resolution, "reject");
+const auditId = communicationId("audit", "booking_123", "resolve_123");
+const evidence = auditEvidence({ auditEventId: auditId, bookingId: "booking_123", kind: "admin_rejected", actorUid: "director_123", actorRole: "Director" });
+assert.equal(evidence.immutable, true);
+assert.equal(evidence.financialFields, false);
+assert.equal(evidence.providerDelivery, "unavailable");
+console.log("adminBookingCommunicationsDomain tests passed");

@@ -13,6 +13,7 @@ import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } 
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 import { buildV2EconomyMasterSnapshot } from "./economyMasterRead.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
+export {getAdminBookingStreamV2,adminResolveBookingV2 as adminResolveBooking,sendBookingMessageV2 as sendBookingMessage} from "./adminBookingCommunicationsRuntime.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -673,7 +674,7 @@ export const cancelBooking = onCall({ memory: "256MiB" }, async (request) => {
 
 // Booking messaging: a participant (the player, the course operator, or staff)
 // appends a message to the booking thread. Purely communicative, non-financial.
-export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
+export const legacySendBookingMessage = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -723,7 +724,7 @@ export const sendBookingMessage = onCall({ memory: "256MiB" }, async (request) =
 // Platform-staff override for the booking lifecycle. NON-FINANCIAL: no refund,
 // payout, escrow or settlement — only seat/status transitions with audit. The
 // client names a decision; the seat release + status change happen server-side.
-export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
+const legacyAdminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -824,6 +825,8 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
 // it is server-owned: the client cannot self-assign roles or write the roster.
 // Only an ACTIVE ENTERPRISE partner may invite/remove staff on their own org.
 // Roster lives at enterprise_staff/{enterpriseUid}/members/{staffUid}.
+void legacyAdminResolveBooking;
+
 export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');

@@ -152,8 +152,8 @@ export default function BookingMessageComposer({ booking, onDismiss }: Props) {
     setSendError('');
     try {
       const fn = httpsCallable(getFunctions(), 'sendBookingMessage');
-      const res: any = await fn({ bookingId: booking.id, text: draftText });
-      if (!res?.data?.success) throw new Error('The server did not confirm the message.');
+      const res: any = await fn({ bookingId: booking.id, locale, message: draftText, idempotencyKey: `admin_booking_message_${crypto.randomUUID().replaceAll('-', '_')}` });
+      if (!res?.data?.accepted || !res?.data?.auditEventId) throw new Error('The server did not confirm the message.');
       setSendState('sent');
     } catch (e: any) {
       setSendError(e?.message || 'Message could not be sent. Use Copy to share it through another channel.');
