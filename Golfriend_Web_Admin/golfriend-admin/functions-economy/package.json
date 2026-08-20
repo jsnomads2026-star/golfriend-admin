@@ -1,0 +1,20 @@
+{
+  "name": "golfriend-v2-economy-functions",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": { "node": "20" },
+  "scripts": {
+    "lint": "echo economy source is covered by focused isolation tests",
+    "build": "tsc",
+    "test:authority": "tsc && node lib/authority.test.js",
+    "test:projection": "tsc && node lib/economyMasterRead.test.js",
+    "test:isolation": "tsc && node lib/isolation.test.js",
+    "test": "tsc && node lib/authority.test.js && node lib/economyMasterRead.test.js && node lib/isolation.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
+  },
+  "devDependencies": { "@types/node": "^24.12.3", "typescript": "^6.0.0" }
+}

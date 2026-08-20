@@ -11,7 +11,6 @@ import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from ".
 import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
-import { buildV2EconomyMasterSnapshot } from "./economyMasterRead.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
 
 // Initialize Firebase Admin
@@ -1377,31 +1376,6 @@ export const applyModerationStrike = onCall({ memory: "256MiB" }, async (request
     logger.error("⚖️ Moderation strike failed:", error);
     throw new HttpsError('internal', error.message || 'Moderation strike failed.');
   }
-});
-
-// Director-only, read-only projection of canonical V2 economy authority. This
-// intentionally has no policy, ledger, payment, or settlement mutation path.
-// Canonical V2 collections deny all direct client access; the Admin receives
-// only bounded, non-member-identifying aggregates through this callable.
-export const getV2EconomyMasterSnapshot = onCall({ memory: "256MiB" }, async (request) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  const adminSnap = await db.collection('admin_users').doc(request.auth.uid).get();
-  if (!isActiveDirector(adminSnap.exists ? adminSnap.data() : null)) {
-    throw new HttpsError('permission-denied', 'Director authority is required.');
-  }
-
-  const [policies, lots, journals, reconciliationCases, policyAudit] = await Promise.all([
-    db.collection('v2_economy_policy_versions').limit(100).get(),
-    db.collection('v2_tee_lots').limit(500).get(),
-    db.collection('v2_economy_journal_entries').limit(250).get(),
-    db.collection('v2_economy_reconciliation_cases').limit(250).get(),
-    db.collection('v2_economy_policy_change_audit').limit(100).get(),
-  ]);
-  const toDocuments = (snapshot: admin.firestore.QuerySnapshot) => snapshot.docs.map((item) => ({ id: item.id, data: item.data() }));
-  return buildV2EconomyMasterSnapshot({
-    policies: toDocuments(policies), lots: toDocuments(lots), journals: toDocuments(journals),
-    reconciliationCases: toDocuments(reconciliationCases), policyAudit: toDocuments(policyAudit),
-  });
 });
 
 // ==========================================
