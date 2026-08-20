@@ -1,0 +1,1 @@
+export {getPartnerPortalContext} from "./getPartnerPortalContext";
