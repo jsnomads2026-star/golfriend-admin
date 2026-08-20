@@ -75,12 +75,19 @@ export function filterCourses(courses, query, filter) {
 export function normalizeSyncResult(data) {
   if (!data || data.success !== true || data.mode !== 'preview') throw new Error('Preview response failed validation.');
   const summary = data.summary && typeof data.summary === 'object' ? data.summary : {};
-  return { mode: 'preview', processed: Number(data.processed) || 0, productionWrites: 0, summary, results: Array.isArray(data.results) ? data.results : [], quota: data.quota ?? null };
+  return { mode: 'preview', processed: Number(data.processed) || 0, previewId: typeof data.previewId === 'string' ? data.previewId : null, productionWrites: 0, summary, results: Array.isArray(data.results) ? data.results : [], quota: data.quota ?? null };
 }
 
 export function normalizeIngestionStatus(raw) {
-  const empty = { source: 'golfapi.io v2.3', lastCommitAt: null, estimatedCallsUsed: null, added: null, skippedExisting: null, reviewRequired: null, failed: null, errors: null, lastCommitJobId: null };
+  const empty = { source: 'golfapi.io v2.3', lastCommitAt: null, estimatedCallsUsed: null, remaining: null, currentMonth: null, added: null, skippedExisting: null, reviewRequired: null, failed: null, errors: null, lastCommitJobId: null };
   if (!raw || typeof raw !== 'object') return empty;
+  if (raw.schema === 'golfriend.golf-api-sync-status.v1') {
+    const lastSuccess = raw.lastSuccess && typeof raw.lastSuccess === 'object' ? raw.lastSuccess : null;
+    const outcome = lastSuccess?.outcome && typeof lastSuccess.outcome === 'object' ? lastSuccess.outcome : {};
+    const safeErrors = raw.safeErrorSummary && typeof raw.safeErrorSummary === 'object' ? raw.safeErrorSummary : {};
+    const at = lastSuccess?.at;
+    return { ...empty, lastCommitAt: typeof at === 'string' && Number.isFinite(Date.parse(at)) ? new Date(at).toISOString() : null, estimatedCallsUsed: Number.isInteger(raw.requestsUsed) ? raw.requestsUsed : null, remaining: Number.isInteger(raw.requestsRemaining) ? raw.requestsRemaining : null, currentMonth: typeof raw.currentMonth === 'string' ? raw.currentMonth : null, added: Number(outcome.updated) || 0, failed: (Number(safeErrors.providerRequestFailures) || 0) + (Number(safeErrors.conflicts) || 0) };
+  }
   const result = raw.lastCommitResult && typeof raw.lastCommitResult === 'object' ? raw.lastCommitResult : null;
   const tsRaw = raw.lastCommitAt;
   const tsMs = tsRaw && typeof tsRaw.toDate === 'function' ? tsRaw.toDate().getTime() : Date.parse(String(tsRaw || ''));
@@ -88,6 +95,8 @@ export function normalizeIngestionStatus(raw) {
     source: 'golfapi.io v2.3',
     lastCommitAt: Number.isFinite(tsMs) ? new Date(tsMs).toISOString() : null,
     estimatedCallsUsed: typeof raw.estimatedCallsUsed === 'number' ? raw.estimatedCallsUsed : null,
+    remaining: null,
+    currentMonth: null,
     added: result ? (Number(result.added) || 0) : null,
     skippedExisting: result ? (Number(result.skippedExisting) || 0) : null,
     reviewRequired: result ? (Number(result.reviewRequired) || 0) : null,

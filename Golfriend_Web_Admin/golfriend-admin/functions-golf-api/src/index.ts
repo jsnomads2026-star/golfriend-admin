@@ -4,6 +4,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { isActiveStaffOrDirector } from './authority.js';
 import { classifyCourseSync, type CourseRecord, type ProviderCourse } from './courseSyncCore.js';
 import { nextUsage, parseApplyRequest, parsePreviewRequest } from './syncPlan.js';
+import { buildGolfApiSyncStatus } from './statusView.js';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -67,7 +68,8 @@ export const syncCoursesFromProvider = onCall({ region: REGION, secrets: [GOLF_A
     const expiresAt = new Date(now.getTime() + PREVIEW_TTL_MS).toISOString();
     await previewRef.create({ schema: 'golfriend.golf-api-sync-preview.v1', status: 'previewed', actorUid: request.auth.uid, fetchedAt, expiresAt, rows, usage, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     await auditCollection.doc(previewRef.id).create({ schema: 'golfriend.golf-api-sync-audit.v1', eventType: 'preview', previewId: previewRef.id, actorUid: request.auth.uid, providerRequestsReserved: targets.length, usage, fetchedAt, rows, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    return { mode: 'preview', previewId: previewRef.id, expiresAt, providerRequestsReserved: targets.length, usage, results: rows };
+    const summary = rows.reduce((value: Record<string, number>, row) => { value[row.result] = (value[row.result] ?? 0) + 1; return value; }, {});
+    return { success: true, mode: 'preview', processed: rows.length, previewId: previewRef.id, expiresAt, providerRequestsReserved: targets.length, usage, summary, results: rows };
   }
 
   if (mode !== 'apply') throw new HttpsError('invalid-argument', 'mode must be "preview" or "apply".');
@@ -95,5 +97,15 @@ export const syncCoursesFromProvider = onCall({ region: REGION, secrets: [GOLF_A
     tx.update(previewRef, { status: 'applied', appliedAt: admin.firestore.FieldValue.serverTimestamp(), appliedResults: results });
     return { idempotent: false, results };
   });
-  return { mode: 'apply', previewId: input.previewId, ...applied };
+  return { success: true, mode: 'apply', previewId: input.previewId, ...applied };
+});
+
+export const getGolfApiSyncStatus = onCall({ region: REGION, memory: '256MiB' }, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
+  await requireStaffOrDirector(request.auth.uid);
+  const [usage, audits] = await Promise.all([
+    usageRef.get(),
+    auditCollection.orderBy('createdAt', 'desc').limit(10).get(),
+  ]);
+  return buildGolfApiSyncStatus({ usage: usage.exists ? usage.data() : null, audits: audits.docs.map((item) => item.data()) });
 });

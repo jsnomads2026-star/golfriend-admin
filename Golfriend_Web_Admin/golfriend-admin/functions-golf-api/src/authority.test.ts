@@ -5,4 +5,5 @@ assert.equal(isActiveStaffOrDirector({ role: 'Operations', status: 'Active' }), 
 assert.equal(isActiveStaffOrDirector({ role: 'Director', status: 'Suspended' }), false);
 assert.equal(isActiveStaffOrDirector({ status: 'Active' }), false);
 assert.equal(isActiveStaffOrDirector(null), false);
-console.log('golf-api authority: active staff/Director allowed; suspended and missing records denied.');
+assert.equal(isActiveStaffOrDirector({ role: '', status: 'Active' }), false);
+console.log('golf-api status authority: active staff/Director allowed; suspended, missing and role-less records denied.');
