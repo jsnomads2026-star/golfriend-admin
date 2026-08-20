@@ -1,0 +1,9 @@
+import assert from 'node:assert';
+import { advanceIngestion, classifyProviderFailure } from './ingestionReliability.js';
+const now = new Date('2026-08-20T00:00:00.000Z'); const job = { cursor: 0, courseIds: ['a','b'], attempts: {}, completed: [], nextAttemptAt: null };
+assert.deepEqual(classifyProviderFailure(429, '60', now, 0), { kind:'temporary', reason:'rate_limited', retryAt:'2026-08-20T00:01:00.000Z' });
+assert.equal(classifyProviderFailure(503, null, now, 2, 50).kind, 'temporary');
+assert.deepEqual(classifyProviderFailure(404, null, now, 0), { kind:'permanent', reason:'not_found' });
+const done = advanceIngestion(job, 'a', 'completed', null); assert.deepEqual(advanceIngestion(done, 'a', 'completed', null), done);
+const paused = advanceIngestion(job, 'a', 'temporary', '2026-08-20T00:01:00.000Z'); assert.equal(paused.cursor, 0); assert.equal(paused.attempts.a, 1);
+console.log('golf-api ingestion reliability: success, 429 resume, permanent failure and duplicate-safe replay passed.');
