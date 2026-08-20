@@ -24,7 +24,9 @@ const service=fs.readFileSync(new URL('../src/components/admin/v2/courseOperatio
 const app=fs.readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 assert.match(app,/activeArea === 'courses' && <V2CourseOperations/);
 assert.match(ui,/confirm_preview/); assert.match(ui,/mode:'preview'/); assert.match(ui,/confirm_apply/); assert.match(ui,/mode:'apply'/);
-assert.match(ui,/previewId/); assert.match(ui,/mode:'apply',previewId/);
+assert.doesNotMatch(ui,/previewId/); assert.match(ui,/mode:'apply',courseIds,requestId/);
+assert.match(ui,/crypto\.randomUUID\(\)/);
+assert.match(ui,/proposed_for_worker/);
 assert.doesNotMatch(ui,/service\.sync\(\{mode:'apply',limit\}\)/);
 assert.match(ui,/runState==='confirm_preview'[\s\S]*onClick=\{\(\)=>void runPreview\(\)\}/);
 assert.match(ui,/runState==='confirm_apply'[\s\S]*onClick=\{\(\)=>void runApply\(\)\}/);
@@ -79,4 +81,4 @@ assert.match(cfg, /ACTIVE_PROJECT === 'v2-preview' \? 'asia-southeast1' : 'us-ce
 assert.match(cfg, /getFunctions\(app, FUNCTIONS_REGION\)/);
 assert.doesNotMatch(cfg, /getFunctions\(app\)/, 'the callable region must never fall back to the SDK default');
 
-console.log('Course operations verification PASS: catalogue, health, filter, preview-bound apply, confirmation, state, quota, locale, route, callable region, independent status load, and secret-boundary assertions.');
+console.log('Course operations verification PASS: catalogue, health, filter, read-only Preview, enqueue-only Apply contract, confirmation, state, quota, locale, route, callable region, independent status load, and secret-boundary assertions.');

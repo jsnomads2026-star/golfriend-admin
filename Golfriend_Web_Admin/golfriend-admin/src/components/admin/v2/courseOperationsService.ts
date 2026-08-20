@@ -4,7 +4,7 @@ import { db, functions } from '../../../firebaseConfig';
 
 export interface CourseOperationsService {
   loadCourses(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
-  sync(payload: { mode: 'preview'; courseIds: string[] } | { mode: 'apply'; previewId: string }): Promise<unknown>;
+  sync(payload: { mode: 'preview'; courseIds: string[] } | { mode: 'apply'; courseIds: string[]; requestId: string }): Promise<unknown>;
   loadIngestionStatus(): Promise<unknown>;
 }
 

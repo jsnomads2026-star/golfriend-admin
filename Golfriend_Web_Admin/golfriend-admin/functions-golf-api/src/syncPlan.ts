@@ -16,9 +16,12 @@ export function parseApplyRequest(data: unknown): { mode: 'apply'; courseIds: st
   if (!courseIds.length || courseIds.length > MAX_MANUAL_RUN || courseIds.length !== value.courseIds.length) throw new Error('Provide 1 to 25 unique valid provider course ids.');
   return { mode: 'apply', courseIds, requestId: value.requestId };
 }
-export function nextUsage(month: string, current: { month?: unknown; requestsUsed?: unknown } | null, requestCount: number) {
+export function nextUsage(month: string, current: { month?: unknown; requestsUsed?: unknown; monthlyBudget?: unknown } | null, requestCount: number) {
   if (!/^\d{4}-\d{2}$/.test(month) || !Number.isInteger(requestCount) || requestCount < 1 || requestCount > MAX_MANUAL_RUN) throw new Error('Invalid usage reservation.');
-  const used = current?.month === month && Number.isInteger(current.requestsUsed) ? Number(current.requestsUsed) : 0;
+  // `platform/golfApiUsage` is the sole durable usage authority.  A missing or
+  // malformed record is not evidence of unused quota, so the worker must stop.
+  if (!current || current.monthlyBudget !== MONTHLY_PROVIDER_REQUEST_BUDGET || !Number.isInteger(current.requestsUsed) || typeof current.month !== 'string') throw new Error('Golf API usage state is unavailable or untrusted.');
+  const used = current.month === month ? Number(current.requestsUsed) : 0;
   if (used + requestCount > MONTHLY_PROVIDER_REQUEST_BUDGET) throw new Error('Monthly Golf API provider-request budget exceeded.');
   return { month, requestsUsed: used + requestCount, remaining: MONTHLY_PROVIDER_REQUEST_BUDGET - used - requestCount };
 }

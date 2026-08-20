@@ -75,7 +75,7 @@ export function filterCourses(courses, query, filter) {
 export function normalizeSyncResult(data) {
   if (!data || data.success !== true || data.mode !== 'preview') throw new Error('Preview response failed validation.');
   const summary = data.summary && typeof data.summary === 'object' ? data.summary : {};
-  return { mode: 'preview', processed: Number(data.processed) || 0, previewId: typeof data.previewId === 'string' ? data.previewId : null, productionWrites: 0, summary, results: Array.isArray(data.results) ? data.results : [], quota: data.quota ?? null };
+  return { mode: 'preview', processed: Number(data.processed) || 0, productionWrites: 0, summary, results: Array.isArray(data.results) ? data.results : [], quota: data.quota ?? null };
 }
 
 export function normalizeIngestionStatus(raw) {
