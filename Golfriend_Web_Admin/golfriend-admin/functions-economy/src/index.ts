@@ -1,13 +1,14 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore, type QuerySnapshot } from 'firebase-admin/firestore';
 import { isActiveDirector } from './authority.js';
 import { buildV2EconomyMasterSnapshot } from './economyMasterRead.js';
 import { V2_ECONOMY_POLICY_SEED_PREVIEW } from './economyPolicySeedPreview.js';
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp();
+const db = getFirestore();
 
-const toDocuments = (snapshot: admin.firestore.QuerySnapshot) => snapshot.docs.map((item) => ({ id: item.id, data: item.data() }));
+const toDocuments = (snapshot: QuerySnapshot) => snapshot.docs.map((item) => ({ id: item.id, data: item.data() }));
 
 // The only Economy codebase export: bounded, non-member-identifying reads from
 // canonical V2 authority. It has no secrets and no financial mutation path.
