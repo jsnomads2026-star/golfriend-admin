@@ -125,7 +125,7 @@ export default function BookingOversight() {
 
       {/* C2C: view toggle — 'table' mode leaves all existing oversight behaviour unchanged */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }} role="group" aria-label="Oversight view">
-        {([['table', '📋 All Bookings'], ['queue', '⚠️ Exception Queue'], ['report', '📊 Operations Report']] as const).map(([v, label]) => (
+        {([['table', '📋 Booking Communications']] as const).map(([v, label]) => (
           <button
             key={v}
             onClick={() => setActiveView(v)}
