@@ -14,3 +14,8 @@ export function advanceIngestion(job: IngestionJob, courseId: string, outcome: '
   if (outcome === 'completed') return { ...job, cursor: Math.max(job.cursor, job.courseIds.indexOf(courseId) + 1), completed: [...job.completed, courseId], nextAttemptAt: null };
   return { ...job, attempts: { ...job.attempts, [courseId]: (job.attempts[courseId] ?? 0) + 1 }, nextAttemptAt: retryAt };
 }
+
+export type JobState = 'queued'|'running'|'waiting_retry'|'completed'|'failed_permanent'|'paused'|'quota_exhausted';
+export type DurableJob = IngestionJob & { state: JobState; terminalErrors: Record<string,string>; counters: { processed:number; proposed:number; unchanged:number; permanentFailures:number; temporaryFailures:number }; leaseUntil: string|null; runId: string|null };
+export function dueForRun(job: DurableJob, now: Date) { return ['queued','waiting_retry'].includes(job.state) && (!job.nextAttemptAt || Date.parse(job.nextAttemptAt) <= now.getTime()) && (!job.leaseUntil || Date.parse(job.leaseUntil) <= now.getTime()); }
+export function markPermanent(job: DurableJob, courseId: string, reason: string): DurableJob { if(job.completed.includes(courseId)) return job; const completed=[...job.completed,courseId]; const cursor=Math.max(job.cursor,job.courseIds.indexOf(courseId)+1); return {...job,cursor,completed,terminalErrors:{...job.terminalErrors,[courseId]:reason},counters:{...job.counters,processed:job.counters.processed+1,permanentFailures:job.counters.permanentFailures+1},state:completed.length===job.courseIds.length?'failed_permanent':'queued'}; }

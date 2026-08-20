@@ -9,10 +9,12 @@ export function parsePreviewRequest(data: unknown): { mode: 'preview'; courseIds
   if (!courseIds.length || courseIds.length > MAX_MANUAL_RUN || courseIds.length !== value.courseIds.length) throw new Error('Provide 1 to 25 unique valid provider course ids.');
   return { mode: 'preview', courseIds };
 }
-export function parseApplyRequest(data: unknown): { mode: 'apply'; previewId: string } {
-  const value = data as { mode?: unknown; previewId?: unknown };
-  if (value?.mode !== 'apply' || typeof value.previewId !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(value.previewId)) throw new Error('Apply requires a valid previewId.');
-  return { mode: 'apply', previewId: value.previewId };
+export function parseApplyRequest(data: unknown): { mode: 'apply'; courseIds: string[]; requestId: string } {
+  const value = data as { mode?: unknown; courseIds?: unknown; requestId?: unknown };
+  if (value?.mode !== 'apply' || !Array.isArray(value.courseIds) || typeof value.requestId !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(value.requestId)) throw new Error('Apply requires explicit courseIds and a valid requestId.');
+  const courseIds = [...new Set(value.courseIds.filter(isValidProviderId))];
+  if (!courseIds.length || courseIds.length > MAX_MANUAL_RUN || courseIds.length !== value.courseIds.length) throw new Error('Provide 1 to 25 unique valid provider course ids.');
+  return { mode: 'apply', courseIds, requestId: value.requestId };
 }
 export function nextUsage(month: string, current: { month?: unknown; requestsUsed?: unknown } | null, requestCount: number) {
   if (!/^\d{4}-\d{2}$/.test(month) || !Number.isInteger(requestCount) || requestCount < 1 || requestCount > MAX_MANUAL_RUN) throw new Error('Invalid usage reservation.');

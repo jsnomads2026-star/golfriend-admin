@@ -1,112 +1,110 @@
 import admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { isActiveStaffOrDirector } from './authority.js';
 import { classifyCourseSync, type CourseRecord, type ProviderCourse } from './courseSyncCore.js';
 import { nextUsage, parseApplyRequest, parsePreviewRequest } from './syncPlan.js';
 import { buildGolfApiSyncStatus } from './statusView.js';
+import { classifyProviderFailure, dueForRun, type DurableJob } from './ingestionReliability.js';
 
 if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
-const GOLF_API_KEY = defineSecret('GOLF_API_KEY');
-const REGION = 'asia-southeast1';
-const PREVIEW_TTL_MS = 15 * 60 * 1000;
-const courseCollection = db.collection('courses');
-const previewCollection = db.collection('golf_api_sync_previews');
-const auditCollection = db.collection('golf_api_sync_audit');
-const usageRef = db.collection('platform').doc('golfApiUsage');
-
-const monthKey = (now: Date) => now.toISOString().slice(0, 7);
-const timestamp = () => new Date().toISOString();
+const db = admin.firestore(), GOLF_API_KEY = defineSecret('GOLF_API_KEY'), REGION = 'asia-southeast1';
+const courses = db.collection('courses'), audits = db.collection('golf_api_sync_audit'), usage = db.collection('platform').doc('golfApiUsage'), jobs = db.collection('golf_api_ingestion_jobs');
+// One request per durable scheduler tick keeps quota accounting exact even when a provider call fails.
+const BATCH_SIZE = 1, LEASE_MS = 14 * 60 * 1000;
+const month = (d: Date) => d.toISOString().slice(0, 7), stamp = (d: Date) => d.toISOString();
 
 async function requireStaffOrDirector(uid: string) {
   const staff = await db.collection('admin_users').doc(uid).get();
   if (!isActiveStaffOrDirector(staff.exists ? staff.data() : null)) throw new HttpsError('permission-denied', 'Only active staff or a Director can run Golf API sync.');
 }
-
-async function fetchProviderCourse(providerId: string): Promise<ProviderCourse | null> {
-  const response = await fetch(`https://www.golfapi.io/api/v2.3/courses/${encodeURIComponent(providerId)}`, { headers: { Authorization: `Bearer ${GOLF_API_KEY.value()}` } });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Provider HTTP ${response.status}.`);
-  const body = await response.json() as Record<string, unknown>;
-  const value = (body.data && typeof body.data === 'object' ? body.data : body) as Record<string, unknown>;
-  return { courseID: value.courseID ?? value.id ?? providerId, latitude: value.latitude ?? null, longitude: value.longitude ?? null };
+type ProviderOutcome = { kind: 'success'; course: ProviderCourse | null } | { kind: 'failure'; status: number; retryAfter: string | null };
+/** This is intentionally called only by runGolfApiIngestion. */
+async function fetchProviderOutcome(id: string): Promise<ProviderOutcome> {
+  let response: Response;
+  try { response = await fetch(`https://www.golfapi.io/api/v2.3/courses/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${GOLF_API_KEY.value()}` } }); }
+  catch { return { kind: 'failure', status: 503, retryAfter: null }; }
+  if (response.status === 404) return { kind: 'failure', status: 404, retryAfter: null };
+  if (!response.ok) return { kind: 'failure', status: response.status, retryAfter: response.headers.get('retry-after') };
+  try {
+    const body = await response.json() as Record<string, unknown>, value = (body.data && typeof body.data === 'object' ? body.data : body) as Record<string, unknown>;
+    return { kind: 'success', course: { courseID: value.courseID ?? value.id ?? id, latitude: value.latitude ?? null, longitude: value.longitude ?? null } };
+  } catch { return { kind: 'failure', status: 422, retryAfter: null }; }
 }
+const remaining = (job: DurableJob) => job.courseIds.filter((id) => !job.completed.includes(id));
 
-export const syncCoursesFromProvider = onCall({ region: REGION, secrets: [GOLF_API_KEY], memory: '256MiB', timeoutSeconds: 120 }, async (request) => {
+/** Preview performs local validation only: no provider call, quota reservation, or write. */
+export const syncCoursesFromProvider = onCall({ region: REGION, memory: '256MiB', timeoutSeconds: 120 }, async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
   await requireStaffOrDirector(request.auth.uid);
   const mode = (request.data as { mode?: unknown } | undefined)?.mode;
-
   if (mode === 'preview') {
-    let input;
-    try { input = parsePreviewRequest(request.data); } catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid preview request.'); }
-    const courseSnapshots = await Promise.all(input.courseIds.map((id) => courseCollection.doc(id).get()));
-    const targets = courseSnapshots.map((snapshot, index) => ({ providerId: input.courseIds[index], snapshot })).filter(({ snapshot }) => snapshot.exists);
-    if (!targets.length) throw new HttpsError('not-found', 'None of the requested courses exist; no provider request was made.');
-    const now = new Date();
-    let usage;
-    try {
-      usage = await db.runTransaction(async (tx) => {
-        const current = await tx.get(usageRef);
-        const next = nextUsage(monthKey(now), current.exists ? current.data() ?? null : null, targets.length);
-        tx.set(usageRef, { schema: 'golfriend.platform.golf-api-usage.v1', ...next, monthlyBudget: 100, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        return next;
-      });
-    } catch (error) { throw new HttpsError('resource-exhausted', error instanceof Error ? error.message : 'Usage reservation failed.'); }
-    const rows = await Promise.all(targets.map(async ({ providerId, snapshot }) => {
-      try {
-        const provider = await fetchProviderCourse(providerId);
-        const decision = classifyCourseSync(providerId, snapshot.data() as CourseRecord, provider);
-        return { courseId: snapshot.id, providerId, provider, ...decision };
-      } catch (error) {
-        return { courseId: snapshot.id, providerId, provider: null, result: 'error', before: { latitude: null, longitude: null }, error: error instanceof Error ? error.message : 'Provider request failed.' };
-      }
-    }));
-    const previewRef = previewCollection.doc();
-    const fetchedAt = timestamp();
-    const expiresAt = new Date(now.getTime() + PREVIEW_TTL_MS).toISOString();
-    await previewRef.create({ schema: 'golfriend.golf-api-sync-preview.v1', status: 'previewed', actorUid: request.auth.uid, fetchedAt, expiresAt, rows, usage, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    await auditCollection.doc(previewRef.id).create({ schema: 'golfriend.golf-api-sync-audit.v1', eventType: 'preview', previewId: previewRef.id, actorUid: request.auth.uid, providerRequestsReserved: targets.length, usage, fetchedAt, rows, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    const summary = rows.reduce((value: Record<string, number>, row) => { value[row.result] = (value[row.result] ?? 0) + 1; return value; }, {});
-    return { success: true, mode: 'preview', processed: rows.length, previewId: previewRef.id, expiresAt, providerRequestsReserved: targets.length, usage, summary, results: rows };
+    let input; try { input = parsePreviewRequest(request.data); } catch (e) { throw new HttpsError('invalid-argument', e instanceof Error ? e.message : 'Invalid preview request.'); }
+    const snaps = await Promise.all(input.courseIds.map((id) => courses.doc(id).get()));
+    const results = snaps.map((snap, i) => ({ courseId: input.courseIds[i], providerId: input.courseIds[i], result: snap.exists ? 'proposed_for_worker' : 'missing_local_course', before: { latitude: null, longitude: null } }));
+    const summary = results.reduce((out: Record<string, number>, row) => { out[row.result] = (out[row.result] ?? 0) + 1; return out; }, {});
+    return { success: true, mode, processed: results.length, providerRequestsReserved: 0, summary, results, note: 'Preview is local validation only; Apply queues a server-owned job.' };
   }
-
   if (mode !== 'apply') throw new HttpsError('invalid-argument', 'mode must be "preview" or "apply".');
-  let input;
-  try { input = parseApplyRequest(request.data); } catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Invalid apply request.'); }
-  const previewRef = previewCollection.doc(input.previewId);
-  const applied = await db.runTransaction(async (tx) => {
-    const preview = await tx.get(previewRef);
-    if (!preview.exists) throw new HttpsError('not-found', 'Preview not found.');
-    const data = preview.data() as { actorUid?: unknown; status?: unknown; expiresAt?: unknown; appliedResults?: unknown; rows?: unknown };
-    if (data.actorUid !== request.auth!.uid) throw new HttpsError('permission-denied', 'Only the previewing staff member can apply this preview.');
-    if (data.status === 'applied') return { idempotent: true, results: data.appliedResults ?? [] };
-    if (data.status !== 'previewed' || typeof data.expiresAt !== 'string' || Date.parse(data.expiresAt) < Date.now() || !Array.isArray(data.rows) || data.rows.length > 25) throw new HttpsError('failed-precondition', 'Preview is invalid or expired; create a new preview.');
-    const previewRows = data.rows as Array<{ courseId?: unknown; providerId?: unknown; provider?: ProviderCourse | null; result?: unknown }>;
-    const refs = previewRows.map((row) => courseCollection.doc(String(row.courseId)));
-    const fresh = await Promise.all(refs.map((ref) => tx.get(ref)));
-    const results = fresh.map((snapshot, index) => {
-      const row = previewRows[index];
-      if (!snapshot.exists || typeof row.providerId !== 'string' || row.result === 'error') return { courseId: snapshot.id, result: 'conflict', reason: 'Course or preview evidence is unavailable.' };
-      const decision = classifyCourseSync(row.providerId, snapshot.data() as CourseRecord, row.provider ?? null);
-      if (decision.result === 'updated' && decision.after) tx.set(snapshot.ref, { latitude: decision.after.latitude, longitude: decision.after.longitude, lat: decision.after.latitude, lng: decision.after.longitude, gpsSource: 'golfapi', providerId: row.providerId, providerFetchedAt: timestamp(), updatedByUid: request.auth!.uid, apiImported: true }, { merge: true });
-      return { courseId: snapshot.id, providerId: row.providerId, ...decision };
-    });
-    const applyAudit = auditCollection.doc(`${previewRef.id}_apply`);
-    tx.create(applyAudit, { schema: 'golfriend.golf-api-sync-audit.v1', eventType: 'apply', previewId: previewRef.id, actorUid: request.auth!.uid, results, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    tx.update(previewRef, { status: 'applied', appliedAt: admin.firestore.FieldValue.serverTimestamp(), appliedResults: results });
-    return { idempotent: false, results };
+  let input; try { input = parseApplyRequest(request.data); } catch (e) { throw new HttpsError('invalid-argument', e instanceof Error ? e.message : 'Invalid apply request.'); }
+  const ref = jobs.doc(input.requestId);
+  const result = await db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists) return { idempotent: true, state: existing.get('state') };
+    const local = await Promise.all(input.courseIds.map((id) => tx.get(courses.doc(id))));
+    const courseIds = input.courseIds.filter((_, i) => local[i].exists);
+    if (!courseIds.length) throw new HttpsError('failed-precondition', 'No requested courses exist locally.');
+    tx.create(ref, { schema: 'golfriend.golf-api-ingestion-job.v1', state: 'queued', cursor: 0, courseIds, completed: [], attempts: {}, terminalErrors: {}, counters: { processed: 0, proposed: 0, unchanged: 0, permanentFailures: 0, temporaryFailures: 0 }, quotaContext: null, nextRetryAt: null, leaseUntil: null, runId: null, requestedBy: request.auth!.uid, requestId: input.requestId, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.create(audits.doc(`job_${input.requestId}_enqueued`), { schema: 'golfriend.golf-api-sync-audit.v1', eventType: 'job_enqueued', jobId: input.requestId, actorUid: request.auth!.uid, courseCount: courseIds.length, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    return { idempotent: false, state: 'queued' };
   });
-  return { success: true, mode: 'apply', previewId: input.previewId, ...applied };
+  return { success: true, mode, jobId: input.requestId, providerRequestsReserved: 0, ...result };
 });
 
 export const getGolfApiSyncStatus = onCall({ region: REGION, memory: '256MiB' }, async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
   await requireStaffOrDirector(request.auth.uid);
-  const [usage, audits] = await Promise.all([
-    usageRef.get(),
-    auditCollection.orderBy('createdAt', 'desc').limit(10).get(),
-  ]);
-  return buildGolfApiSyncStatus({ usage: usage.exists ? usage.data() ?? null : null, audits: audits.docs.map((item) => item.data()) });
+  const [used, recent] = await Promise.all([usage.get(), audits.orderBy('createdAt', 'desc').limit(10).get()]);
+  return buildGolfApiSyncStatus({ usage: used.exists ? used.data() ?? null : null, audits: recent.docs.map((d) => d.data()) });
+});
+
+/** The sole provider caller. A lease transaction makes duplicate scheduler deliveries harmless. */
+export const runGolfApiIngestion = onSchedule({ region: REGION, schedule: 'every 15 minutes', timeZone: 'Asia/Bangkok', secrets: [GOLF_API_KEY], memory: '256MiB', timeoutSeconds: 120 }, async () => {
+  const now = new Date(), candidates = await jobs.where('state', 'in', ['queued', 'waiting_retry']).limit(5).get();
+  for (const candidate of candidates.docs) {
+    const claim = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(candidate.ref), job = snap.data() as DurableJob | undefined;
+      if (!job || !dueForRun(job, now)) return null;
+      const ids = remaining(job).slice(0, BATCH_SIZE);
+      if (!ids.length) { tx.update(candidate.ref, { state: 'completed', leaseUntil: null, runId: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }); return null; }
+      const runId = `${candidate.id}_${now.getTime()}`;
+      tx.update(candidate.ref, { state: 'running', runId, leaseUntil: stamp(new Date(now.getTime() + LEASE_MS)), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return { job, ids, runId };
+    });
+    if (!claim) continue;
+    let quota;
+    try { quota = await db.runTransaction(async (tx) => { const current = await tx.get(usage); const next = nextUsage(month(now), current.exists ? current.data() ?? null : null, claim.ids.length); tx.set(usage, { schema: 'golfriend.platform.golf-api-usage.v1', ...next, monthlyBudget: 100, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true }); return next; }); }
+    catch { await candidate.ref.update({ state: 'quota_exhausted', leaseUntil: null, runId: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }); await audits.doc(`job_${candidate.id}_${claim.runId}_quota`).create({ schema: 'golfriend.golf-api-sync-audit.v1', eventType: 'quota_exhausted', jobId: candidate.id, createdAt: admin.firestore.FieldValue.serverTimestamp() }); continue; }
+    // One bounded request per tick; subsequent ticks resume at the first incomplete ID.
+    const id = claim.ids[0], outcome = await fetchProviderOutcome(id);
+    if (outcome.kind === 'failure') {
+      const failure = classifyProviderFailure(outcome.status, outcome.retryAfter, now, claim.job.attempts[id] ?? 0, Math.floor(Math.random() * 1000));
+      const patch = failure.kind === 'temporary'
+        ? { state: 'waiting_retry', nextRetryAt: failure.retryAt, leaseUntil: null, runId: null, [`attempts.${id}`]: admin.firestore.FieldValue.increment(1), 'counters.temporaryFailures': admin.firestore.FieldValue.increment(1) }
+        : { state: 'failed_permanent', leaseUntil: null, runId: null, [`terminalErrors.${id}`]: failure.reason, 'counters.permanentFailures': admin.firestore.FieldValue.increment(1) };
+      await candidate.ref.update({ ...patch, quotaContext: quota, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      await audits.doc(`job_${candidate.id}_${claim.runId}_${id}`).create({ schema: 'golfriend.golf-api-sync-audit.v1', eventType: failure.kind === 'temporary' ? 'provider_retry' : 'provider_permanent_failure', jobId: candidate.id, courseId: id, reason: failure.reason, ...(failure.kind === 'temporary' ? { retryAt: failure.retryAt } : {}), createdAt: admin.firestore.FieldValue.serverTimestamp() });
+      continue;
+    }
+    await db.runTransaction(async (tx) => {
+      const [jobSnap, courseSnap] = await Promise.all([tx.get(candidate.ref), tx.get(courses.doc(id))]), current = jobSnap.data() as DurableJob | undefined;
+      if (!current || current.runId !== claim.runId || current.completed.includes(id)) return;
+      const decision = classifyCourseSync(id, (courseSnap.data() ?? {}) as CourseRecord, outcome.course);
+      if (decision.result === 'updated' && decision.after) tx.set(courseSnap.ref, { latitude: decision.after.latitude, longitude: decision.after.longitude, lat: decision.after.latitude, lng: decision.after.longitude, gpsSource: 'golfapi', providerId: id, providerFetchedAt: stamp(now), apiImported: true }, { merge: true });
+      const completed = current.completed.length + 1 === current.courseIds.length;
+      tx.update(candidate.ref, { completed: admin.firestore.FieldValue.arrayUnion(id), cursor: Math.max(current.cursor, current.courseIds.indexOf(id) + 1), state: completed ? 'completed' : 'queued', nextRetryAt: null, leaseUntil: null, runId: null, 'counters.processed': admin.firestore.FieldValue.increment(1), ...(decision.result === 'updated' ? { 'counters.proposed': admin.firestore.FieldValue.increment(1) } : { 'counters.unchanged': admin.firestore.FieldValue.increment(1) }), quotaContext: quota, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.create(audits.doc(`job_${candidate.id}_${claim.runId}_${id}`), { schema: 'golfriend.golf-api-sync-audit.v1', eventType: 'provider_result', jobId: candidate.id, courseId: id, result: decision.result, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+  }
 });

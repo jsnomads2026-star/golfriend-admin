@@ -3,7 +3,8 @@ import { nextUsage, parseApplyRequest, parsePreviewRequest } from './syncPlan.js
 assert.deepEqual(parsePreviewRequest({ mode: 'preview', courseIds: ['course_001', 'course_002'] }).courseIds, ['course_001', 'course_002']);
 assert.throws(() => parsePreviewRequest({ mode: 'preview', courseIds: Array.from({ length: 26 }, (_, index) => `course_${index}`) }), /1 to 25/);
 assert.throws(() => parsePreviewRequest({ mode: 'apply', courseIds: ['course_001'] }), /Preview/);
-assert.equal(parseApplyRequest({ mode: 'apply', previewId: 'abcdefghijklmnop' }).previewId, 'abcdefghijklmnop');
+assert.deepEqual(parseApplyRequest({ mode: 'apply', courseIds: ['course_001'], requestId: 'abcdefghijklmnop' }), { mode: 'apply', courseIds: ['course_001'], requestId: 'abcdefghijklmnop' });
+assert.throws(() => parseApplyRequest({ mode: 'apply', courseIds: ['course_001'], requestId: 'short' }), /requestId/);
 assert.deepEqual(nextUsage('2026-08', { month: '2026-08', requestsUsed: 75 }, 25), { month: '2026-08', requestsUsed: 100, remaining: 0 });
 assert.throws(() => nextUsage('2026-08', { month: '2026-08', requestsUsed: 76 }, 25), /budget/);
 assert.equal(nextUsage('2026-09', { month: '2026-08', requestsUsed: 100 }, 1).requestsUsed, 1);
