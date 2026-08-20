@@ -21,7 +21,8 @@ export {savePartnerApplicationDraftV2, submitPartnerApplicationV2, getMyPartnerA
 export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvitation,transferPartnerOwnership,raisePartnerClaimDispute,setPartnerOrganizationStatus,getPartnerAuthorityState,listPartnerAuthorityAdmin} from "./partnerActivationRuntime.js";
 export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
 export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSlot,reviewCourseAvailabilityV2,getCourseAvailabilityV2,listCourseAvailabilityAdminV2} from "./partnerAvailabilityRuntime.js";
-export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,sendPlayBookingMessageV2 as sendBookingMessage,getPlayBookingsPortalV2,getPlayBookingsAdminV2} from "./partnerBookingRuntime.js";
+export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,getPlayBookingsPortalV2,getPlayBookingsAdminV2} from "./partnerBookingRuntime.js";
+export {getAdminBookingStreamV2,adminResolveBookingV2 as adminResolveBooking,sendBookingMessageV2 as sendBookingMessage} from "./adminBookingCommunicationsRuntime.js";
 export {getBookingOperationsPortalV2,getBookingOperationsAdminV2,reconcileBookingOperationsV2,exportBookingOperationsV2,getBookingOperationsReceiptV2} from "./bookingReportingRuntime.js";
 export {prepareBookingProviderPublicationV2,publishBookingProviderPublicationV2,getBookingProviderPublicationsV2} from "./bookingProviderPublicationRuntime.js";
 
@@ -740,7 +741,7 @@ void legacySendBookingMessage;
 // Platform-staff override for the booking lifecycle. NON-FINANCIAL: no refund,
 // payout, escrow or settlement — only seat/status transitions with audit. The
 // client names a decision; the seat release + status change happen server-side.
-export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
+const legacyAdminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
@@ -841,6 +842,8 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
 // it is server-owned: the client cannot self-assign roles or write the roster.
 // Only an ACTIVE ENTERPRISE partner may invite/remove staff on their own org.
 // Roster lives at enterprise_staff/{enterpriseUid}/members/{staffUid}.
+void legacyAdminResolveBooking;
+
 export const manageEnterpriseStaff = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');

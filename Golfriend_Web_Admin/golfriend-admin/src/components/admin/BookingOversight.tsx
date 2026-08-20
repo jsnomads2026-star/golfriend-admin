@@ -6,9 +6,7 @@
 // seat / settlement state directly — every action is a callable.
 // ==========================================
 import { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
 import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
 import BookingDetailPanel from './booking/BookingDetailPanel';
@@ -41,6 +39,7 @@ export default function BookingOversight() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [detailBooking, setDetailBooking] = useState<BookingRow | null>(null);
+  const [streamState, setStreamState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   // C2C/C2D: view toggle — 'table' mode leaves all existing oversight behaviour unchanged.
   const [activeView, setActiveView] = useState<'table' | 'queue' | 'report'>('table');
 
@@ -49,33 +48,23 @@ export default function BookingOversight() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Stream ALL bookings live.
+  const loadServerStream = async () => {
+    setStreamState('loading');
+    try {
+      const fn = httpsCallable(getFunctions(), 'getAdminBookingStreamV2');
+      const result: any = await fn({});
+      if (result?.data?.source !== 'server' || result?.data?.availability !== 'confirmed' || !Array.isArray(result?.data?.bookings)) throw new Error('BOOKING_STREAM_UNAVAILABLE');
+      setBookings(result.data.bookings.map((b: any) => ({ ...b, status: (['pending', 'confirmed', 'rejected', 'cancelled'].includes(b.status) ? b.status : 'pending') as BookingStatus })));
+      setStreamState('ready');
+    } catch {
+      setBookings([]);
+      setStreamState('unavailable');
+    }
+  };
+
+  // Server-owned V2 snapshot: no direct Firestore subscription and no fixture fallback.
   useEffect(() => {
-    const unsub = onSnapshot(
-      query(collection(db, 'bookings')),
-      (snap) => {
-        setBookings(
-          snap.docs.map((d) => {
-            const b = d.data() as any;
-            return {
-              id: d.id,
-              slotId: b.slotId || '',
-              courseId: b.courseId || '',
-              courseName: b.courseName || b.courseId || 'Unknown',
-              date: b.date || '',
-              time: b.time || '',
-              playerUid: b.playerUid || '',
-              playerName: b.playerName || b.playerUid || 'Unknown',
-              status: (['pending', 'confirmed', 'rejected', 'cancelled'].includes(b.status)
-                ? b.status
-                : 'pending') as BookingStatus,
-            } as BookingRow;
-          })
-        );
-      },
-      (err) => console.error('Booking oversight sync error:', err)
-    );
-    return () => unsub();
+    void loadServerStream();
   }, []);
 
   const visible = useMemo(() => {
@@ -96,8 +85,9 @@ export default function BookingOversight() {
     setBusyId(bookingId);
     try {
       const fn = httpsCallable(getFunctions(), 'adminResolveBooking');
-      const res: any = await fn({ bookingId, decision });
-      if (!res?.data?.success) throw new Error('Resolution was not accepted by the server.');
+      const res: any = await fn({ bookingId, resolution: decision, idempotencyKey: `admin_booking_${crypto.randomUUID().replaceAll('-', '_')}` });
+      if (!res?.data?.accepted || !res?.data?.auditEventId) throw new Error('Resolution was not accepted by the server.');
+      await loadServerStream();
       const label = decision === 'confirm' ? 'confirmed' : decision === 'reject' ? 'rejected' : 'cancelled';
       notify(`Booking ${label}.`, 'success');
     } catch (e: any) {
@@ -130,7 +120,7 @@ export default function BookingOversight() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${V2Theme.surfaceBorder}`, paddingBottom: '12px', marginBottom: '16px' }}>
         <h2 style={{ color: V2Theme.gold, margin: 0 }}>📖 Booking Oversight</h2>
-        <span style={{ color: V2Theme.surfaceTextMuted, fontSize: '12px' }}>{bookings.length} bookings streamed</span>
+        <span style={{ color: V2Theme.surfaceTextMuted, fontSize: '12px' }}>{streamState === 'ready' ? `${bookings.length} server-confirmed bookings` : 'Booking stream unavailable'}</span>
       </div>
 
       {/* C2C: view toggle — 'table' mode leaves all existing oversight behaviour unchanged */}
@@ -172,6 +162,8 @@ export default function BookingOversight() {
       {/* Table view — all existing logic below is completely unchanged */}
       {activeView === 'table' && (
       <>
+      {streamState === 'loading' && <p role="status" style={{ color: V2Theme.surfaceTextMuted }}>Loading server-confirmed bookings…</p>}
+      {streamState === 'unavailable' && <p role="alert" style={{ color: V2Theme.errorRed }}>Booking communications are unavailable until the server confirms staff access and data. No fixture data is shown. <button onClick={() => void loadServerStream()}>Retry</button></p>}
       <p style={{ color: V2Theme.surfaceText, fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
         Force-confirm, reject, or cancel any tee-time booking. Every action is settled server-side by
         <code style={{ color: V2Theme.gold, margin: '0 4px' }}>adminResolveBooking</code>
