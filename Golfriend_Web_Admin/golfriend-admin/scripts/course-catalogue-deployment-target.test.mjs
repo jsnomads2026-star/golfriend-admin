@@ -13,6 +13,15 @@ const migrationPreflight = readFileSync(new URL('./scripts/course-catalogue-prod
 const controlledIncremental = readFileSync(new URL('./scripts/run-course-catalogue-production-controlled-incremental.mjs', root), 'utf8');
 const activation = readFileSync(new URL('./scripts/activate-course-catalogue-after-rotation.mjs', root), 'utf8');
 const pipelineStatus = readFileSync(new URL('./scripts/run-course-catalogue-pipeline.mjs', root), 'utf8');
+const schedulerRegistration = readFileSync(new URL('./scripts/register-course-catalogue-production-schedulers.mjs', root), 'utf8');
+const callableExports = [
+  'searchGolfApiCatalogue', 'getGolfApiCatalogueStatus', 'reconcileGolfApiPendingSettlements',
+  'armGolfApiCalibrationCanary', 'runGolfApiCalibrationCanary',
+];
+const scheduledExports = [
+  'scheduledGolfApiCatalogueIncremental', 'scheduledGolfApiCatalogueRetries',
+  'scheduledGolfApiCatalogueCanary', 'scheduledGolfApiCatalogueCountReceipt',
+];
 
 test('course catalogue keeps the unrelated default V1 project and declares the distinct production alias', () => {
   assert.equal(firebaseRc.projects.default, 'golfriend-v1');
@@ -25,8 +34,12 @@ test('course catalogue codebase is Node 20 and every operational command selects
   assert.deepEqual(codebase && { source: codebase.source, runtime: codebase.runtime }, {
     source: 'functions-course-catalogue', runtime: 'nodejs20',
   });
-  assert.equal(packageJson.scripts['deploy:course-catalogue:production'],
-    'firebase deploy --project golfriend-v2-production-2ee34 --only functions:course-catalogue');
+  const callableDeploy = packageJson.scripts['deploy:course-catalogue:production:callables'];
+  assert.match(callableDeploy, /^firebase deploy --project golfriend-v2-production-2ee34 --only /);
+  for (const name of callableExports) assert.match(callableDeploy, new RegExp(`functions:course-catalogue:${name}`));
+  for (const name of scheduledExports) assert.doesNotMatch(callableDeploy, new RegExp(name));
+  assert.equal(packageJson.scripts['deploy:course-catalogue:production'], undefined);
+  assert.match(packageJson.scripts['register:course-catalogue:production:schedulers'], /--project=golfriend-v2-production-2ee34/);
   assert.equal(packageJson.scripts['evidence:course-catalogue:production'],
     'node scripts/read-course-catalogue-production-evidence.mjs');
   assert.match(packageJson.scripts['preflight:course-catalogue:production'], /--project=golfriend-v2-production-2ee34/);
@@ -34,7 +47,7 @@ test('course catalogue codebase is Node 20 and every operational command selects
   assert.equal(packageJson.scripts['deploy:course-catalogue:v2'], undefined);
   assert.equal(packageJson.scripts['evidence:course-catalogue:v2'], undefined);
   assert.match(packageJson.scripts['verify:course-catalogue-predeploy'], /test:course-catalogue-deployment-target/);
-  assert.match(runbook, /firebase deploy --project golfriend-v2-production-2ee34 --only functions:course-catalogue/);
+  assert.match(runbook, /deploy:course-catalogue:production:callables/);
   assert.doesNotMatch(runbook, /firebase deploy(?!\s+--project\s+golfriend-v2-production-2ee34)/);
   assert.doesNotMatch(runbook, /--project\s+golfriend-v2(?:\s|$)/);
   assert.match(evidence, /PROJECT='golfriend-v2-production-2ee34'/);
@@ -46,6 +59,10 @@ test('course catalogue codebase is Node 20 and every operational command selects
   assert.match(pipelineStatus, /PROJECT='golfriend-v2-production-2ee34'/);
   assert.match(controlledIncremental, /MAX_PROVIDER_REQUESTS=10/);
   assert.match(controlledIncremental, /MAX_COURSE_WRITES=2/);
+  assert.match(schedulerRegistration, /SCHEDULER_REGISTRATION_AUTHORIZATION_REQUIRED/);
+  assert.match(schedulerRegistration, /PAUSED_JOB_CONFIRMATION_REQUIRED/);
+  assert.match(schedulerRegistration, /functions:course-catalogue:\$\{name\}/);
+  for (const name of scheduledExports) assert.match(schedulerRegistration, new RegExp(`'${name}'`));
 });
 
 test('production operation guards reject the former V2 project, unqualified execution, and an unbounded trigger', () => {
@@ -60,6 +77,9 @@ test('production operation guards reject the former V2 project, unqualified exec
     ['run-course-catalogue-production-controlled-incremental.mjs', ['--max-provider-requests=10', '--max-course-writes=2'], 'PROJECT_TARGET_REJECTED'],
     ['run-course-catalogue-production-controlled-incremental.mjs', ['--project=golfriend-v2-production-2ee34', '--max-provider-requests=9', '--max-course-writes=2'], 'CONTROLLED_INCREMENTAL_BOUND_REQUIRED'],
     ['run-course-catalogue-production-controlled-incremental.mjs', ['--project=golfriend-v2-production-2ee34', '--max-provider-requests=10', '--max-course-writes=2'], 'EXECUTION_APPROVAL_REQUIRED'],
+    ['register-course-catalogue-production-schedulers.mjs', ['--project=golfriend-v2-production-2ee34'], 'SCHEDULER_REGISTRATION_AUTHORIZATION_REQUIRED'],
+    ['register-course-catalogue-production-schedulers.mjs', ['--project=golfriend-v2-production-2ee34', '--execute=SCHEDULER_REGISTRATION_APPROVED'], 'PAUSED_JOB_CONFIRMATION_REQUIRED'],
+    ['register-course-catalogue-production-schedulers.mjs', ['--project=golfriend-v2'], 'PROJECT_TARGET_REJECTED'],
   ]) {
     const result = spawnSync(process.execPath, [`scripts/${script}`, ...args], { cwd: new URL('..', import.meta.url), encoding: 'utf8', shell: false });
     assert.notEqual(result.status, 0);

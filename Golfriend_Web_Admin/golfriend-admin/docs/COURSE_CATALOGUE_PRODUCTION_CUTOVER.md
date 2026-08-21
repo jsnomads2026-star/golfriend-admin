@@ -22,10 +22,20 @@ request, Secret Manager payload access, Firestore document read, or write):
 npm.cmd run evidence:course-catalogue:production
 ```
 
-The eventual approved production deployment command is:
+The only safe first-phase production deployment excludes every `onSchedule`
+export and deploys the Firestore controls plus callable catalogue Functions:
 
 ```powershell
-firebase deploy --project golfriend-v2-production-2ee34 --only functions:course-catalogue
+npm.cmd run deploy:course-catalogue:production:callables
+```
+
+Do not use a codebase-wide `functions:course-catalogue` deploy. It would
+create missing Scheduler jobs enabled. Scheduler registration is a separate
+future step and requires both explicit authorization and verified pre-existing
+paused jobs:
+
+```powershell
+npm.cmd run register:course-catalogue:production:schedulers -- --execute=SCHEDULER_REGISTRATION_APPROVED --paused-jobs-confirmed=true
 ```
 
 The first bounded update is Scheduler-owned. Only after target evidence,
