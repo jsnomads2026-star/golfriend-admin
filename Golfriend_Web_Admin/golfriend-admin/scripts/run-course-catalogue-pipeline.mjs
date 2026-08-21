@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 if(!process.argv.includes('--status'))throw Error('OPERATOR_PROVIDER_EXECUTION_RETIRED_USE_SERVER_SCHEDULER');
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),PROJECT='golfriend-v2',ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`,auth=require(process.env.FIREBASE_TOOLS_AUTH_MODULE||'C:/Users/Windows/AppData/Roaming/npm/node_modules/firebase-tools/lib/auth');
+const require=createRequire(import.meta.url),PROJECT='golfriend-v2-production-2ee34',ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`,auth=require(process.env.FIREBASE_TOOLS_AUTH_MODULE||'C:/Users/Windows/AppData/Roaming/npm/node_modules/firebase-tools/lib/auth');
 const account=auth.getGlobalDefaultAccount(),scopes=Array.isArray(account.tokens.scopes)?account.tokens.scopes:String(account.tokens.scope||'').split(/\s+/).filter(Boolean),credential=await auth.getAccessToken(account.tokens.refresh_token,scopes),access=credential.access_token;
 const decode=value=>!value?null:'nullValue'in value?null:'stringValue'in value?value.stringValue:'booleanValue'in value?value.booleanValue:'integerValue'in value?Number(value.integerValue):'doubleValue'in value?value.doubleValue:'timestampValue'in value?value.timestampValue:'mapValue'in value?Object.fromEntries(Object.entries(value.mapValue.fields||{}).map(([key,item])=>[key,decode(item)])):null;
 async function get(path){const response=await fetch(`${ROOT}/${path}`,{headers:{Authorization:`Bearer ${access}`}});if(!response.ok)throw Error(`FIRESTORE_${response.status}`);const body=await response.json();return Object.fromEntries(Object.entries(body.fields||{}).map(([key,item])=>[key,decode(item)]));}

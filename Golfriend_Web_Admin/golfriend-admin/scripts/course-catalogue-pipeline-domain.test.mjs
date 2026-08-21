@@ -59,6 +59,16 @@ test('a partial batch resumes from the exact persisted course cursor', () => {
   assert.equal(domain.advanceCursor(page.clubs, afterFirst.clubOffset, afterFirst.courseOffset).pageComplete, true);
 });
 
+test('the first controlled incremental batch remains bounded to ten provider requests and two course writes', () => {
+  const root = new URL('..', import.meta.url);
+  const runtime = readFileSync(new URL('./functions-course-catalogue/index.js', root), 'utf8');
+  assert.equal(domain.REFRESH_SLO.pagesPerRun, 8);
+  assert.equal(domain.REFRESH_SLO.detailsPerRun, 2);
+  assert.equal(domain.REFRESH_SLO.pagesPerRun + domain.REFRESH_SLO.detailsPerRun, 10);
+  assert.match(runtime, /if\(detailCounter>=config\.detailsPerRun\).*DETAIL_BUDGET_DEFERRED/);
+  assert.match(runtime, /ref=db\.collection\('courses'\)\.doc\(course\.courseID\)[\s\S]*?await ref\.set\(d\.mergeCurated/);
+});
+
 test('provider transport errors settle failed accounting without retrying or creating course data', async () => {
   let providerCalls = 0;
   let failedCost = 0;

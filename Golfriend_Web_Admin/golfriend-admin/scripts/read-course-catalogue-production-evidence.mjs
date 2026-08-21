@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Read-only V2 control-plane evidence. It intentionally performs GET requests
+// Read-only production control-plane evidence. It intentionally performs GET requests
 // only and never reads a Secret Manager payload or any Firestore document.
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const PROJECT='golfriend-v2';
+const PROJECT='golfriend-v2-production-2ee34';
 const REGION='asia-southeast1';
 const EXPECTED_FUNCTIONS=[
   'armGolfApiCalibrationCanary', 'getGolfApiCatalogueStatus',

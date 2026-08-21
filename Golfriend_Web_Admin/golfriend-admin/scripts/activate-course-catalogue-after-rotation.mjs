@@ -3,7 +3,7 @@
 // function, regenerate and independently verify a new activation receipt.
 // A receipt bound to an earlier Cloud Run revision must never activate traffic.
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),d=require('../functions-course-catalogue/domain.js'),PROJECT='golfriend-v2',REGION='asia-southeast1',ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`,APPLY=process.argv.includes('--apply-after-claude-pass'),RECEIPT_ONLY=process.argv.includes('--write-receipt-only'),SAFE_BIND=process.argv.includes('--bind-receipt-disabled'),versionArg=process.argv.find(value=>value.startsWith('--secret-version=')),SECRET_VERSION=versionArg?.split('=')[1];
+const require=createRequire(import.meta.url),d=require('../functions-course-catalogue/domain.js'),PROJECT='golfriend-v2-production-2ee34',REGION='asia-southeast1',ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`,APPLY=process.argv.includes('--apply-after-claude-pass'),RECEIPT_ONLY=process.argv.includes('--write-receipt-only'),SAFE_BIND=process.argv.includes('--bind-receipt-disabled'),versionArg=process.argv.find(value=>value.startsWith('--secret-version=')),SECRET_VERSION=versionArg?.split('=')[1];
 if(!/^\d+$/.test(SECRET_VERSION||''))throw Error('SECRET_VERSION_METADATA_REQUIRED');
 if([APPLY,RECEIPT_ONLY,SAFE_BIND].filter(Boolean).length>1)throw Error('ACTIVATION_MODE_CONFLICT');
 if(APPLY&&process.env.CLAUDE_GOLF_API_REAUDIT!=='PASS')throw Error('INDEPENDENT_CLAUDE_PASS_REQUIRED');
