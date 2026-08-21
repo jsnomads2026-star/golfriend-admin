@@ -1,31 +1,69 @@
 #!/usr/bin/env node
-// Mandatory operational rule: after every deployment of either provider
-// function, regenerate and independently verify a new activation receipt.
-// A receipt bound to an earlier Cloud Run revision must never activate traffic.
-import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),d=require('../functions-course-catalogue/domain.js'),PROJECT='golfriend-v2-production-2ee34',REGION='asia-southeast1',ROOT=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`,APPLY=process.argv.includes('--apply-after-claude-pass'),RECEIPT_ONLY=process.argv.includes('--write-receipt-only'),SAFE_BIND=process.argv.includes('--bind-receipt-disabled'),versionArg=process.argv.find(value=>value.startsWith('--secret-version=')),SECRET_VERSION=versionArg?.split('=')[1];
-if(!/^\d+$/.test(SECRET_VERSION||''))throw Error('SECRET_VERSION_METADATA_REQUIRED');
-if([APPLY,RECEIPT_ONLY,SAFE_BIND].filter(Boolean).length>1)throw Error('ACTIVATION_MODE_CONFLICT');
-if(APPLY&&process.env.CLAUDE_GOLF_API_REAUDIT!=='PASS')throw Error('INDEPENDENT_CLAUDE_PASS_REQUIRED');
-const auth=require(process.env.FIREBASE_TOOLS_AUTH_MODULE||'C:/Users/Windows/AppData/Roaming/npm/node_modules/firebase-tools/lib/auth'),account=auth.getGlobalDefaultAccount(),scopes=Array.isArray(account.tokens.scopes)?account.tokens.scopes:String(account.tokens.scope||'').split(/\s+/).filter(Boolean),credential=await auth.getAccessToken(account.tokens.refresh_token,scopes),access=credential.access_token;
-const encode=value=>value===null?{nullValue:null}:typeof value==='string'?{stringValue:value}:typeof value==='boolean'?{booleanValue:value}:typeof value==='number'?(Number.isInteger(value)?{integerValue:String(value)}:{doubleValue:value}):typeof value==='object'?{mapValue:{fields:Object.fromEntries(Object.entries(value).map(([key,item])=>[key,encode(item)]))}}:(()=>{throw Error('ENCODE_INVALID')})();
-const decode=value=>value?.stringValue??value?.booleanValue??(value?.integerValue!==undefined?Number(value.integerValue):value?.doubleValue??(value?.nullValue===null?null:value?.mapValue?Object.fromEntries(Object.entries(value.mapValue.fields||{}).map(([key,item])=>[key,decode(item)])):value?.arrayValue?(value.arrayValue.values||[]).map(decode):undefined));
-async function google(url,init={}){const response=await fetch(url,{...init,headers:{Authorization:`Bearer ${access}`,'Content-Type':'application/json',...(init.headers||{})}}),body=await response.text();if(!response.ok)throw Error(`GOOGLE_${response.status}:${body.slice(0,160)}`);return body?JSON.parse(body):{};}
-async function patch(collection,id,value){const url=new URL(`${ROOT}/${collection}/${id}`);for(const field of Object.keys(value))url.searchParams.append('updateMask.fieldPaths',field);await google(url.toString(),{method:'PATCH',body:JSON.stringify({fields:Object.fromEntries(Object.entries(value).map(([key,item])=>[key,encode(item)]))})});}
-async function create(collection,id,value){await google(`${ROOT}/${collection}?documentId=${encodeURIComponent(id)}`,{method:'POST',body:JSON.stringify({fields:Object.fromEntries(Object.entries(value).map(([key,item])=>[key,encode(item)]))})});}
-async function read(collection,id){const document=await google(`${ROOT}/${collection}/${id}`);return Object.fromEntries(Object.entries(document.fields||{}).map(([key,item])=>[key,decode(item)]));}
-async function list(collection){const response=await google(`${ROOT}/${collection}?pageSize=100`);return(response.documents||[]).map(document=>({id:document.name.split('/').pop(),data:Object.fromEntries(Object.entries(document.fields||{}).map(([key,item])=>[key,decode(item)]))}));}
-const required=['scheduledGolfApiCatalogueIncremental','scheduledGolfApiCatalogueRetries','scheduledGolfApiCatalogueCanary','runGolfApiCalibrationCanary'],scheduled=['scheduledGolfApiCatalogueIncremental','scheduledGolfApiCatalogueRetries','scheduledGolfApiCatalogueCanary'];
-async function pausedSchedulers(){const response=await google(`https://cloudscheduler.googleapis.com/v1/projects/${PROJECT}/locations/${REGION}/jobs?pageSize=100`),jobs={};for(const name of scheduled){const matches=(response.jobs||[]).filter(job=>job.name.toLowerCase().includes(name.toLowerCase()));if(matches.length!==1||matches[0].state!=='PAUSED')throw Error(`PROVIDER_SCHEDULER_NOT_PAUSED:${name}`);jobs[name]=matches[0].state;}return jobs;}
-const secret=await google(`https://secretmanager.googleapis.com/v1/projects/${PROJECT}/secrets/GOLF_API_KEY/versions/${SECRET_VERSION}`);if(secret.state!=='ENABLED')throw Error('SECRET_VERSION_NOT_ENABLED');
-const functions=await google(`https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/functions?pageSize=100`),selected=(functions.functions||[]).filter(fn=>required.some(name=>fn.name.endsWith(`/functions/${name}`)));
-if(selected.length!==required.length)throw Error('PROVIDER_FUNCTION_SET_INCOMPLETE');
-const functionRevisions={};
-for(const fn of selected){const binding=(fn.serviceConfig?.secretEnvironmentVariables||[]).find(item=>item.key==='GOLF_API_KEY');if(!binding||binding.secret!=='GOLF_API_KEY'||binding.version!==SECRET_VERSION)throw Error(`FUNCTION_SECRET_BINDING_MISMATCH:${fn.name.split('/').pop()}`);const serviceName=fn.serviceConfig?.service?.split('/').pop();if(!serviceName)throw Error('FUNCTION_SERVICE_UNCONFIRMED');const service=await google(`https://run.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/services/${serviceName}`),revision=d.normalizeRevisionIdentity(service.latestReadyRevision,serviceName);if(!revision)throw Error('FUNCTION_REVISION_UNCONFIRMED');functionRevisions[serviceName]=revision;}
-const verifiedAt=new Date().toISOString(),payload={projectId:PROJECT,secretName:'GOLF_API_KEY',secretVersion:SECRET_VERSION,secretVersionState:secret.state,functionRevisions,verifiedAt},digest=d.activationReceiptDigest(payload),receiptId=`rotation-${SECRET_VERSION}-${digest.slice(0,16)}`;
-let safety=null,previousBindingReceiptId=null;
-if(SAFE_BIND){const config=await read('platform','golfApiCatalogueConfig'),checkpoint=await read('course_acquisition_checkpoints','golf-api'),schedulers=await pausedSchedulers();if(config.providerRequestsAllowed!==false)throw Error('PROVIDER_REQUESTS_MUST_REMAIN_DISABLED');if(checkpoint.state!=='blocked')throw Error('CHECKPOINT_MUST_REMAIN_BLOCKED');previousBindingReceiptId=d.text(config.bindingReceiptId);if(!previousBindingReceiptId){const receipts=(await list('course_catalogue_activation_receipts')).filter(item=>item.data.projectId===PROJECT&&item.data.secretName==='GOLF_API_KEY'&&item.data.secretVersion===SECRET_VERSION&&item.data.state==='verified').sort((left,right)=>String(right.data.verifiedAt||'').localeCompare(String(left.data.verifiedAt||'')));previousBindingReceiptId=receipts[0]?.id??null;}safety={providerRequestsAllowed:false,checkpoint:checkpoint.state,schedulers};}
-if(APPLY||RECEIPT_ONLY||SAFE_BIND)await create('course_catalogue_activation_receipts',receiptId,{...payload,digest,state:'verified',immutable:true,bindingState:SAFE_BIND?'current':'unbound'});
-if(SAFE_BIND){if(previousBindingReceiptId)await patch('course_catalogue_activation_receipts',previousBindingReceiptId,{bindingState:'superseded',supersededByReceiptId:receiptId,supersededAt:verifiedAt});await patch('platform','golfApiCatalogueConfig',{requiredSecretVersion:SECRET_VERSION,bindingReceiptId:receiptId,updatedAt:verifiedAt});const config=await read('platform','golfApiCatalogueConfig'),checkpoint=await read('course_acquisition_checkpoints','golf-api'),receipt=await read('course_catalogue_activation_receipts',receiptId),previous=previousBindingReceiptId?await read('course_catalogue_activation_receipts',previousBindingReceiptId):null,schedulers=await pausedSchedulers();if(config.providerRequestsAllowed!==false||config.bindingReceiptId!==receiptId||config.requiredSecretVersion!==SECRET_VERSION||receipt.bindingState!=='current')throw Error('SAFE_BIND_CONFIGURATION_VERIFICATION_FAILED');if(previous&&previous.bindingState!=='superseded')throw Error('PREVIOUS_RECEIPT_SUPERSESSION_FAILED');if(checkpoint.state!=='blocked')throw Error('SAFE_BIND_CHECKPOINT_VERIFICATION_FAILED');safety={providerRequestsAllowed:false,checkpoint:checkpoint.state,schedulers};}
-if(APPLY)await patch('platform','golfApiCatalogueConfig',{schema:'golfriend.golf-api-catalogue-config.v3',enabled:true,providerRequestsAllowed:true,requiredSecretVersion:SECRET_VERSION,bindingReceiptId:receiptId,refreshAfterDays:30,pagesPerRun:8,detailsPerRun:2,blockedReason:null,updatedAt:verifiedAt});
-console.log(JSON.stringify({projectId:PROJECT,mode:APPLY?'apply-after-claude-pass':RECEIPT_ONLY?'write-receipt-only':SAFE_BIND?'bind-receipt-disabled':'verify-only',secretVersion:SECRET_VERSION,secretVersionState:secret.state,functionRevisions,receiptId,digest,receiptWritten:APPLY||RECEIPT_ONLY||SAFE_BIND,configurationWritten:APPLY||SAFE_BIND,configurationFieldsChanged:SAFE_BIND?['bindingReceiptId','requiredSecretVersion','updatedAt']:APPLY?['schema','enabled','providerRequestsAllowed','requiredSecretVersion','bindingReceiptId','refreshAfterDays','pagesPerRun','detailsPerRun','blockedReason','updatedAt']:[],previousBindingReceiptId,safety,writes:APPLY?2:RECEIPT_ONLY?1:SAFE_BIND?(previousBindingReceiptId?3:2):0,providerRequests:0,secretValueAccessed:false}));
+// Deferred-manual phase: validates a receipt candidate with GET requests only.
+// It cannot create a receipt, alter configuration/checkpoint state, or invoke a Scheduler.
+import { createRequire } from 'node:module';
+
+const PROJECT = 'golfriend-v2-production-2ee34';
+const REGION = 'asia-southeast1';
+const SCHEDULER_MODE = 'deferred_by_design';
+const CALLABLE_FUNCTIONS = [
+  'armGolfApiCalibrationCanary', 'getGolfApiCatalogueStatus',
+  'reconcileGolfApiPendingSettlements', 'runGolfApiCalibrationCanary',
+  'searchGolfApiCatalogue',
+].sort();
+const PROVIDER_CALLABLES = ['runGolfApiCalibrationCanary'];
+const versionArg = process.argv.find((value) => value.startsWith('--secret-version='));
+const secretVersion = versionArg?.split('=')[1];
+if (!/^\d+$/.test(secretVersion || '')) throw new Error('SECRET_VERSION_METADATA_REQUIRED');
+if (process.argv.some((value) => ['--apply-after-claude-pass', '--write-receipt-only', '--bind-receipt-disabled'].includes(value))) throw new Error('DEFERRED_MANUAL_BASELINE_READ_ONLY');
+
+const require = createRequire(import.meta.url);
+const auth = require(process.env.FIREBASE_TOOLS_AUTH_MODULE || 'C:/Users/Windows/AppData/Roaming/npm/node_modules/firebase-tools/lib/auth');
+const account = auth.getGlobalDefaultAccount();
+const scopes = Array.isArray(account.tokens.scopes) ? account.tokens.scopes : String(account.tokens.scope || '').split(/\s+/).filter(Boolean);
+const credential = await auth.getAccessToken(account.tokens.refresh_token, scopes);
+async function read(url) {
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${credential.access_token}` } });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`READ_${response.status}:${body.slice(0, 160)}`);
+  return body ? JSON.parse(body) : {};
+}
+
+const [secret, functionPage] = await Promise.all([
+  read(`https://secretmanager.googleapis.com/v1/projects/${PROJECT}/secrets/GOLF_API_KEY/versions/${secretVersion}`),
+  read(`https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/functions?pageSize=100`),
+]);
+if (secret.state !== 'ENABLED') throw new Error('SECRET_VERSION_NOT_ENABLED');
+const functions = (functionPage.functions || [])
+  .filter((item) => item.labels?.['firebase-functions-codebase'] === 'course-catalogue')
+  .map((item) => ({
+    id: item.name?.split('/').pop(), state: item.state,
+    service: item.serviceConfig?.service?.split('/').pop(),
+    secretVersion: (item.serviceConfig?.secretEnvironmentVariables || []).find((value) => value.key === 'GOLF_API_KEY')?.version ?? null,
+  }))
+  .sort((left, right) => left.id.localeCompare(right.id));
+const ids = functions.map((item) => item.id);
+const missing = CALLABLE_FUNCTIONS.filter((name) => !ids.includes(name));
+const unexpected = ids.filter((name) => !CALLABLE_FUNCTIONS.includes(name));
+if (missing.length) throw new Error(`CALLABLE_FUNCTION_MISSING:${missing.join(',')}`);
+if (unexpected.length) throw new Error(`UNEXPECTED_CATALOGUE_FUNCTION:${unexpected.join(',')}`);
+if (functions.some((item) => item.state !== 'ACTIVE')) throw new Error('CATALOGUE_CALLABLE_NOT_ACTIVE');
+for (const name of PROVIDER_CALLABLES) {
+  const fn = functions.find((item) => item.id === name);
+  if (fn?.secretVersion !== secretVersion) throw new Error(`FUNCTION_SECRET_BINDING_MISMATCH:${name}`);
+}
+const revisions = {};
+for (const fn of functions) {
+  if (!fn.service) throw new Error(`FUNCTION_SERVICE_UNCONFIRMED:${fn.id}`);
+  const service = await read(`https://run.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/services/${fn.service}`);
+  const revision = service.latestReadyRevision?.split('/').pop();
+  if (!revision) throw new Error(`FUNCTION_REVISION_UNCONFIRMED:${fn.id}`);
+  revisions[fn.service] = revision;
+}
+const verifiedAt = new Date().toISOString();
+console.log(JSON.stringify({
+  projectId: PROJECT, region: REGION, schedulerMode: SCHEDULER_MODE,
+  receiptValidation: { state: 'verified_not_written', secretName: 'GOLF_API_KEY', secretVersion, verifiedAt, functionRevisions: revisions },
+  callableFunctions: functions, providerSecretBindings: PROVIDER_CALLABLES.map((id) => ({ id, version: functions.find((item) => item.id === id)?.secretVersion ?? null })),
+  providerRequests: 0, firestoreWrites: 0, configurationWrites: 0, checkpointWrites: 0, schedulerMutations: 0, secretValueAccessed: false,
+}, null, 2));

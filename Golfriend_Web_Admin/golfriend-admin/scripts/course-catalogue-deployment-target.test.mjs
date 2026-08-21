@@ -69,7 +69,14 @@ test('course catalogue codebase is Node 20 and every operational command selects
   for (const name of scheduledExports) assert.match(evidence, new RegExp(`'${name}'`));
   assert.match(migrationPreflight, /TARGET_PROJECT='golfriend-v2-production-2ee34'/);
   assert.match(controlledIncremental, /TARGET_PROJECT='golfriend-v2-production-2ee34'/);
-  assert.match(activation, /PROJECT='golfriend-v2-production-2ee34'/);
+  assert.match(activation, /PROJECT\s*=\s*'golfriend-v2-production-2ee34'/);
+  assert.match(activation, /SCHEDULER_MODE = 'deferred_by_design'/);
+  assert.match(activation, /const CALLABLE_FUNCTIONS = \[/);
+  assert.match(activation, /DEFERRED_MANUAL_BASELINE_READ_ONLY/);
+  assert.doesNotMatch(activation, /cloudscheduler\.googleapis\.com/);
+  assert.doesNotMatch(activation, /method:\s*['"](?:POST|PATCH|PUT|DELETE)['"]/);
+  for (const name of callableExports) assert.match(activation, new RegExp(`'${name}'`));
+  for (const name of scheduledExports) assert.doesNotMatch(activation, new RegExp(`'${name}'`));
   assert.match(pipelineStatus, /PROJECT='golfriend-v2-production-2ee34'/);
   assert.match(controlledIncremental, /MAX_PROVIDER_REQUESTS=10/);
   assert.match(controlledIncremental, /MAX_COURSE_WRITES=2/);
