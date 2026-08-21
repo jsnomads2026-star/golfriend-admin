@@ -40,6 +40,7 @@ const initializer = fs.readFileSync(path.join(root, 'src/firebaseConfig.ts'), 'u
 const firebaserc = JSON.parse(fs.readFileSync(path.join(root, '.firebaserc'), 'utf8'));
 assert.match(initializer, new RegExp(`VITE_FIREBASE_PROJECT \\|\\| '${CANONICAL_V2_PROJECT_ID}'`));
 assert.doesNotMatch(initializer, /VITE_FIREBASE_PROJECT \|\| 'golfriend-v1'/);
+assert.match(initializer, /getFunctions\(app, 'asia-southeast1'\)/);
 assert.equal(firebaserc.projects.default, CANONICAL_V2_PROJECT_ID);
 
 console.log(`PASS: Admin and Partner Portal production target is ${CANONICAL_V2_PROJECT_ID}; V1 is rejected.`);

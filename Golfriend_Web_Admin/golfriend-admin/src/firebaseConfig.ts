@@ -35,7 +35,9 @@ const firebaseConfig = resolveFirebaseTarget(ACTIVE_PROJECT, env);
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app);
+// All V2 Admin callables, including the isolated Economy read, are deployed in
+// asia-southeast1. Never silently fall back to the SDK's us-central1 default.
+export const functions = getFunctions(app, 'asia-southeast1');
 export const storage = getStorage(app);
 
 // Development-only precommission emulator wiring. All four services are pinned to
