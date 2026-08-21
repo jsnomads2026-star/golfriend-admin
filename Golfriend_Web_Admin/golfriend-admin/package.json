@@ -29,6 +29,7 @@
     "map:routes": "node scripts/route-capability-map.mjs",
     "verify:booking": "node scripts/booking-journey-verify.mjs",
     "verify:v2": "node scripts/v2-synthetic-verify.mjs",
+    "verify:identity-v2": "node scripts/identity-v2-production-gate.mjs",
     "verify:roles": "node scripts/role-journey-verify.mjs",
     "verify:guards": "node scripts/route-guard-verify.mjs",
     "verify:courseops": "node scripts/course-ops-journey-verify.mjs",

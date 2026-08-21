@@ -1,19 +1,13 @@
 // ==========================================
 // FILE: src/firebaseTarget.js  (ESM — imported by firebaseConfig.ts AND by the
 // executable gate/tests in scripts/, so the SAME resolution logic is verified.)
-// Fail-closed Firebase target resolution with an explicit fail-closed
-// `v2-preview` mode that must NEVER resolve any golfriend-v1 identity/target.
+// Fail-closed Firebase target resolution. Production resolves ONLY the canonical
+// V2 identity and explicit V1 selection is rejected.
 // ==========================================
 
-/** The current V1 project config (public web keys are non-secret by design). */
-export const V1_CONFIG = {
-  apiKey: 'AIzaSyDdcu6nWK4_wFqeuqZ5HodZ8GhLiLmIOYY',
-  authDomain: 'golfriend-v1.firebaseapp.com',
-  projectId: 'golfriend-v1',
-  storageBucket: 'golfriend-v1.firebasestorage.app',
-  messagingSenderId: '368292182099',
-  appId: '1:368292182099:web:986581e047a7e2ee2ceea6',
-};
+export const CANONICAL_V2_PROJECT_ID = 'golfriend-v2-production-2ee34';
+export const CANONICAL_V2_AUTH_DOMAIN = 'golfriend-v2-production-2ee34.firebaseapp.com';
+export const CANONICAL_V2_STORAGE_BUCKET = 'golfriend-v2-production-2ee34.firebasestorage.app';
 
 /**
  * Substrings that identify the V1 project. A `v2-preview` config that contains
@@ -51,7 +45,9 @@ function present(v) {
 
 /**
  * Resolve the Firebase config for a mode.
- *  - 'golfriend-v1'  → the V1 config.
+ *  - canonical V2 id → built ONLY from injected VITE_FIREBASE_V2_* identities,
+ *                      with project/domain/bucket pinned to the V2 production
+ *                      identity.
  *  - 'v2-preview'    → built ONLY from injected env (VITE_FIREBASE_V2_*). Fails
  *                      closed if any identity is missing/empty (never falls back
  *                      to V1) or if any field carries a V1 identifier (mixed).
@@ -61,10 +57,6 @@ function present(v) {
  * @returns {{apiKey:string,authDomain:string,projectId:string,storageBucket:string,messagingSenderId:string,appId:string}}
  */
 export function resolveFirebaseTarget(mode, env = {}) {
-  if (mode === 'golfriend-v1') {
-    return { ...V1_CONFIG };
-  }
-
   if (mode === 'precommission') {
     // Emulator-only demo project. Must be a `demo-*` id (offline-only) and carry
     // zero V1 identifiers. The emulator endpoints are validated separately by
@@ -83,7 +75,7 @@ export function resolveFirebaseTarget(mode, env = {}) {
     return cfg;
   }
 
-  if (mode === 'v2-preview') {
+  if (mode === CANONICAL_V2_PROJECT_ID || mode === 'v2-preview') {
     // Built PURELY from injected identities — no V1 fallback of any kind.
     const cfg = {
       apiKey: env.VITE_FIREBASE_V2_API_KEY,
@@ -96,7 +88,7 @@ export function resolveFirebaseTarget(mode, env = {}) {
     const missing = REQUIRED.filter((k) => !present(cfg[k]));
     if (missing.length) {
       throw new Error(
-        `v2-preview requires injected V2 identities; missing/empty: ${missing.join(', ')}. ` +
+        `${mode} requires injected V2 identities; missing/empty: ${missing.join(', ')}. ` +
         `It never falls back to golfriend-v1.`,
       );
     }
@@ -104,14 +96,26 @@ export function resolveFirebaseTarget(mode, env = {}) {
     for (const k of REQUIRED) {
       for (const bad of V1_FORBIDDEN) {
         if (String(cfg[k]).includes(bad)) {
-          throw new Error(`v2-preview config field "${k}" resolves a V1 identifier ("${bad}"); mixed V1/V2 is forbidden.`);
+          throw new Error(`${mode} config field "${k}" resolves a V1 identifier ("${bad}"); mixed V1/V2 is forbidden.`);
+        }
+      }
+    }
+    if (mode === CANONICAL_V2_PROJECT_ID) {
+      const pinned = {
+        projectId: CANONICAL_V2_PROJECT_ID,
+        authDomain: CANONICAL_V2_AUTH_DOMAIN,
+        storageBucket: CANONICAL_V2_STORAGE_BUCKET,
+      };
+      for (const [field, expected] of Object.entries(pinned)) {
+        if (cfg[field] !== expected) {
+          throw new Error(`${mode} config field "${field}" is not the canonical V2 identity.`);
         }
       }
     }
     return cfg;
   }
 
-  throw new Error(`Unknown Firebase target "${mode}". Add it to the resolver before selecting it (issue #21).`);
+  throw new Error(`Unknown Firebase target "${mode}". V1 is not an allowed Admin or Partner Portal target.`);
 }
 
 /**

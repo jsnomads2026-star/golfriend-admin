@@ -6,23 +6,24 @@ import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { resolveFirebaseTarget, resolveEmulatorEndpoints } from './firebaseTarget.js';
 
 // ==========================================
-// Firebase target selection (V1 / fail-closed V2 preview / precommission emulator).
+// Firebase target selection (canonical V2 / fail-closed V2 preview / precommission emulator).
 // The resolver (src/firebaseTarget.js) is the single, testable swap point:
-//  - default 'golfriend-v1' (current project; unchanged — issue #21 governs V2);
+//  - default 'golfriend-v2-production-2ee34' (the only production project);
 //  - 'v2-preview'    builds ONLY from injected VITE_FIREBASE_V2_* identities and
 //    FAILS CLOSED (throws) if any are missing/mixed — it never resolves V1;
 //  - 'precommission' runs ONLY against the local Firebase emulator suite (a
 //    demo-* offline-only project) and FAILS CLOSED if the emulator endpoints are
 //    absent — it never falls back to production, and is development-only.
-// Selected via VITE_FIREBASE_PROJECT (build env); defaults to golfriend-v1 and
-// never silently falls through. No component defines its own config.
+// Selected via VITE_FIREBASE_PROJECT (build env); defaults to the canonical V2
+// project and rejects V1 rather than silently falling through. No component
+// defines its own config.
 // ==========================================
 
 // NOTE: read `import.meta.env` directly (NOT `import.meta?.env`) — the optional
 // chain prevented Vite from injecting the VITE_* values, which silently forced the
-// app onto production golfriend-v1 regardless of VITE_FIREBASE_PROJECT.
+// app onto the default production target regardless of VITE_FIREBASE_PROJECT.
 const env = (import.meta.env ?? {}) as unknown as Record<string, string | undefined>;
-const ACTIVE_PROJECT = env.VITE_FIREBASE_PROJECT || 'golfriend-v1';
+const ACTIVE_PROJECT = env.VITE_FIREBASE_PROJECT || 'golfriend-v2-production-2ee34';
 
 export const ACTIVE_FIREBASE_PROJECT = ACTIVE_PROJECT;
 export const USING_EMULATORS = ACTIVE_PROJECT === 'precommission';
