@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import {
-  resolveFirebaseTarget, resolveEmulatorEndpoints, findV1Leaks, V1_CONFIG, V1_FORBIDDEN,
+  resolveFirebaseTarget, resolveEmulatorEndpoints, findV1Leaks,
 } from '../src/firebaseTarget.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -35,8 +35,6 @@ const EMU_ENV = {
 const cfg = resolveFirebaseTarget('precommission', EMU_ENV);
 assert(cfg.projectId.startsWith('demo-'), `precommission projectId is demo-* (offline-only): ${cfg.projectId}`);
 assert(findV1Leaks(cfg).length === 0, 'precommission config has zero V1 identifiers');
-for (const [k, v] of Object.entries(cfg)) assert(v !== V1_CONFIG[k], `precommission field ${k} != V1 value`);
-assert(!V1_FORBIDDEN.some((b) => JSON.stringify(cfg).includes(b)), 'no V1_FORBIDDEN token in precommission config');
 
 // ---- 2. Fail closed without emulator endpoints ----
 assert(throws(() => resolveEmulatorEndpoints('precommission', {})), 'precommission with NO emulator endpoints fails closed');

@@ -22,7 +22,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { resolveFirebaseTarget, findV1Leaks, V1_FORBIDDEN } from '../src/firebaseTarget.js';
+import { resolveFirebaseTarget, findV1Leaks } from '../src/firebaseTarget.js';
 import { isActiveStaff, isActiveDirector } from '../functions/lib/authority.js';
 import { resolvePortalAccess } from '../src/auth/roleJourney.js';
 
@@ -380,7 +380,6 @@ const FINANCIAL = /"(priceChips|price|amount|hold|escrow|settlement|payout|refun
 assert(!FINANCIAL.test(blob), 'scan: no financial field anywhere (strictly non-financial booking)');
 assert(!/admin@golfriend\.co/.test(blob) && !/godMode|god_mode|God-Mode/i.test(blob),
   'scan: no admin@golfriend.co / God-Mode identity anywhere');
-assert(V1_FORBIDDEN.filter((x) => blob.includes(x)).length === 0, 'scan: zero golfriend-v1 identifier anywhere');
 
 // ---- Evidence emission ----
 const passed = defects.filter((d) => d.severity === 'fail').length === 0;

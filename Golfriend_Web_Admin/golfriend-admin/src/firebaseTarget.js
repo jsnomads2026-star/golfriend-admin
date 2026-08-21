@@ -1,30 +1,9 @@
 // ==========================================
 // FILE: src/firebaseTarget.js  (ESM — imported by firebaseConfig.ts AND by the
 // executable gate/tests in scripts/, so the SAME resolution logic is verified.)
-// Fail-closed Firebase target resolution with an explicit fail-closed
-// `v2-preview` mode that must NEVER resolve any golfriend-v1 identity/target.
+// Fail-closed Firebase target resolution for the Admin V2 identity surface.
+// A deployed Admin build must always receive an explicit V2 configuration.
 // ==========================================
-
-/** The current V1 project config (public web keys are non-secret by design). */
-export const V1_CONFIG = {
-  apiKey: 'AIzaSyDdcu6nWK4_wFqeuqZ5HodZ8GhLiLmIOYY',
-  authDomain: 'golfriend-v1.firebaseapp.com',
-  projectId: 'golfriend-v1',
-  storageBucket: 'golfriend-v1.firebasestorage.app',
-  messagingSenderId: '368292182099',
-  appId: '1:368292182099:web:986581e047a7e2ee2ceea6',
-};
-
-/**
- * Substrings that identify the V1 project. A `v2-preview` config that contains
- * ANY of these is a mixed/leaked V1 resolution and is rejected (zero-V1 rule).
- * Also covers the `.firebaserc` deploy alias and hosting/functions target.
- */
-export const V1_FORBIDDEN = [
-  'golfriend-v1',            // projectId / authDomain / storageBucket / deploy alias / hosting site
-  '368292182099',           // V1 messagingSenderId / appId sender
-  '986581e047a7e2ee2ceea6', // V1 appId suffix
-];
 
 /**
  * Precommission demo project config. Firebase treats any `demo-*` projectId as an
@@ -51,20 +30,16 @@ function present(v) {
 
 /**
  * Resolve the Firebase config for a mode.
- *  - 'golfriend-v1'  → the V1 config.
  *  - 'v2-preview'    → built ONLY from injected env (VITE_FIREBASE_V2_*). Fails
  *                      closed if any identity is missing/empty (never falls back
- *                      to V1) or if any field carries a V1 identifier (mixed).
+ *                      to another project) or if any field carries a legacy
+ *                      identifier (mixed).
  *  - anything else   → throws.
  * @param {string} mode
  * @param {Record<string,string|undefined>} [env]
  * @returns {{apiKey:string,authDomain:string,projectId:string,storageBucket:string,messagingSenderId:string,appId:string}}
  */
 export function resolveFirebaseTarget(mode, env = {}) {
-  if (mode === 'golfriend-v1') {
-    return { ...V1_CONFIG };
-  }
-
   if (mode === 'precommission') {
     // Emulator-only demo project. Must be a `demo-*` id (offline-only) and carry
     // zero V1 identifiers. The emulator endpoints are validated separately by
@@ -72,13 +47,6 @@ export function resolveFirebaseTarget(mode, env = {}) {
     const cfg = { ...PRECOMMISSION_CONFIG };
     if (!String(cfg.projectId).startsWith('demo-')) {
       throw new Error('precommission projectId must be a demo-* (offline-only) project; refusing to run.');
-    }
-    for (const k of REQUIRED) {
-      for (const bad of V1_FORBIDDEN) {
-        if (String(cfg[k]).includes(bad)) {
-          throw new Error(`precommission config field "${k}" resolves a V1 identifier ("${bad}"); forbidden.`);
-        }
-      }
     }
     return cfg;
   }
@@ -97,17 +65,15 @@ export function resolveFirebaseTarget(mode, env = {}) {
     if (missing.length) {
       throw new Error(
         `v2-preview requires injected V2 identities; missing/empty: ${missing.join(', ')}. ` +
-        `It never falls back to golfriend-v1.`,
+        'No fallback Firebase target is available.',
       );
     }
-    // Zero-V1: reject if ANY field carries a V1 identifier (mixed/leaked V1/V2).
-    for (const k of REQUIRED) {
-      for (const bad of V1_FORBIDDEN) {
-        if (String(cfg[k]).includes(bad)) {
-          throw new Error(`v2-preview config field "${k}" resolves a V1 identifier ("${bad}"); mixed V1/V2 is forbidden.`);
-        }
-      }
+    if (!String(cfg.projectId).startsWith('golfriend-v2-')) {
+      throw new Error('v2-preview projectId must identify a golfriend-v2 project.');
     }
+    if (cfg.authDomain !== `${cfg.projectId}.firebaseapp.com`) throw new Error('v2-preview authDomain must match its projectId.');
+    if (![`${cfg.projectId}.firebasestorage.app`, `${cfg.projectId}.appspot.com`].includes(cfg.storageBucket)) throw new Error('v2-preview storageBucket must match its projectId.');
+    if (!String(cfg.appId).startsWith(`1:${cfg.messagingSenderId}:web:`)) throw new Error('v2-preview appId must bind to its messagingSenderId.');
     return cfg;
   }
 
@@ -153,13 +119,15 @@ export function resolveEmulatorEndpoints(mode, env = {}) {
   return { host, ports };
 }
 
-/** Deep-scan a resolved config for any V1 identifier. Returns the offending [field, token] pairs. */
+/** Validate that a resolved config has no cross-project identity mismatch. */
 export function findV1Leaks(cfg) {
   const leaks = [];
-  for (const [k, v] of Object.entries(cfg || {})) {
-    for (const bad of V1_FORBIDDEN) {
-      if (String(v).includes(bad)) leaks.push([k, bad]);
-    }
+  const projectId = String(cfg?.projectId || '');
+  if (!projectId.startsWith('golfriend-v2-') && !projectId.startsWith('demo-')) leaks.push(['projectId', 'not-v2-or-demo']);
+  if (projectId.startsWith('golfriend-v2-')) {
+    if (cfg?.authDomain !== `${projectId}.firebaseapp.com`) leaks.push(['authDomain', 'project-mismatch']);
+    if (![`${projectId}.firebasestorage.app`, `${projectId}.appspot.com`].includes(cfg?.storageBucket)) leaks.push(['storageBucket', 'project-mismatch']);
+    if (!String(cfg?.appId || '').startsWith(`1:${cfg?.messagingSenderId}:web:`)) leaks.push(['appId', 'sender-mismatch']);
   }
   return leaks;
 }
