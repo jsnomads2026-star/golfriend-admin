@@ -14,6 +14,7 @@ const controlledIncremental = readFileSync(new URL('./scripts/run-course-catalog
 const activation = readFileSync(new URL('./scripts/activate-course-catalogue-after-rotation.mjs', root), 'utf8');
 const pipelineStatus = readFileSync(new URL('./scripts/run-course-catalogue-pipeline.mjs', root), 'utf8');
 const schedulerRegistration = readFileSync(new URL('./scripts/register-course-catalogue-production-schedulers.mjs', root), 'utf8');
+const disabledBaseline = readFileSync(new URL('./scripts/establish-course-catalogue-production-disabled-baseline.mjs', root), 'utf8');
 const callableExports = [
   'searchGolfApiCatalogue', 'getGolfApiCatalogueStatus', 'reconcileGolfApiPendingSettlements',
   'armGolfApiCalibrationCanary', 'runGolfApiCalibrationCanary',
@@ -43,6 +44,7 @@ test('course catalogue codebase is Node 20 and every operational command selects
   assert.equal(packageJson.scripts['evidence:course-catalogue:production'],
     'node scripts/read-course-catalogue-production-evidence.mjs');
   assert.match(packageJson.scripts['preflight:course-catalogue:production'], /--project=golfriend-v2-production-2ee34/);
+  assert.match(packageJson.scripts['establish:course-catalogue:production:disabled-baseline'], /--project=golfriend-v2-production-2ee34/);
   assert.match(packageJson.scripts['run:course-catalogue:production:controlled-incremental'], /--project=golfriend-v2-production-2ee34/);
   assert.equal(packageJson.scripts['deploy:course-catalogue:v2'], undefined);
   assert.equal(packageJson.scripts['evidence:course-catalogue:v2'], undefined);
@@ -50,9 +52,21 @@ test('course catalogue codebase is Node 20 and every operational command selects
   assert.match(runbook, /deploy:course-catalogue:production:callables/);
   assert.doesNotMatch(runbook, /firebase deploy(?!\s+--project\s+golfriend-v2-production-2ee34)/);
   assert.doesNotMatch(runbook, /--project\s+golfriend-v2(?:\s|$)/);
-  assert.match(evidence, /PROJECT='golfriend-v2-production-2ee34'/);
+  assert.match(evidence, /PROJECT\s*=\s*'golfriend-v2-production-2ee34'/);
   assert.match(evidence, /Read-only production control-plane evidence/);
   assert.doesNotMatch(evidence, /:access|method:\s*['"]POST['"]|method:\s*['"]PATCH['"]|method:\s*['"]PUT['"]|method:\s*['"]DELETE['"]/);
+  assert.match(evidence, /const CALLABLE_FUNCTIONS = \[/);
+  assert.match(evidence, /const DEFERRED_SCHEDULED_EXPORTS = \[/);
+  assert.match(evidence, /deferred\/not created by design/);
+  assert.match(evidence, /const LEGACY_SCHEDULER = 'firebase-schedule-runGolfApiIngestion-asia-southeast1'/);
+  assert.match(evidence, /LEGACY_RUN_GOLF_API_INGESTION_NOT_PAUSED/);
+  assert.match(evidence, /DEFERRED_CATALOGUE_SCHEDULER_PRESENT/);
+  assert.match(evidence, /FIRESTORE_RULES_RELEASE_MISSING/);
+  assert.match(evidence, /CATALOGUE_CONFIGURATION_NOT_DISABLED/);
+  assert.match(evidence, /CATALOGUE_CHECKPOINT_NOT_BLOCKED/);
+  assert.match(evidence, /CATALOGUE_QUOTA_BASELINE_NOT_EMPTY/);
+  for (const name of callableExports) assert.match(evidence, new RegExp(`'${name}'`));
+  for (const name of scheduledExports) assert.match(evidence, new RegExp(`'${name}'`));
   assert.match(migrationPreflight, /TARGET_PROJECT='golfriend-v2-production-2ee34'/);
   assert.match(controlledIncremental, /TARGET_PROJECT='golfriend-v2-production-2ee34'/);
   assert.match(activation, /PROJECT='golfriend-v2-production-2ee34'/);
@@ -62,6 +76,12 @@ test('course catalogue codebase is Node 20 and every operational command selects
   assert.match(schedulerRegistration, /SCHEDULER_REGISTRATION_AUTHORIZATION_REQUIRED/);
   assert.match(schedulerRegistration, /PAUSED_JOB_CONFIRMATION_REQUIRED/);
   assert.match(schedulerRegistration, /functions:course-catalogue:\$\{name\}/);
+  assert.match(disabledBaseline, /TARGET_PROJECT = 'golfriend-v2-production-2ee34'/);
+  assert.match(disabledBaseline, /DISABLED_BASELINE_EXECUTION_APPROVAL_REQUIRED/);
+  assert.match(disabledBaseline, /currentDocument: \{ exists: false \}/);
+  assert.match(disabledBaseline, /functionInvocations: 0/);
+  assert.match(disabledBaseline, /schedulerMutations: 0/);
+  assert.match(disabledBaseline, /courseWrites: 0/);
   for (const name of scheduledExports) assert.match(schedulerRegistration, new RegExp(`'${name}'`));
 });
 
@@ -80,6 +100,8 @@ test('production operation guards reject the former V2 project, unqualified exec
     ['register-course-catalogue-production-schedulers.mjs', ['--project=golfriend-v2-production-2ee34'], 'SCHEDULER_REGISTRATION_AUTHORIZATION_REQUIRED'],
     ['register-course-catalogue-production-schedulers.mjs', ['--project=golfriend-v2-production-2ee34', '--execute=SCHEDULER_REGISTRATION_APPROVED'], 'PAUSED_JOB_CONFIRMATION_REQUIRED'],
     ['register-course-catalogue-production-schedulers.mjs', ['--project=golfriend-v2'], 'PROJECT_TARGET_REJECTED'],
+    ['establish-course-catalogue-production-disabled-baseline.mjs', ['--project=golfriend-v2'], 'PROJECT_TARGET_REJECTED'],
+    ['establish-course-catalogue-production-disabled-baseline.mjs', ['--project=golfriend-v2-production-2ee34'], 'DISABLED_BASELINE_EXECUTION_APPROVAL_REQUIRED'],
   ]) {
     const result = spawnSync(process.execPath, [`scripts/${script}`, ...args], { cwd: new URL('..', import.meta.url), encoding: 'utf8', shell: false });
     assert.notEqual(result.status, 0);
