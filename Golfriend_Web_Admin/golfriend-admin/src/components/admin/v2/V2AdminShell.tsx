@@ -11,7 +11,7 @@ export default function V2AdminShell({ activeArea, onAreaChange, onSignOut, chil
   useEffect(() => setMenuOpen(false), [activeArea]);
   return <AdminLocaleContext.Provider value={locale}><div className="v2-admin-shell">
     <aside className={`v2-admin-sidebar ${menuOpen ? 'is-open' : ''}`} aria-label="Primary navigation">
-      <div className="v2-admin-brand"><img className="v2-admin-mark" src="/favicon.svg" alt="Golfriend" /><div><strong>Golfriend Admin</strong><span>{copy.workspace}</span></div></div>
+      <div className="v2-admin-brand"><img className="v2-admin-mark" src="/golfriend-production-app-icon.png" alt="Golfriend" /><div><strong>Golfriend Admin</strong><span>{copy.workspace}</span></div></div>
       <nav className="v2-admin-nav">{ADMIN_AREAS.map((area, index) => <button key={area.id} type="button" aria-current={activeArea === area.id ? 'page' : undefined} onClick={() => onAreaChange(area.id)}><span>{String(index + 1).padStart(2, '0')}</span>{area.label}</button>)}</nav>
       <div className="v2-admin-sidebar-footer"><label htmlFor="admin-locale">{copy.language}</label><select id="admin-locale" value={locale} onChange={(event) => setLocale(event.target.value as AdminLocale)}>{ADMIN_LOCALES.map((code) => <option key={code} value={code}>{code.toUpperCase()}</option>)}</select><button type="button" onClick={onSignOut}>{copy.signOut}</button></div>
     </aside>
