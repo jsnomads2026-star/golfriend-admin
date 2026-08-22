@@ -63,13 +63,115 @@ export function summarizeCourses(courses) {
     stale: courses.filter((c) => c.stale).length, duplicates: courses.filter((c) => c.duplicate).length, lastSuccessfulSync: latest };
 }
 
-export function filterCourses(courses, query, filter) {
+/**
+ * `scope` is optional and defaults to no geographic narrowing, so the existing
+ * three-argument calls (and the gate that asserts them) behave exactly as before.
+ */
+export function filterCourses(courses, query, filter, scope = {}) {
   const needle = query.trim().toLocaleLowerCase();
+  const country = typeof scope.country === 'string' ? scope.country.trim() : '';
+  const region = typeof scope.region === 'string' ? scope.region.trim() : '';
   return courses.filter((course) => {
     const searchMatch = !needle || [course.name, course.country, course.region, course.canonicalId].some((item) => item.toLocaleLowerCase().includes(needle));
     const filterMatch = filter === 'all' || (filter === 'missing_coordinates' && !course.hasCoordinates) || (filter === 'incomplete' && course.incomplete) || (filter === 'stale' && course.stale) || (filter === 'duplicate' && course.duplicate) || (filter === 'healthy' && healthOf(course) === 'healthy');
-    return searchMatch && filterMatch;
+    // Exact match, not substring: the value comes from a picker whose options are the
+    // countries actually present, so a partial string here would silently widen the
+    // selection the operator made.
+    const countryMatch = !country || course.country === country;
+    // A region is only meaningful inside its country: the same region name can exist
+    // in two countries, so it must never select across them. A region with no country
+    // is not a narrowing anyone can see — the picker disables the area input until a
+    // country is chosen — so it is ignored rather than silently emptying the table.
+    const regionMatch = !region || !country || course.region === region;
+    return searchMatch && filterMatch && countryMatch && regionMatch;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Geographic pickers
+// ---------------------------------------------------------------------------
+
+/**
+ * Countries actually present in the loaded catalogue, with a count each, ordered by
+ * name. Derived from the data rather than a static list so it can never offer a
+ * country that would return nothing, and never omit one that exists.
+ *
+ * `Unknown` is the normalizer's placeholder for a record with no country. It is kept
+ * as a selectable option, because "which records have no country?" is exactly the
+ * question this table exists to answer — hiding it would hide the incomplete records.
+ */
+export function countryOptions(courses) {
+  const counts = new Map();
+  courses.forEach((course) => counts.set(course.country, (counts.get(course.country) || 0) + 1));
+  return [...counts.entries()]
+    .map(([country, count]) => ({ country, count }))
+    .sort((left, right) => left.country.localeCompare(right.country));
+}
+
+/** Regions present within one country. Empty when no country is selected. */
+export function regionOptions(courses, country) {
+  const selected = typeof country === 'string' ? country.trim() : '';
+  if (!selected) return [];
+  const counts = new Map();
+  courses.forEach((course) => {
+    if (course.country !== selected) return;
+    counts.set(course.region, (counts.get(course.region) || 0) + 1);
+  });
+  return [...counts.entries()]
+    .map(([region, count]) => ({ region, count }))
+    .sort((left, right) => left.region.localeCompare(right.region));
+}
+
+// ---------------------------------------------------------------------------
+// Sorting
+// ---------------------------------------------------------------------------
+
+export const SORT_COLUMNS = Object.freeze(['name', 'country', 'source', 'updated']);
+
+/**
+ * Click cycling: a new column starts ascending; the active column flips direction.
+ * There is deliberately no third "unsorted" state — the table always has a defined
+ * order, so rows never move for a reason the operator cannot see.
+ */
+export function nextSort(current, column) {
+  if (!SORT_COLUMNS.includes(column)) return current;
+  if (!current || current.column !== column) return { column, direction: 'asc' };
+  return { column, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+}
+
+const compareText = (left, right) => String(left ?? '').localeCompare(String(right ?? ''), undefined, { sensitivity: 'base' });
+
+/**
+ * Stable, pure sort. Returns a new array; the input order is preserved for equal keys
+ * because every comparator falls through to the original index.
+ *
+ * Records with no `updatedAt` sort LAST in both directions. They are not "oldest" —
+ * the date is unknown — so letting them lead a descending sort would assert something
+ * the data does not say, and would bury the newest records the operator asked for.
+ */
+export function sortCourses(courses, sort) {
+  if (!sort || !SORT_COLUMNS.includes(sort.column)) return courses;
+  const factor = sort.direction === 'desc' ? -1 : 1;
+  const decorated = courses.map((course, index) => ({ course, index }));
+  decorated.sort((left, right) => {
+    let result = 0;
+    if (sort.column === 'name') result = compareText(left.course.name, right.course.name);
+    else if (sort.column === 'country') {
+      result = compareText(left.course.country, right.course.country) || compareText(left.course.region, right.course.region);
+    } else if (sort.column === 'source') result = compareText(left.course.source, right.course.source);
+    else {
+      const a = Date.parse(left.course.updatedAt || ''), b = Date.parse(right.course.updatedAt || '');
+      const aKnown = Number.isFinite(a), bKnown = Number.isFinite(b);
+      if (!aKnown && !bKnown) result = 0;
+      // Unknown dates are pinned last by returning the direction-cancelling sign, so
+      // the factor below cannot lift them to the top of a descending sort.
+      else if (!aKnown) return 1;
+      else if (!bKnown) return -1;
+      else result = a - b;
+    }
+    return result * factor || left.index - right.index;
+  });
+  return decorated.map((entry) => entry.course);
 }
 
 export function normalizeSyncResult(data) {

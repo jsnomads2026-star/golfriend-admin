@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { filterCourses, healthOf, markDuplicates, normalizeCourse, normalizeSyncResult, summarizeCourses } from '../src/components/admin/v2/courseOperationsModel.mjs';
+import { countryOptions, filterCourses, healthOf, markDuplicates, nextSort, normalizeCourse, normalizeSyncResult, regionOptions, sortCourses, summarizeCourses } from '../src/components/admin/v2/courseOperationsModel.mjs';
 
 const now = new Date('2026-08-12T00:00:00Z');
 const courses = markDuplicates([
@@ -80,5 +80,69 @@ const cfg = fs.readFileSync(new URL('../src/firebaseConfig.ts', import.meta.url)
 assert.match(cfg, /ACTIVE_PROJECT === 'v2-preview' \? 'asia-southeast1' : 'us-central1'/);
 assert.match(cfg, /getFunctions\(app, FUNCTIONS_REGION\)/);
 assert.doesNotMatch(cfg, /getFunctions\(app\)/, 'the callable region must never fall back to the SDK default');
+
+
+// ---------------------------------------------------------------------------
+// Sorting and geographic scope. Read-only additions: neither may introduce a write
+// path, and neither may change what the existing quality filters select.
+// ---------------------------------------------------------------------------
+const scoped = markDuplicates([
+  normalizeCourse('s1', { courseID:'p1', clubName:'Alpha', country:'Thailand', region:'Chonburi', latitude:12, longitude:100, providerFetchedAt:'2026-08-10T00:00:00Z', gpsSource:'golfapi' }, now),
+  normalizeCourse('s2', { courseID:'p2', clubName:'zeta', country:'Thailand', region:'Phuket', latitude:8, longitude:98, providerFetchedAt:'2026-06-01T00:00:00Z', gpsSource:'manual-entry' }, now),
+  normalizeCourse('s3', { courseID:'p3', clubName:'Mid', country:'Japan', region:'Chiba', latitude:35, longitude:140, providerFetchedAt:'2026-07-01T00:00:00Z', gpsSource:'golfapi' }, now),
+  normalizeCourse('s4', { courseID:'p4', clubName:'NoDate', country:'Japan', region:'Chiba', latitude:36, longitude:139 }, now),
+]);
+
+// Countries come from the data, are counted, and are ordered by name.
+assert.deepEqual(countryOptions(scoped), [{ country:'Japan', count:2 }, { country:'Thailand', count:2 }]);
+// Regions are scoped to one country and empty until a country is chosen.
+assert.deepEqual(regionOptions(scoped, ''), []);
+assert.deepEqual(regionOptions(scoped, 'Thailand'), [{ region:'Chonburi', count:1 }, { region:'Phuket', count:1 }]);
+assert.deepEqual(regionOptions(scoped, 'Japan'), [{ region:'Chiba', count:2 }]);
+
+// The optional scope argument must not disturb the existing three-argument contract.
+assert.deepEqual(filterCourses(scoped,'','all').map((c)=>c.id), ['s1','s2','s3','s4']);
+assert.deepEqual(filterCourses(scoped,'','all',{}).map((c)=>c.id), ['s1','s2','s3','s4']);
+assert.deepEqual(filterCourses(scoped,'','all',{ country:'Thailand' }).map((c)=>c.id), ['s1','s2']);
+assert.deepEqual(filterCourses(scoped,'','all',{ country:'Thailand', region:'Phuket' }).map((c)=>c.id), ['s2']);
+// A region without its country must never select across countries.
+assert.deepEqual(filterCourses(scoped,'','all',{ region:'Chiba' }).map((c)=>c.id), ['s1','s2','s3','s4']);
+assert.deepEqual(filterCourses(scoped,'','all',{ country:'Thailand', region:'Chiba' }).map((c)=>c.id), []);
+// Scope composes with the quality filters and the search box rather than replacing them.
+assert.deepEqual(filterCourses(scoped,'','missing_coordinates',{ country:'Thailand' }).map((c)=>c.id), []);
+assert.deepEqual(filterCourses(scoped,'alpha','all',{ country:'Thailand' }).map((c)=>c.id), ['s1']);
+
+// Click cycling: a new column starts ascending, the active column flips.
+assert.deepEqual(nextSort(null,'name'), { column:'name', direction:'asc' });
+assert.deepEqual(nextSort({ column:'name', direction:'asc' },'name'), { column:'name', direction:'desc' });
+assert.deepEqual(nextSort({ column:'name', direction:'desc' },'name'), { column:'name', direction:'asc' });
+assert.deepEqual(nextSort({ column:'name', direction:'desc' },'country'), { column:'country', direction:'asc' });
+assert.deepEqual(nextSort({ column:'name', direction:'asc' },'nonsense'), { column:'name', direction:'asc' });
+
+// Name sorting is case-insensitive: 'zeta' must not sort before 'Alpha'.
+assert.deepEqual(sortCourses(scoped,{ column:'name', direction:'asc' }).map((c)=>c.name), ['Alpha','Mid','NoDate','zeta']);
+assert.deepEqual(sortCourses(scoped,{ column:'name', direction:'desc' }).map((c)=>c.name), ['zeta','NoDate','Mid','Alpha']);
+// Country sorts by country then region.
+assert.deepEqual(sortCourses(scoped,{ column:'country', direction:'asc' }).map((c)=>c.id), ['s3','s4','s1','s2']);
+assert.deepEqual(sortCourses(scoped,{ column:'source', direction:'asc' }).map((c)=>c.source), ['golfapi','golfapi','manual-entry','unknown']);
+// An unknown date is not 'oldest'. It sorts last in BOTH directions.
+assert.equal(sortCourses(scoped,{ column:'updated', direction:'asc' }).at(-1).id, 's4');
+assert.equal(sortCourses(scoped,{ column:'updated', direction:'desc' }).at(-1).id, 's4');
+assert.deepEqual(sortCourses(scoped,{ column:'updated', direction:'desc' }).slice(0,3).map((c)=>c.id), ['s1','s3','s2']);
+// Sorting is pure and never mutates its input.
+const before = scoped.map((c)=>c.id);
+sortCourses(scoped,{ column:'name', direction:'desc' });
+assert.deepEqual(scoped.map((c)=>c.id), before, 'sortCourses must not mutate the array it is given');
+assert.deepEqual(sortCourses(scoped,null).map((c)=>c.id), before);
+
+// The table stays read-only: the new controls add no write path of any kind.
+assert.doesNotMatch(ui, /setDoc|updateDoc|addDoc|deleteDoc|writeBatch/, 'the course table must remain read-only');
+assert.match(ui, /aria-sort=/, 'sortable headers must expose aria-sort');
+assert.match(ui, /list="course-country-options"/); assert.match(ui, /list="course-region-options"/);
+assert.match(ui, /disabled=\{!country\}/, 'the area picker must depend on a chosen country');
+assert.match(ui, /sortCourses\(filterCourses\(/, 'sorting must apply to the filtered rows');
+// The existing quality filters and the pipeline panel are untouched.
+assert.match(ui, /'all','missing_coordinates','incomplete','stale','duplicate'/);
+assert.match(ui, /growthBlocked/);
 
 console.log('Course operations verification PASS: catalogue, health, filter, read-only Preview, enqueue-only Apply contract, confirmation, state, quota, locale, route, callable region, independent status load, and secret-boundary assertions.');

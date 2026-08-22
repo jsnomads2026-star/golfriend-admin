@@ -4,7 +4,16 @@ export function normalizeCourse(id:string, record:Record<string,unknown>, now?:D
 export function markDuplicates(courses:Array<Omit<CourseView,'duplicate'>>): CourseView[];
 export function healthOf(course:CourseView): CourseHealth;
 export function summarizeCourses(courses:CourseView[]): {total:number;usable:number;regions:number;withCoordinates:number;missingCoordinates:number;incomplete:number;stale:number;quality:number;duplicates:number;lastSuccessfulSync:string|null};
-export function filterCourses(courses:CourseView[], query:string, filter:'all'|CourseHealth):CourseView[];
+export interface CourseScope { country?:string; region?:string }
+export function filterCourses(courses:CourseView[], query:string, filter:'all'|CourseHealth, scope?:CourseScope):CourseView[];
+export function countryOptions(courses:CourseView[]): Array<{country:string;count:number}>;
+export function regionOptions(courses:CourseView[], country:string): Array<{region:string;count:number}>;
+export type SortColumn = 'name'|'country'|'source'|'updated';
+export type SortDirection = 'asc'|'desc';
+export interface CourseSort { column:SortColumn; direction:SortDirection }
+export const SORT_COLUMNS: readonly SortColumn[];
+export function nextSort(current:CourseSort|null, column:SortColumn): CourseSort;
+export function sortCourses(courses:CourseView[], sort:CourseSort|null): CourseView[];
 export function normalizeSyncResult(data:unknown): {mode:'preview';processed:number;productionWrites:0;summary:Record<string,number>;results:Array<{courseId?:string;result?:string;[key:string]:unknown}>;quota:unknown};
 export interface IngestionStatus { source:string; lastCommitAt:string|null; estimatedCallsUsed:number|null; remaining:number|null; currentMonth:string|null; added:number|null; skippedExisting:number|null; reviewRequired:number|null; failed:number|null; errors:Array<{courseID:string;message:string}>|null; lastCommitJobId:string|null }
 export function normalizeIngestionStatus(raw:unknown): IngestionStatus;
