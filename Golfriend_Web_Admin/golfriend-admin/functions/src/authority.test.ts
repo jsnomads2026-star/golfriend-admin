@@ -18,7 +18,6 @@ check('active Director is staff', () => {
 check('active Manager/Support is staff (any assigned role)', () => {
   assert.equal(isActiveStaff({ role: 'Manager', status: 'Active' }), true);
   assert.equal(isActiveStaff({ role: 'Support', status: 'Active' }), true);
-  assert.equal(isActiveStaff({ role: 'Support' }), true); // status defaults to active if not Suspended
 });
 
 // ---- NEGATIVE (fail closed) ----
@@ -30,6 +29,16 @@ check('missing admin_users doc → denied', () => {
 check('suspended staff → denied (even Director)', () => {
   assert.equal(isActiveStaff({ role: 'Director', status: 'Suspended' }), false);
   assert.equal(isActiveDirector({ role: 'Director', status: 'Suspended' }), false);
+});
+check('missing, null, and unknown status → denied', () => {
+  assert.equal(isActiveDirector({ role: 'Director' }), false);
+  assert.equal(isActiveDirector({ role: 'Director', status: null as unknown as string }), false);
+  assert.equal(isActiveDirector({ role: 'Director', status: 'Pending' }), false);
+});
+check('malformed status → denied', () => {
+  assert.equal(isActiveDirector({ role: 'Director', status: '' }), false);
+  assert.equal(isActiveDirector({ role: 'Director', status: 1 as unknown as string }), false);
+  assert.equal(isActiveDirector({ role: 'Director', status: {} as unknown as string }), false);
 });
 check('role-less / unauthorized record → denied', () => {
   assert.equal(isActiveStaff({ status: 'Active' }), false);   // no role

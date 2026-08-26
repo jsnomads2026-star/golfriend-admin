@@ -1462,7 +1462,7 @@ export const reportPlayerIncident = onCall({ memory: "256MiB" }, async (request)
 
   let authorized = false;
   const adminSnap = await db.collection('admin_users').doc(reporterUid).get();
-  if (adminSnap.exists && adminSnap.data()?.status !== 'Suspended') {
+  if (isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
     authorized = true;
   }
   if (!authorized) {
