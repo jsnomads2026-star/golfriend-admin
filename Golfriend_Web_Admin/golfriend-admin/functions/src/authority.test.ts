@@ -11,13 +11,13 @@ let passed = 0;
 function check(name: string, fn: () => void) { fn(); passed += 1; console.log(`  ✓ ${name}`); }
 
 // ---- POSITIVE ----
-check('active Director is staff', () => {
-  assert.equal(isActiveStaff({ role: 'Director', status: 'Active' }), true);
-  assert.equal(isActiveDirector({ role: 'Director', status: 'Active' }), true);
+check('lowercase active Director is staff', () => {
+  assert.equal(isActiveStaff({ role: 'Director', status: 'active' }), true);
+  assert.equal(isActiveDirector({ role: 'Director', status: 'active' }), true);
 });
 check('active Manager/Support is staff (any assigned role)', () => {
-  assert.equal(isActiveStaff({ role: 'Manager', status: 'Active' }), true);
-  assert.equal(isActiveStaff({ role: 'Support', status: 'Active' }), true);
+  assert.equal(isActiveStaff({ role: 'Manager', status: 'active' }), true);
+  assert.equal(isActiveStaff({ role: 'Support', status: 'active' }), true);
 });
 
 // ---- NEGATIVE (fail closed) ----
@@ -30,6 +30,10 @@ check('suspended staff → denied (even Director)', () => {
   assert.equal(isActiveStaff({ role: 'Director', status: 'Suspended' }), false);
   assert.equal(isActiveDirector({ role: 'Director', status: 'Suspended' }), false);
 });
+check('wrong-cased Active status → denied', () => {
+  assert.equal(isActiveStaff({ role: 'Director', status: 'Active' }), false);
+  assert.equal(isActiveDirector({ role: 'Director', status: 'Active' }), false);
+});
 check('missing, null, and unknown status → denied', () => {
   assert.equal(isActiveDirector({ role: 'Director' }), false);
   assert.equal(isActiveDirector({ role: 'Director', status: null as unknown as string }), false);
@@ -41,13 +45,13 @@ check('malformed status → denied', () => {
   assert.equal(isActiveDirector({ role: 'Director', status: {} as unknown as string }), false);
 });
 check('role-less / unauthorized record → denied', () => {
-  assert.equal(isActiveStaff({ status: 'Active' }), false);   // no role
+  assert.equal(isActiveStaff({ status: 'active' }), false);   // no role
   assert.equal(isActiveStaff({}), false);
-  assert.equal(isActiveStaff({ role: '', status: 'Active' }), false);
-  assert.equal(isActiveStaff({ role: '   ', status: 'Active' }), false);
+  assert.equal(isActiveStaff({ role: '', status: 'active' }), false);
+  assert.equal(isActiveStaff({ role: '   ', status: 'active' }), false);
 });
 check('non-Director active staff is NOT a Director', () => {
-  assert.equal(isActiveDirector({ role: 'Support', status: 'Active' }), false);
+  assert.equal(isActiveDirector({ role: 'Support', status: 'active' }), false);
 });
 check('authority derives ONLY from the doc — no email/identity input exists', () => {
   // The function signature takes only the admin_users doc; there is no email,
