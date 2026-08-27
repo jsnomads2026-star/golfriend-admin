@@ -14,6 +14,8 @@ export interface CourseOperationsService {
   startCountry(country:string): Promise<Record<string,unknown>>;
   pauseCountry(country:string): Promise<Record<string,unknown>>;
   resumeCountry(country:string): Promise<Record<string,unknown>>;
+  previewGlobalRefresh(): Promise<Record<string,unknown>>;
+  setGlobalRefresh(enabled:boolean): Promise<Record<string,unknown>>;
   loadGrowthReceipts(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
@@ -40,6 +42,8 @@ export const courseOperationsService: CourseOperationsService = {
   async startCountry(country) { return (await httpsCallable(functions,'startCourseCountryIngestion')({country})).data as Record<string,unknown>; },
   async pauseCountry(country) { return (await httpsCallable(functions,'pauseCourseCountryIngestion')({country})).data as Record<string,unknown>; },
   async resumeCountry(country) { return (await httpsCallable(functions,'resumeCourseCountryIngestion')({country})).data as Record<string,unknown>; },
+  async previewGlobalRefresh() { return (await httpsCallable(functions,'previewCourseCountryAutoRefresh')()).data as Record<string,unknown>; },
+  async setGlobalRefresh(enabled) { return (await httpsCallable(functions,'setCourseCountryAutoRefresh')({enabled})).data as Record<string,unknown>; },
   async loadGrowthReceipts() {
     const status=await this.loadIngestionOperations(),receipt=status.lastCountReceipt as Record<string,unknown>|undefined;
     return receipt?[{id:String(receipt.receiptId||''),data:receipt}]:[];
