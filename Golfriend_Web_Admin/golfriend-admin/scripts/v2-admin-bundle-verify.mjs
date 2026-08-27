@@ -20,4 +20,5 @@ const bundle = readFileSync(`dist/${asset}`, 'utf8');
 
 assert.ok(bundle.includes('golfriend-v2-production-2ee34'), 'V2_PRODUCTION_IDENTITY_MISSING');
 assert.ok(bundle.includes('asia-southeast1'), 'V2_FUNCTIONS_REGION_MISSING');
-console.log('V2 Admin bundle PASS: production identity resolves without the V1 fallback and Functions bind asia-southeast1.');
+assert.ok(bundle.includes('exchangeRecaptchaEnterpriseToken'), 'V2_ENTERPRISE_APP_CHECK_PROVIDER_MISSING');
+console.log('V2 Admin bundle PASS: production identity resolves without the V1 fallback, Functions bind asia-southeast1, and App Check uses reCAPTCHA Enterprise.');

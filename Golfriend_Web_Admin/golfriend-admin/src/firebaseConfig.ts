@@ -3,7 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
-import { CustomProvider, ReCaptchaV3Provider, initializeAppCheck } from 'firebase/app-check';
+import { CustomProvider, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider, initializeAppCheck } from 'firebase/app-check';
 import { resolveFirebaseTarget, resolveEmulatorEndpoints } from './firebaseTarget.js';
 
 // ==========================================
@@ -60,7 +60,9 @@ const APP_CHECK_SITE_KEY = (env.VITE_FIREBASE_APPCHECK_SITE_KEY || '').trim();
 let appCheckActive = false;
 if (!USING_EMULATORS && APP_CHECK_SITE_KEY) {
   initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+    provider: ACTIVE_PROJECT === 'v2-preview'
+      ? new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY)
+      : new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
     isTokenAutoRefreshEnabled: true,
   });
   appCheckActive = true;
