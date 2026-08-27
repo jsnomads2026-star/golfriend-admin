@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CountryCoverage, CourseOperationsService } from './courseOperationsService';
 
-const headers = ['Country', 'Total courses', 'With coordinates', 'Missing coordinates', 'Golf API imported', 'Direct-confirmed', 'Provider evidence missing', 'Latest Golfriend fetch'];
+const headers = ['Country', 'Total courses', 'With coordinates', 'Missing coordinates', 'Golf API imported', 'Direct-confirmed', 'Provider evidence missing', 'Latest Golfriend fetch', 'Cycle state'];
+const timestamp = (value: number | null) => value ? new Date(value).toLocaleString() : 'Unavailable';
 
 export default function V2CourseCoverageByCountry({ service }: { service: CourseOperationsService }) {
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
@@ -12,12 +13,19 @@ export default function V2CourseCoverageByCountry({ service }: { service: Course
     try { setCountries(await service.loadCountryCoverage()); setState('ready'); }
     catch { setState('unavailable'); }
   }, [service]);
+  const action = useCallback(async (country: string, command: 'plan'|'start'|'pause'|'resume') => {
+    try {
+      const result = command === 'plan' ? await service.planCountry(country) : command === 'start' ? await service.startCountry(country) : command === 'pause' ? await service.pauseCountry(country) : await service.resumeCountry(country);
+      setMessage(command === 'plan' ? `${country} plan: ${String(result.providerCalls)} provider calls, ${String(result.courseWrites)} writes` : `${country} ${command === 'start' ? 'queued' : command}d`);
+      setConfirmCountry(null); await load();
+    } catch { setMessage(`${country} could not be ${command === 'start' ? 'started' : command === 'plan' ? 'planned' : `${command}d`}.`); }
+  }, [load, service]);
   useEffect(() => { void load(); }, [load]);
   return <section className="course-catalogue" aria-labelledby="course-coverage-by-country-title">
-    <div className="course-toolbar"><h3 id="course-coverage-by-country-title">Course Coverage by Country</h3><p>Server-authoritative aggregate. No country is inferred from coordinates.</p></div>
+    <div className="course-toolbar"><h3 id="course-coverage-by-country-title">Country acquisition pipeline</h3><p>Server-authoritative coverage. Plans make zero provider calls and zero course writes; only the scheduled worker contacts the provider. No country is inferred from coordinates.</p></div>
     {state === 'loading' && <div className="course-state" role="status" aria-live="polite">Loading country coverage…</div>}
     {state === 'unavailable' && <div className="course-state is-error" role="alert"><p>Country coverage is unavailable.</p><button onClick={() => void load()}>Retry</button></div>}
-    {state === 'ready' && countries.length === 0 && <div className="course-state">No course records are available.</div>}
-    {state === 'ready' && countries.length > 0 && <div className="course-table-wrap"><table><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}<th>Country acquisition</th></tr></thead><tbody>{countries.map((country) => <tr key={country.country}><td>{country.country}</td><td>{country.totalCourses}</td><td>{country.coursesWithCoordinates}</td><td>{country.coursesMissingCoordinates}</td><td>{country.golfApiImportedCount}</td><td>{country.directConfirmedCount}</td><td>{country.providerEvidenceMissingCount}</td><td>{country.latestGolfriendFetchTime ? new Date(country.latestGolfriendFetchTime).toLocaleString() : 'Unavailable'}</td><td>{country.country==='UNKNOWN'?<span>Unavailable</span>:confirmCountry===country.country?<><button onClick={()=>void service.startCountry(country.country).then(()=>{setMessage(`${country.country} queued`);setConfirmCountry(null);})}>Confirm Start</button><button onClick={()=>setConfirmCountry(null)}>Cancel</button></>:<><button onClick={()=>void service.planCountry(country.country).then(plan=>setMessage(`${country.country} plan: ${String(plan.providerCalls)} provider calls, ${String(plan.courseWrites)} writes`))}>Plan</button><button onClick={()=>setConfirmCountry(country.country)}>Start</button><button onClick={()=>void service.pauseCountry(country.country)}>Pause</button><button onClick={()=>void service.resumeCountry(country.country)}>Resume</button></>}</td></tr>)}</tbody></table></div>}{message&&<p role="status">{message}</p>}
+    {state === 'ready' && countries.every((country) => country.totalCourses === 0) && <div className="course-state">No course records are available. UNKNOWN remains visible and unavailable.</div>}
+    {state === 'ready' && countries.length > 0 && <div className="course-table-wrap"><table><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}<th>Country acquisition</th></tr></thead><tbody>{countries.map((country) => { const job=country.job,canPause=job?.state==='queued'||job?.state==='running',canResume=job?.state==='paused'; return <tr key={country.country}><td>{country.country}</td><td>{country.totalCourses}</td><td>{country.coursesWithCoordinates}</td><td>{country.coursesMissingCoordinates}</td><td>{country.golfApiImportedCount}</td><td>{country.directConfirmedCount}</td><td>{country.providerEvidenceMissingCount}</td><td>{country.latestGolfriendFetchTime ? new Date(country.latestGolfriendFetchTime).toLocaleString() : 'Unavailable'}</td><td>{country.country==='UNKNOWN'?'Unavailable':job?<>{job.state}{job.state==='paused'&&job.retryAtMs?` — retry ${timestamp(job.retryAtMs)}`:''}{job.state==='completed'&&job.nextDueAtMs?` — next ${timestamp(job.nextDueAtMs)}`:''}</>:'unavailable'}</td><td>{country.country==='UNKNOWN'?<span>Unavailable</span>:confirmCountry===country.country?<><button onClick={()=>void action(country.country,'start')}>Confirm Start</button><button onClick={()=>setConfirmCountry(null)}>Cancel</button></>:<><button onClick={()=>void action(country.country,'plan')}>Preview Plan</button>{canPause?<button onClick={()=>void action(country.country,'pause')}>Pause</button>:canResume?<button onClick={()=>void action(country.country,'resume')}>Resume</button>:<button onClick={()=>setConfirmCountry(country.country)}>Start</button>}</>}</td></tr>; })}</tbody></table></div>}{message&&<p role="status">{message}</p>}
   </section>;
 }

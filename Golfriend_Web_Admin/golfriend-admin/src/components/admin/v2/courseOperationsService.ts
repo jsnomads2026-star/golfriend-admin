@@ -4,6 +4,7 @@ import { functions } from '../../../firebaseConfig';
 export type CountryCoverage = Readonly<{
   country: string; totalCourses: number; coursesWithCoordinates: number; coursesMissingCoordinates: number;
   golfApiImportedCount: number; directConfirmedCount: number; providerEvidenceMissingCount: number; latestGolfriendFetchTime: string | null;
+  job: null | Readonly<{ state: 'queued'|'running'|'paused'|'completed'|'failed'|'unavailable'; cycle: number; nextDueAtMs: number | null; retryAtMs: number | null; pauseReason: string | null }>;
 }>;
 
 export interface CourseOperationsService {
@@ -32,7 +33,7 @@ export const courseOperationsService: CourseOperationsService = {
   async loadCountryCoverage() {
     const response = await httpsCallable(functions, 'getCourseCoverageByCountry')();
     const value = response.data as { schema?: unknown; countries?: unknown };
-    if (value?.schema !== 'golfriend.course-coverage-by-country.v1' || !Array.isArray(value.countries)) throw new Error('COURSE_COVERAGE_INVALID');
+    if (value?.schema !== 'golfriend.course-coverage-by-country.v2' || !Array.isArray(value.countries)) throw new Error('COURSE_COVERAGE_INVALID');
     return value.countries as CountryCoverage[];
   },
   async planCountry(country) { return (await httpsCallable(functions,'planCourseCountryIngestion')({country})).data as Record<string,unknown>; },

@@ -18,10 +18,14 @@ async function requireStaffOrDirector(request) {
 
 exports.getCourseCoverageByCountry = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
   await requireStaffOrDirector(request);
-  const courses = await db.collection('courses').get();
+  const [courses, jobs] = await Promise.all([db.collection('courses').get(), db.collection('course_country_ingestion_jobs').get()]);
+  const jobsByCountry = new Map(jobs.docs.map((document) => {
+    const value = document.data() || {};
+    return [normalizedCountry(value.country), Object.freeze({ state: value.state || 'unavailable', cycle: Number(value.cycle || 0), nextDueAtMs: Number(value.nextDueAtMs || 0) || null, retryAtMs: Number(value.retryAtMs || 0) || null, pauseReason: value.pauseReason || null })];
+  }));
   return Object.freeze({
-    schema: 'golfriend.course-coverage-by-country.v1',
-    countries: projectCoverageByCountry(courses.docs.map((document) => document.data())),
+    schema: 'golfriend.course-coverage-by-country.v2',
+    countries: projectCoverageByCountry(courses.docs.map((document) => document.data())).map((coverage) => Object.freeze({ ...coverage, job: jobsByCountry.get(coverage.country) || null })),
   });
 });
 exports.planCourseCountryIngestion = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {

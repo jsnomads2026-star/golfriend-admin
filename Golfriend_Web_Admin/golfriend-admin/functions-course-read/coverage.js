@@ -66,6 +66,10 @@ function projectCoverageByCountry(courses) {
     if (fetched !== null && (bucket.latestGolfriendFetchTimeMs === null || fetched > bucket.latestGolfriendFetchTimeMs)) bucket.latestGolfriendFetchTimeMs = fetched;
     buckets.set(country, bucket);
   }
+  if (!buckets.has(UNKNOWN)) buckets.set(UNKNOWN, {
+    country: UNKNOWN, totalCourses: 0, coursesWithCoordinates: 0, coursesMissingCoordinates: 0,
+    golfApiImportedCount: 0, directConfirmedCount: 0, providerEvidenceMissingCount: 0, latestGolfriendFetchTimeMs: null,
+  });
   return [...buckets.values()]
     .map((bucket) => {
       const { latestGolfriendFetchTimeMs, ...coverage } = bucket;

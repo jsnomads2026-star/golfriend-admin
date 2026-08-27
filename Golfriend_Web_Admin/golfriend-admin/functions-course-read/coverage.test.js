@@ -22,3 +22,11 @@ test('projects deterministic country coverage from fixtures without coordinate c
     { country: 'VIETNAM', totalCourses: 1, coursesWithCoordinates: 1, coursesMissingCoordinates: 0, golfApiImportedCount: 0, directConfirmedCount: 1, providerEvidenceMissingCount: 0, latestGolfriendFetchTime: '2026-08-26T09:00:00.000Z' },
   ]);
 });
+
+test('keeps an explicit UNKNOWN row visible even when every course has a known country', () => {
+  const rows = projectCoverageByCountry([{ country: 'TH', latitude: 1, longitude: 1 }]);
+  assert.deepEqual(rows.find((row) => row.country === UNKNOWN), {
+    country: UNKNOWN, totalCourses: 0, coursesWithCoordinates: 0, coursesMissingCoordinates: 0,
+    golfApiImportedCount: 0, directConfirmedCount: 0, providerEvidenceMissingCount: 0, latestGolfriendFetchTime: null,
+  });
+});
