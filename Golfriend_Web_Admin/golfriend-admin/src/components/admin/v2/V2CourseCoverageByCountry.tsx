@@ -3,6 +3,11 @@ import type { CountryCoverage, CourseOperationsService } from './courseOperation
 
 const headers = ['Country', 'Total courses', 'With coordinates', 'Missing coordinates', 'Golf API imported', 'Direct-confirmed', 'Provider evidence missing', 'Latest Golfriend fetch', 'Cycle state'];
 const timestamp = (value: number | null) => value ? new Date(value).toLocaleString() : 'Unavailable';
+const safeCallableCode = (error: unknown, prefix: string) => {
+  const raw = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
+  const code = raw.replace(/[^A-Z0-9_-]/gi, '_').toUpperCase();
+  return `${prefix}_${code || 'UNKNOWN'}`;
+};
 
 export default function V2CourseCoverageByCountry({ service }: { service: CourseOperationsService }) {
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
@@ -22,7 +27,7 @@ export default function V2CourseCoverageByCountry({ service }: { service: Course
   }, [load, service]);
   useEffect(() => { void load(); }, [load]);
   return <section className="course-catalogue" aria-labelledby="course-coverage-by-country-title">
-    <div className="course-toolbar"><h3 id="course-coverage-by-country-title">Country acquisition pipeline</h3><p>Server-authoritative coverage. Plans make zero provider calls and zero course writes; only the scheduled worker contacts the provider. No country is inferred from coordinates.</p><button onClick={()=>void service.previewGlobalRefresh().then(plan=>setMessage(`Global preview: ${String(plan.firstCountry&&((plan.firstCountry as Record<string,unknown>).country)||'none')} first; ${String(plan.providerCalls)} provider calls, ${String(plan.courseWrites)} writes.`)).catch(()=>setMessage('Global preview is unavailable.'))}>Preview Global Plan</button>{confirmCountry==='__global__'?<><button onClick={()=>void service.setGlobalRefresh(true).then(()=>{setMessage('Automatic refresh enabled.');setConfirmCountry(null);void load();}).catch(()=>setMessage('Automatic refresh could not be enabled.'))}>Confirm Enable Automatic Refresh</button><button onClick={()=>setConfirmCountry(null)}>Cancel</button></>:<button onClick={()=>setConfirmCountry('__global__')}>Enable Automatic Refresh</button>}</div>
+    <div className="course-toolbar"><h3 id="course-coverage-by-country-title">Country acquisition pipeline</h3><p>Server-authoritative coverage. Plans make zero provider calls and zero course writes; only the scheduled worker contacts the provider. No country is inferred from coordinates.</p><button onClick={()=>void service.previewGlobalRefresh().then(plan=>setMessage(`Global preview: ${String(plan.firstCountry&&((plan.firstCountry as Record<string,unknown>).country)||'none')} first; ${String(plan.providerCalls)} provider calls, ${String(plan.courseWrites)} writes.`)).catch(error=>setMessage(`Global preview unavailable (${safeCallableCode(error, 'GLOBAL_PREVIEW')}).`))}>Preview Global Plan</button>{confirmCountry==='__global__'?<><button onClick={()=>void service.setGlobalRefresh(true).then(()=>{setMessage('Automatic refresh enabled.');setConfirmCountry(null);void load();}).catch(()=>setMessage('Automatic refresh could not be enabled.'))}>Confirm Enable Automatic Refresh</button><button onClick={()=>setConfirmCountry(null)}>Cancel</button></>:<button onClick={()=>setConfirmCountry('__global__')}>Enable Automatic Refresh</button>}</div>
     {state === 'loading' && <div className="course-state" role="status" aria-live="polite">Loading country coverage…</div>}
     {state === 'unavailable' && <div className="course-state is-error" role="alert"><p>Country coverage is unavailable.</p><button onClick={() => void load()}>Retry</button></div>}
     {state === 'ready' && countries.every((country) => country.totalCourses === 0) && <div className="course-state">No course records are available. UNKNOWN remains visible and unavailable.</div>}
