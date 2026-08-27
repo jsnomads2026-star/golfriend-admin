@@ -9,6 +9,10 @@ export type CountryCoverage = Readonly<{
 export interface CourseOperationsService {
   loadCourses(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   loadCountryCoverage(): Promise<CountryCoverage[]>;
+  planCountry(country:string): Promise<Record<string,unknown>>;
+  startCountry(country:string): Promise<Record<string,unknown>>;
+  pauseCountry(country:string): Promise<Record<string,unknown>>;
+  resumeCountry(country:string): Promise<Record<string,unknown>>;
   loadGrowthReceipts(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
@@ -31,6 +35,10 @@ export const courseOperationsService: CourseOperationsService = {
     if (value?.schema !== 'golfriend.course-coverage-by-country.v1' || !Array.isArray(value.countries)) throw new Error('COURSE_COVERAGE_INVALID');
     return value.countries as CountryCoverage[];
   },
+  async planCountry(country) { return (await httpsCallable(functions,'planCourseCountryIngestion')({country})).data as Record<string,unknown>; },
+  async startCountry(country) { return (await httpsCallable(functions,'startCourseCountryIngestion')({country})).data as Record<string,unknown>; },
+  async pauseCountry(country) { return (await httpsCallable(functions,'pauseCourseCountryIngestion')({country})).data as Record<string,unknown>; },
+  async resumeCountry(country) { return (await httpsCallable(functions,'resumeCourseCountryIngestion')({country})).data as Record<string,unknown>; },
   async loadGrowthReceipts() {
     const status=await this.loadIngestionOperations(),receipt=status.lastCountReceipt as Record<string,unknown>|undefined;
     return receipt?[{id:String(receipt.receiptId||''),data:receipt}]:[];

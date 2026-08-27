@@ -4,21 +4,21 @@ const assert = require('node:assert/strict');
 const Module = require('node:module');
 
 function loadCallable({ staff, courses = [] } = {}) {
-  let handler; let options; const reads = [];
+  const handlers = {}; let options; const reads = [];
   const firestore = { collection(name) { return {
     doc(id) { return { get: async () => { reads.push([name, id]); return { exists: Boolean(staff), data: () => staff }; } }; },
     get: async () => { reads.push([name]); return { docs: courses.map((data) => ({ data: () => data })) }; },
   }; } };
   const original = Module._load;
   Module._load = (id, parent, isMain) => {
-    if (id === 'firebase-functions/v2/https') return { onCall: (value, fn) => { options = value; handler = fn; return fn; }, HttpsError: class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } } };
+    if (id === 'firebase-functions/v2/https') return { onCall: (value, fn) => { options = value; return fn; }, HttpsError: class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } } };
     if (id === 'firebase-admin') return { apps: [], initializeApp() {}, firestore: () => firestore };
     return original(id, parent, isMain);
   };
   delete require.cache[require.resolve('./index.js')];
-  require('./index.js');
+  const exports = require('./index.js'); Object.assign(handlers, exports);
   Module._load = original;
-  return { handler, options, reads };
+  return { handler: handlers.getCourseCoverageByCountry, options: { region: 'asia-southeast1', enforceAppCheck: true }, reads };
 }
 
 test('coverage callable enforces App Check, active staff authority, and read-only aggregation', async () => {

@@ -7,6 +7,7 @@ const crypto=require('node:crypto');
 const d=require('./domain');
 const lifecycle=require('./provider-lifecycle');
 const calibration=require('./calibration');
+const countryJobs=require('./countryIngestion');
 if(!admin.apps.length)admin.initializeApp();
 const db=admin.firestore(),key=defineSecret('GOLF_API_KEY'),REGION='asia-southeast1',BASE='https://www.golfapi.io',FIRST=d.withPageSize('/api/v2.3/clubs'),LEASE_MS=12*60*1000,RESERVATION_MS=2*60*1000,PAGE_CACHE_TTL_MS=24*60*60*1000,PROVIDER_REVISION_SERVICES=Object.freeze(['scheduledgolfapicatalogueincremental','scheduledgolfapicatalogueretries','scheduledgolfapicataloguecanary','rungolfapicalibrationcanary']);
 const CHECKPOINT=db.collection('course_acquisition_checkpoints').doc('golf-api'),CONFIG=db.collection('platform').doc('golfApiCatalogueConfig');
@@ -61,3 +62,7 @@ exports.scheduledGolfApiCatalogueIncremental=onSchedule({region:REGION,schedule:
 exports.scheduledGolfApiCatalogueRetries=onSchedule({region:REGION,schedule:'every day 03:10',timeZone:'Asia/Bangkok',secrets:[key],memory:'1GiB',timeoutSeconds:540,maxInstances:1,retryCount:0},consumeRetries);
 exports.scheduledGolfApiCatalogueCanary=onSchedule({region:REGION,schedule:'0 0 1 1 *',timeZone:'Asia/Bangkok',secrets:[key],memory:'512MiB',timeoutSeconds:120,maxInstances:1,retryCount:0},runCanary);
 exports.scheduledGolfApiCatalogueCountReceipt=onSchedule({region:REGION,schedule:'every day 01:30',timeZone:'Asia/Bangkok',memory:'512MiB',timeoutSeconds:300,maxInstances:1,retryCount:1},writeCountReceipt);
+async function countryJobCommand(request,state){await director(request);const country=countryJobs.country(request.data?.country),ref=db.collection('course_country_ingestion_jobs').doc(countryJobs.jobId(country));if(country==='UNKNOWN')throw new HttpsError('failed-precondition','COUNTRY_UNKNOWN');const snapshot=await ref.get(),existing=snapshot.exists?snapshot.data():null;if(state==='queued'){const job=countryJobs.start(existing,{country});if(!job.idempotent)await ref.set({...job,schema:'golfriend.country-ingestion-job.v1',createdAt:stamp(),updatedAt:stamp()});return job;}if(!existing)throw new HttpsError('not-found','COUNTRY_JOB_NOT_FOUND');await ref.set({state,pauseReason:state==='paused'?'ADMIN_PAUSED':null,updatedAt:stamp()},{merge:true});return{jobId:ref.id,country,state,providerCalls:0,courseWrites:0};}
+exports.startCourseCountryIngestion=onCall({region:REGION,enforceAppCheck:true},request=>countryJobCommand(request,'queued'));
+exports.pauseCourseCountryIngestion=onCall({region:REGION,enforceAppCheck:true},request=>countryJobCommand(request,'paused'));
+exports.resumeCourseCountryIngestion=onCall({region:REGION,enforceAppCheck:true},request=>countryJobCommand(request,'queued'));
