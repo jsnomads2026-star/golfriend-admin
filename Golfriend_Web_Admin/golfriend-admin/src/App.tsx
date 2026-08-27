@@ -214,7 +214,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
   const isOnline = useOnlineStatus();
   const [isAuthLoading, setIsAuthLoading] = useState(true);  // auth_pending
   const [roleLoading, setRoleLoading] = useState(false);     // role_resolving
-  const [resolveError, setResolveError] = useState(false);   // error (honest UI)
+  const [resolveError, setResolveError] = useState<string | null>(null);   // safe boundary code
 
   const executeSecureLogout = async () => {
     try {
@@ -246,7 +246,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
       stopRoleWatch?.();
       stopRoleWatch = null;
       setUser(currentUser);
-      setResolveError(false);
+      setResolveError(null);
       setAdminData(null);
       setPartnerData(null);
 
@@ -263,11 +263,11 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
           // suspension, expiry or role mutation is reflected immediately; callable
           // authorization still re-checks the same server record on every operation.
           stopRoleWatch = onSnapshot(doc(db, 'admin_users', currentUser.uid), (next) => {
-            setResolveError(false);
+            setResolveError(null);
             setAdminData(next.exists() ? next.data() : null);
-          }, () => {
+          }, (error) => {
             setAdminData(null);
-            setResolveError(true);
+            setResolveError(`ADMIN_PROFILE_${String(error.code || 'UNKNOWN').replace(/[^A-Z0-9_-]/gi, '_').toUpperCase()}`);
           });
         } else {
           // Exact authenticated-UID lookup only. The route may narrow organization scope,
@@ -276,16 +276,16 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
           const partnerDoc = await getDoc(partnerRef);
           setPartnerData(partnerDoc.exists() ? partnerDoc.data() : null);
           stopRoleWatch = onSnapshot(partnerRef, (next) => {
-            setResolveError(false);
+            setResolveError(null);
             setPartnerData(next.exists() ? next.data() : null);
-          }, () => {
+          }, (error) => {
             setPartnerData(null);
-            setResolveError(true);
+            setResolveError(`PARTNER_PROFILE_${String(error.code || 'UNKNOWN').replace(/[^A-Z0-9_-]/gi, '_').toUpperCase()}`);
           });
         }
-      } catch {
+      } catch (error: any) {
         // Never surface raw provider errors — set the honest 'error' state.
-        setResolveError(true);
+        setResolveError(`ADMIN_PROFILE_${String(error?.code || 'UNKNOWN').replace(/[^A-Z0-9_-]/gi, '_').toUpperCase()}`);
       } finally {
         setRoleLoading(false);
       }
@@ -335,7 +335,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
 
   // ---- Server-owned access derivation (single source of truth) ----
   const access = resolvePortalAccess({
-    mode, authPending: isAuthLoading, user, roleLoading, resolveError,
+    mode, authPending: isAuthLoading, user, roleLoading, resolveError: Boolean(resolveError),
     adminDoc: adminData, partnerDoc: partnerData, requestedOrganizationId,
   });
 
@@ -415,6 +415,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
       <div style={{...styles.masterContainer, justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}
         role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'} aria-busy={isBusy}>
         <h1 style={{...styles.logo, color: isError ? '#ff4444' : '#d4af37'}}>{t(access.state)}</h1>
+        {access.state === 'error' && resolveError && <code style={{color: '#ffb4a9', marginBottom: '12px'}}>{resolveError}</code>}
         {(access.state === 'unauthorized' || access.state === 'suspended' || access.state === 'error') && (
           <button onClick={executeSecureLogout}
             style={{marginTop: '16px', padding: '12px 24px', backgroundColor: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>
