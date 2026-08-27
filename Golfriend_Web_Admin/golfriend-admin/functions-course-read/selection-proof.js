@@ -2,9 +2,9 @@
 const fs = require('node:fs');
 const source = fs.readFileSync(require.resolve('./index.js'), 'utf8');
 const exportsFound = [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
-const prohibited = ['acquireCourseCandidates', 'syncCoursesFromProvider', 'nightlyCourseHealer', 'queryGolfApi'];
-if (exportsFound.length !== 1 || exportsFound[0] !== 'getCourseAcquisitionDashboard') throw Error(`EXPORT_SELECTION_INVALID:${exportsFound.join(',')}`);
+const prohibited = ['acquireCourseCandidates', 'syncCoursesFromProvider', 'nightlyCourseHealer', 'queryGolfApi', 'fetch(', 'defineSecret', '.set(', '.update(', '.create(', '.delete('];
+if (exportsFound.length !== 1 || exportsFound[0] !== 'getCourseCoverageByCountry') throw Error(`EXPORT_SELECTION_INVALID:${exportsFound.join(',')}`);
 for (const name of prohibited) if (source.includes(name)) throw Error(`PROHIBITED_FUNCTION_PRESENT:${name}`);
-if (/defineSecret|golfapi|https?:\/\/|\.collection\(|\.get\(/i.test(source)) throw Error('DATA_OR_PROVIDER_CAPABILITY_PRESENT');
-if (!source.includes('FULL_COLLECTION_DASHBOARD_RETIRED_USE_CATALOGUE_STATUS')) throw Error('DASHBOARD_NOT_FAIL_CLOSED');
-console.log('course-read selection proof PASS: one fail-closed compatibility export, zero data or provider capability');
+if (!source.includes("enforceAppCheck: true") || !source.includes("collection('admin_users')") || !source.includes("collection('courses')")) throw Error('AUTHORITATIVE_READ_BOUNDARY_MISSING');
+if (!source.includes('projectCoverageByCountry')) throw Error('COVERAGE_PROJECTION_MISSING');
+console.log('course-read selection proof PASS: staff-gated aggregate only, zero provider capability and zero course writes');

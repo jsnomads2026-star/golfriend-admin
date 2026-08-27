@@ -1,9 +1,14 @@
-import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../../../firebaseConfig';
+import { functions } from '../../../firebaseConfig';
+
+export type CountryCoverage = Readonly<{
+  country: string; totalCourses: number; coursesWithCoordinates: number; coursesMissingCoordinates: number;
+  golfApiImportedCount: number; directConfirmedCount: number; providerEvidenceMissingCount: number; latestGolfriendFetchTime: string | null;
+}>;
 
 export interface CourseOperationsService {
   loadCourses(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
+  loadCountryCoverage(): Promise<CountryCoverage[]>;
   loadGrowthReceipts(): Promise<Array<{ id: string; data: Record<string, unknown> }>>;
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
@@ -18,8 +23,13 @@ export interface CourseOperationsService {
 
 export const courseOperationsService: CourseOperationsService = {
   async loadCourses() {
-    const snapshot = await getDocs(collection(db, 'courses'));
-    return snapshot.docs.map((item) => ({ id: item.id, data: item.data() }));
+    throw new Error('COURSE_CATALOGUE_BROWSER_READ_RETIRED');
+  },
+  async loadCountryCoverage() {
+    const response = await httpsCallable(functions, 'getCourseCoverageByCountry')();
+    const value = response.data as { schema?: unknown; countries?: unknown };
+    if (value?.schema !== 'golfriend.course-coverage-by-country.v1' || !Array.isArray(value.countries)) throw new Error('COURSE_COVERAGE_INVALID');
+    return value.countries as CountryCoverage[];
   },
   async loadGrowthReceipts() {
     const status=await this.loadIngestionOperations(),receipt=status.lastCountReceipt as Record<string,unknown>|undefined;
