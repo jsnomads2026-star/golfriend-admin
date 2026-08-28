@@ -39,7 +39,7 @@ export const courseOperationsService: CourseOperationsService = {
     return value.countries as CountryCoverage[];
   },
   async planCountry(country) { return (await httpsCallable(functions,'planCourseCountryIngestion')({country})).data as Record<string,unknown>; },
-  async startCountry(country) { return (await httpsCallable(functions,'startCourseCountryIngestion')({country})).data as Record<string,unknown>; },
+  async startCountry(country) { return (await httpsCallable(functions,'startCourseCountryIngestion')({country,confirmed:true})).data as Record<string,unknown>; },
   async pauseCountry(country) { return (await httpsCallable(functions,'pauseCourseCountryIngestion')({country})).data as Record<string,unknown>; },
   async resumeCountry(country) { return (await httpsCallable(functions,'resumeCourseCountryIngestion')({country})).data as Record<string,unknown>; },
   async previewGlobalRefresh() { return (await httpsCallable(functions,'previewCourseCountryAutoRefresh')()).data as Record<string,unknown>; },

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 export const COURSE_SCHEMA = 'golfriend.v2.course.v2';
 export const MIGRATION_VERSION = 'golfriend.course-migration.v1';
 export const SOURCE_PROJECT = 'golfriend-v1';
-export const TARGET_PROJECT = 'golfriend-v2';
+export const TARGET_PROJECT = 'golfriend-v2-production-2ee34';
 
 export const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const clean = (value) => typeof value === 'string' && value.trim() ? value.normalize('NFKC').trim() : null;
@@ -63,7 +63,7 @@ export function migrateLegacyCourse({legacyDocumentId, source, migratedAt}) {
     providerRetrievalAt: null, legacyCachedAt: source.cachedAt ?? null,
     migratedAt, freshnessState: 'unknown', verified: false,
     needsReview: incompleteReasons.length > 0, migrationState: incompleteReasons.length ? 'incomplete' : 'migrated', incompleteReasons,
-    provenance: 'golf-api', rawSourceReference: `course_migration_sources/${providerCourseId}`,
+    provenance: 'v1_migration', rawSourceReference: `course_migration_sources/${providerCourseId}`,
     preservedSourceDigest: sourceDigest,
     migrationEvidence: {schema: 'golfriend.course-migration-evidence.v1', sourceDigest, transformationVersion: MIGRATION_VERSION, providerRequestCount: 0},
     publicationVersion: 1,
