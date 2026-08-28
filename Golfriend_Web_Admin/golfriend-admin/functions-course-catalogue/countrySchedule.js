@@ -1,16 +1,18 @@
 'use strict';
 
+const {countryPriorityKey}=require('./countryIdentity');
+
 const HOUR=60*60*1000, DAY=24*HOUR;
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
 const asMs=value=>{if(value&&typeof value.toMillis==='function')return value.toMillis();const parsed=Number(value);return Number.isFinite(parsed)?parsed:0;};
 function priorityEvidence(coverage,now=Date.now(),policy={}){
   const fetched=Date.parse(String(coverage?.latestGolfriendFetchTime||''));
   const staleDays=Number.isFinite(fetched)?Math.max(0,Math.floor((now-fetched)/DAY)):90;
-  const override=Number(coverage?.priorityOverride),marketWeight=number(policy?.marketWeights?.[coverage?.country]);
+  const country=countryPriorityKey(coverage?.country),weights=policy?.marketWeights&&typeof policy.marketWeights==='object'?policy.marketWeights:{},marketWeight=number(Object.entries(weights).find(([key])=>countryPriorityKey(key)===country)?.[1]),override=Number(coverage?.priorityOverride);
   if(Number.isFinite(override))return Object.freeze({score:override,reason:'EXPLICIT_PRIORITY_OVERRIDE',sourceFields:Object.freeze({priorityOverride:override})});
-  const sourceFields=Object.freeze({country:String(coverage?.country||'UNKNOWN'),marketWeight,coursesMissingCoordinates:number(coverage?.coursesMissingCoordinates),providerEvidenceMissingCount:number(coverage?.providerEvidenceMissingCount),staleAgeDays:staleDays,totalCourses:number(coverage?.totalCourses)});
-  const components=Object.freeze({thailandBoost:coverage?.country==='TH'?1000000:0,marketWeight:marketWeight*1000,missingCoordinates:sourceFields.coursesMissingCoordinates*100,providerEvidenceMissing:sourceFields.providerEvidenceMissingCount*25,staleness:Math.min(90,staleDays)*10,catalogueCount:Math.min(99,sourceFields.totalCourses)});
-  return Object.freeze({score:Object.values(components).reduce((sum,value)=>sum+value,0),reason:'AUTHORITATIVE_COVERAGE_PRIORITY',sourceFields,components});
+  const sourceFields=Object.freeze({country,inputCountry:String(coverage?.country||'UNKNOWN'),marketWeight,coursesMissingCoordinates:number(coverage?.coursesMissingCoordinates),providerEvidenceMissingCount:number(coverage?.providerEvidenceMissingCount),staleAgeDays:staleDays,totalCourses:number(coverage?.totalCourses)});
+  const components=Object.freeze({thailandBoost:country==='TH'?1000000:0,marketWeight:marketWeight*1000,missingCoordinates:sourceFields.coursesMissingCoordinates*100,providerEvidenceMissing:sourceFields.providerEvidenceMissingCount*25,staleness:Math.min(90,staleDays)*10,catalogueCount:Math.min(99,sourceFields.totalCourses)});
+  return Object.freeze({score:Object.values(components).reduce((sum,value)=>sum+value,0),reason:components.thailandBoost?'AUTHORITATIVE_COVERAGE_PRIORITY_THAILAND_BOOST':'AUTHORITATIVE_COVERAGE_PRIORITY',sourceFields,components});
 }
 function priority(coverage,now=Date.now(),policy={}){return priorityEvidence(coverage,now,policy).score;}
 function dueDelayMs(priorityScore,remaining){

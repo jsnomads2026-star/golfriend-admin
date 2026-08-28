@@ -1,7 +1,8 @@
 'use strict';
 const crypto=require('node:crypto');
+const {countryPriorityKey}=require('./countryIdentity');
 const STATES=Object.freeze(['queued','running','paused','completed','failed','unavailable']);
-const country=value=>typeof value==='string'?value.normalize('NFC').trim().replace(/\s+/g,' ').toLocaleUpperCase('en-US'):'UNKNOWN';
+const country=countryPriorityKey;
 const jobId=value=>`country-${crypto.createHash('sha256').update(country(value)).digest('hex').slice(0,32)}`;
 function plan(coverage){const value=country(coverage?.country);return Object.freeze({schema:'golfriend.country-ingestion-plan.v1',country:value,actionable:value!=='UNKNOWN',providerCalls:0,courseWrites:0,totalCourses:Number(coverage?.totalCourses||0),missingCoordinates:Number(coverage?.coursesMissingCoordinates||0)});}
 function start(existing,input,now=Date.now()){const value=country(input.country);if(value==='UNKNOWN')return{state:'unavailable',reason:'COUNTRY_UNKNOWN'};if(existing&&['queued','running','paused'].includes(existing.state))return{...existing,idempotent:true};return{jobId:jobId(value),country:value,state:'queued',cycle:Math.max(0,Number(existing?.cycle||0))+1,cycleStartedAtMs:now,nextDueAtMs:now,providerCalls:0,courseWrites:0,attempts:0,pauseReason:null,retryAtMs:null,idempotent:false};}
