@@ -31,6 +31,6 @@ test('country release is pinned to the confirmed V2 target and exactly six pipel
   assert.deepEqual(catalogue.predeploy, ['node scripts/country-pipeline-deploy-preflight.mjs']);
   assert.equal(firebaseRc.projects.default, 'golfriend-v1');
   assert.equal(firebaseRc.projects['golfriend-v2-production-2ee34'], 'golfriend-v2-production-2ee34');
-  assert.deepEqual(firebaseRc.targets['golfriend-v2-production-2ee34'].hosting.admin, ['golfriend-v2-production-2ee34']);
+  assert.deepEqual(firebaseRc.targets['golfriend-v2-production-2ee34'].hosting.admin, ['golfriend-v2-admin']);
   assert.equal(firebaseJson.hosting.target, 'admin');
 });

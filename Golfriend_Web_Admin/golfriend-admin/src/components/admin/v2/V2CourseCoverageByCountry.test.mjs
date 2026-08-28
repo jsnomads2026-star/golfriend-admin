@@ -21,11 +21,16 @@ test('country plan copy guarantees zero provider calls and zero course writes', 
   assert.match(source, /only the scheduled worker contacts the provider/);
 });
 
-test('global preview reports loading, returned server summary, and actionable error state', () => {
+test('global preview renders the returned receipt, ranked queue, loading, and actionable error state without another request', () => {
   assert.match(source, /globalPreviewState==='loading'/);
   assert.match(source, /Preparing the read-only global preview/);
-  assert.match(source, /Global Preview summary/);
-  assert.match(source, /Receipt: \{String\(globalPreview\.receiptId/);
+  assert.match(source, /Global Plan/);
+  assert.match(source, /Receipt ID:/);
+  assert.match(source, /Thailand:/);
+  assert.match(source, /item\.country==='TH'\|\|item\.country==='THAILAND'/);
+  assert.match(source, /Ordered country queue/);
+  assert.match(source, /View all/);
+  assert.match(source, /rankingReason/);
   assert.match(source, /No provider calls or course writes were requested/);
   assert.match(source, /disabled=\{globalPreviewState==='loading'\}/);
   assert.match(source, /service\.previewGlobalRefresh\(\)/);
