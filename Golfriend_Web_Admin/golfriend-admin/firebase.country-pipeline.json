@@ -12,7 +12,7 @@
       "codebase": "course-catalogue",
       "runtime": "nodejs20",
       "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"],
-      "predeploy": ["node \"$RESOURCE_DIR/../scripts/country-pipeline-deploy-preflight.mjs\""]
+      "predeploy": ["node scripts/country-pipeline-deploy-preflight.mjs"]
     }
   ],
   "hosting": {
