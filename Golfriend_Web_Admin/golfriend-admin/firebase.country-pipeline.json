@@ -1,0 +1,24 @@
+{
+  "functions": [
+    {
+      "source": "functions-course-read",
+      "codebase": "course-read",
+      "runtime": "nodejs20",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"],
+      "predeploy": ["node --check \"$RESOURCE_DIR/index.js\"", "node \"$RESOURCE_DIR/selection-proof.js\""]
+    },
+    {
+      "source": "functions-course-catalogue",
+      "codebase": "course-catalogue",
+      "runtime": "nodejs20",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR/..\" run verify:course-catalogue-predeploy"]
+    }
+  ],
+  "hosting": {
+    "target": "admin",
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{"source": "**", "destination": "/index.html"}]
+  }
+}

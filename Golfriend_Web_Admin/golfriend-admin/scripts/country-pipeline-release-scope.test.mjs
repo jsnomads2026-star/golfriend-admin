@@ -6,6 +6,7 @@ const root = new URL('..', import.meta.url);
 const packageJson = JSON.parse(readFileSync(new URL('./package.json', root), 'utf8'));
 const firebaseJson = JSON.parse(readFileSync(new URL('./firebase.json', root), 'utf8'));
 const firebaseRc = JSON.parse(readFileSync(new URL('./.firebaserc', root), 'utf8'));
+const countryConfig = JSON.parse(readFileSync(new URL('./firebase.country-pipeline.json', root), 'utf8'));
 const deploy = packageJson.scripts['deploy:country-pipeline:production'];
 const expected = [
   'functions:course-read:getCourseCoverageByCountry',
@@ -18,11 +19,14 @@ const expected = [
 ];
 
 test('country release is pinned to the confirmed V2 target and exactly six pipeline functions plus Admin hosting', () => {
-  assert.match(deploy, /^firebase deploy --project golfriend-v2-production-2ee34 --only /);
+  assert.match(deploy, /^firebase deploy --project golfriend-v2-production-2ee34 --config firebase\.country-pipeline\.json --only /);
   for (const target of expected) assert.match(deploy, new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const selected = [...deploy.matchAll(/(?:functions:[^,\"]+|hosting:[^,\"]+)/g)].map((match) => match[0]).sort();
   assert.deepEqual(selected, [...expected].sort());
   assert.doesNotMatch(deploy, /getGolfApiCatalogueStatus|DIRECTOR_REQUIRED|firestore:rules|firestore:indexes/);
+  assert.match(deploy, /--config firebase\.country-pipeline\.json/);
+  assert.deepEqual(countryConfig.functions.map((entry) => entry.codebase).sort(), ['course-catalogue', 'course-read']);
+  assert.equal(countryConfig.functions.some((entry) => entry.codebase === 'default'), false);
   assert.equal(firebaseRc.projects.default, 'golfriend-v1');
   assert.equal(firebaseRc.projects['golfriend-v2-production-2ee34'], 'golfriend-v2-production-2ee34');
   assert.deepEqual(firebaseRc.targets['golfriend-v2-production-2ee34'].hosting.admin, ['golfriend-v2-production-2ee34']);
