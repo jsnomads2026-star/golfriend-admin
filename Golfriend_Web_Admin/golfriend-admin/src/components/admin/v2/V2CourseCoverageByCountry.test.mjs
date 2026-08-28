@@ -20,3 +20,12 @@ test('country plan copy guarantees zero provider calls and zero course writes', 
   assert.match(source, /Plans make zero provider calls and zero course writes/);
   assert.match(source, /only the scheduled worker contacts the provider/);
 });
+
+test('global preview reports loading, returned server summary, and actionable error state', () => {
+  assert.match(source, /globalPreviewState==='loading'/);
+  assert.match(source, /Preparing the read-only global preview/);
+  assert.match(source, /Global Preview summary/);
+  assert.match(source, /No provider calls or course writes were requested/);
+  assert.match(source, /disabled=\{globalPreviewState==='loading'\}/);
+  assert.match(source, /service\.previewGlobalRefresh\(\)/);
+});

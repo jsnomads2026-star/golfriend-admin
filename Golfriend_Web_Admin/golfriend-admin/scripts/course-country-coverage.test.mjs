@@ -10,7 +10,7 @@ assert.match(service, /httpsCallable\(functions, 'getCourseCoverageByCountry'\)/
 assert.doesNotMatch(service, /getDocs\s*\(|collection\(db, 'courses'\)/);
 assert.match(panel, /state === 'loading'/);
 assert.match(panel, /state === 'unavailable'/);
-assert.match(panel, /countries\.length === 0/);
+assert.match(panel, /countries\.every\(\(country\) => country\.totalCourses === 0\)/);
 for (const header of ['Total courses', 'With coordinates', 'Missing coordinates', 'Golf API imported', 'Direct-confirmed', 'Provider evidence missing', 'Latest Golfriend fetch']) assert.match(panel, new RegExp(header));
 assert.match(panel, /No country is inferred from coordinates/);
 assert.match(host, /V2CourseCoverageByCountry service=\{service\}/);
