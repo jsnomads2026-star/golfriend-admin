@@ -6,18 +6,17 @@
 // client-known email, God-Mode literal, local bypass or fallback identity.
 // ==========================================
 
+import v2DirectorAuthority from '../../functions-course-catalogue/v2DirectorAuthority.js';
+
 /**
  * Canonical ACTIVE admin statuses, normalized. Mirrors ACTIVE_STAFF_STATUSES in
  * functions/src/authority.ts; scripts/admin-authority-matrix-verify.mjs asserts the two
  * agree on every input, so a divergence is a gate failure rather than a support ticket.
  */
-export const ACTIVE_ADMIN_STATUSES = ['active'];
+export const ACTIVE_ADMIN_STATUSES = v2DirectorAuthority.ACTIVE_ADMIN_STATUSES;
 
 /** Statuses known to mean "not authorized". Documentation and defence in depth only. */
-export const KNOWN_INACTIVE_ADMIN_STATUSES = [
-  'suspended', 'inactive', 'deactivated', 'revoked', 'expired',
-  'disabled', 'deleted', 'removed', 'terminated', 'pending', 'unknown',
-];
+export const KNOWN_INACTIVE_ADMIN_STATUSES = v2DirectorAuthority.KNOWN_INACTIVE_ADMIN_STATUSES;
 
 /**
  * The client twin of the ROLE REGISTRY in functions/src/authority.ts. Status was
@@ -30,7 +29,7 @@ export const KNOWN_INACTIVE_ADMIN_STATUSES = [
  */
 export const ADMIN_ROLE_REGISTRY_VERSION = '2026-08-15.v1';
 
-export const CANONICAL_ADMIN_ROLES = ['Director', 'Manager', 'Support'];
+export const CANONICAL_ADMIN_ROLES = v2DirectorAuthority.CANONICAL_ADMIN_ROLES;
 
 /** Retired roles that must now fail closed. Empty today; recorded, not implied. */
 export const OBSOLETE_ADMIN_ROLES = [];
@@ -39,7 +38,7 @@ export const ENTERPRISE_PARTNER_TIER_ALIASES = ['master_host', 'Product & Servic
 
 /** Exact membership. Never case-folded — folding a role widens authority. */
 export function isCanonicalAdminRole(value) {
-  return typeof value === 'string' && CANONICAL_ADMIN_ROLES.includes(value);
+  return v2DirectorAuthority.isCanonicalAdminRole(value);
 }
 
 /**
@@ -48,9 +47,7 @@ export function isCanonicalAdminRole(value) {
  * stays rejected. Non-strings and blanks normalize to null, i.e. unknown.
  */
 export function normalizeStaffStatus(value) {
-  if (typeof value !== 'string') return null;
-  const normalized = value.normalize('NFC').trim().toLowerCase();
-  return normalized === '' ? null : normalized;
+  return v2DirectorAuthority.normalizeStaffStatus(value);
 }
 
 /**
@@ -63,17 +60,12 @@ export function normalizeStaffStatus(value) {
  * nothing here grants anything.
  */
 export function isActiveAdminDoc(adminDoc) {
-  if (!adminDoc || typeof adminDoc !== 'object' || Array.isArray(adminDoc)) return false;
-  const status = normalizeStaffStatus(adminDoc.status);
-  if (status === null || !ACTIVE_ADMIN_STATUSES.includes(status)) return false;
-  if (typeof adminDoc.role !== 'string' || adminDoc.role.trim() === '') return false;
-  if (OBSOLETE_ADMIN_ROLES.includes(adminDoc.role)) return false;
-  return isCanonicalAdminRole(adminDoc.role);
+  return v2DirectorAuthority.isActiveV2Admin(adminDoc);
 }
 
 /** Director tier. Exact role match, for the same reason the server uses one. */
 export function isActiveDirectorDoc(adminDoc) {
-  return isActiveAdminDoc(adminDoc) && adminDoc.role === 'Director';
+  return v2DirectorAuthority.isActiveV2Director(adminDoc);
 }
 
 /** Ordered journey states a portal can be in. */

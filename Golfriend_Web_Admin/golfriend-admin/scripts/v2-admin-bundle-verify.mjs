@@ -12,6 +12,7 @@ const productionEnv = {
 };
 const resolved = resolveFirebaseTarget('v2-preview', productionEnv);
 assert.equal(resolved.projectId, 'golfriend-v2-production-2ee34');
+assert.ok(process.env.VITE_FIREBASE_APPCHECK_SITE_KEY?.trim(), 'V2_APP_CHECK_SITE_KEY_MISSING');
 
 const html = readFileSync('dist/index.html', 'utf8');
 const asset = html.match(/src="\/(assets\/index-[^"]+\.js)"/)?.[1];
@@ -21,4 +22,5 @@ const bundle = readFileSync(`dist/${asset}`, 'utf8');
 assert.ok(bundle.includes('golfriend-v2-production-2ee34'), 'V2_PRODUCTION_IDENTITY_MISSING');
 assert.ok(bundle.includes('asia-southeast1'), 'V2_FUNCTIONS_REGION_MISSING');
 assert.ok(bundle.includes('exchangeRecaptchaEnterpriseToken'), 'V2_ENTERPRISE_APP_CHECK_PROVIDER_MISSING');
+assert.ok(bundle.includes(process.env.VITE_FIREBASE_APPCHECK_SITE_KEY), 'V2_APP_CHECK_SITE_KEY_NOT_BUNDLED');
 console.log('V2 Admin bundle PASS: production identity resolves without the V1 fallback, Functions bind asia-southeast1, and App Check uses reCAPTCHA Enterprise.');
