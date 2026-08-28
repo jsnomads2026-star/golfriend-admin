@@ -13,6 +13,7 @@ run(['--test',
   'functions-course-catalogue/countryMapping.test.js',
   'functions-course-catalogue/countrySchedule.test.js',
   'functions-course-catalogue/countryWorker.test.js',
+  'functions-course-catalogue/thailandQuotaCalibration.test.js',
   'scripts/v1-course-seed-migration.test.mjs',
 ]);
 run(['functions-course-catalogue/selection-proof.js']);
