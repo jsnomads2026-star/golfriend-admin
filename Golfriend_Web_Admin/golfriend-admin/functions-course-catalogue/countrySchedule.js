@@ -3,13 +3,16 @@
 const HOUR=60*60*1000, DAY=24*HOUR;
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
 const asMs=value=>{if(value&&typeof value.toMillis==='function')return value.toMillis();const parsed=Number(value);return Number.isFinite(parsed)?parsed:0;};
-function priority(coverage,now=Date.now(),policy={}){
+function priorityEvidence(coverage,now=Date.now(),policy={}){
   const fetched=Date.parse(String(coverage?.latestGolfriendFetchTime||''));
   const staleDays=Number.isFinite(fetched)?Math.max(0,Math.floor((now-fetched)/DAY)):90;
   const override=Number(coverage?.priorityOverride),marketWeight=number(policy?.marketWeights?.[coverage?.country]);
-  if(Number.isFinite(override))return override;
-  return (coverage?.country==='TH'?1000000:0)+number(marketWeight)*1000+number(coverage?.coursesMissingCoordinates)*100+number(coverage?.providerEvidenceMissingCount)*25+Math.min(90,staleDays)*10+Math.min(99,number(coverage?.totalCourses));
+  if(Number.isFinite(override))return Object.freeze({score:override,reason:'EXPLICIT_PRIORITY_OVERRIDE',sourceFields:Object.freeze({priorityOverride:override})});
+  const sourceFields=Object.freeze({country:String(coverage?.country||'UNKNOWN'),marketWeight,coursesMissingCoordinates:number(coverage?.coursesMissingCoordinates),providerEvidenceMissingCount:number(coverage?.providerEvidenceMissingCount),staleAgeDays:staleDays,totalCourses:number(coverage?.totalCourses)});
+  const components=Object.freeze({thailandBoost:coverage?.country==='TH'?1000000:0,marketWeight:marketWeight*1000,missingCoordinates:sourceFields.coursesMissingCoordinates*100,providerEvidenceMissing:sourceFields.providerEvidenceMissingCount*25,staleness:Math.min(90,staleDays)*10,catalogueCount:Math.min(99,sourceFields.totalCourses)});
+  return Object.freeze({score:Object.values(components).reduce((sum,value)=>sum+value,0),reason:'AUTHORITATIVE_COVERAGE_PRIORITY',sourceFields,components});
 }
+function priority(coverage,now=Date.now(),policy={}){return priorityEvidence(coverage,now,policy).score;}
 function dueDelayMs(priorityScore,remaining){
   const urgency=Math.min(10000,Math.max(0,number(priorityScore)));
   const quota=Math.max(0,number(remaining));
@@ -17,9 +20,9 @@ function dueDelayMs(priorityScore,remaining){
   return Math.max(6*HOUR,Math.min(30*DAY,30*DAY-Math.min(24*DAY,urgency*2*HOUR)-Math.min(6*DAY,quota*HOUR)));
 }
 function nextDue(coverage,quota,now=Date.now(),policy={}){
-  const priorityScore=priority(coverage,now,policy),remaining=number(quota?.providerReportedRemaining),fetched=Date.parse(String(coverage?.latestGolfriendFetchTime||''));
+  const ranking=priorityEvidence(coverage,now,policy),priorityScore=ranking.score,remaining=number(quota?.providerReportedRemaining),fetched=Date.parse(String(coverage?.latestGolfriendFetchTime||''));
   const nextDueAtMs=now+dueDelayMs(priorityScore,remaining);
-  return Object.freeze({priorityScore,nextDueAtMs,staleAgeDays:Number.isFinite(fetched)?Math.max(0,Math.floor((now-fetched)/DAY)):90});
+  return Object.freeze({priorityScore,nextDueAtMs,staleAgeDays:Number.isFinite(fetched)?Math.max(0,Math.floor((now-fetched)/DAY)):90,ranking});
 }
 function quotaEligible(quota,cost=.1){return quota?.allowed===true&&number(quota?.providerReportedRemaining)>=cost;}
 function nextCycle(existing,coverage,quota,now=Date.now(),policy={}){
@@ -37,4 +40,4 @@ function eligibility(job,quota,now=Date.now()){
   return{eligible:job.state==='completed'||job.state==='paused',reason:'DUE'};
 }
 function receiptId(job){return `${job.jobId}-cycle-${Math.max(1,number(job.cycle))}`;}
-module.exports=Object.freeze({priority,nextDue,quotaEligible,nextCycle,eligibility,receiptId,HOUR,DAY});
+module.exports=Object.freeze({priority,priorityEvidence,nextDue,quotaEligible,nextCycle,eligibility,receiptId,HOUR,DAY});
