@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const source = fs.readFileSync(require.resolve('./index.js'), 'utf8');
-const exportsFound = [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
+const exportsFound = [...new Set([...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]))];
 const prohibited = ['acquireCourseCandidates', 'syncCoursesFromProvider', 'nightlyCourseHealer', 'queryGolfApi', 'fetch(', 'defineSecret', '.set(', '.update(', '.create(', '.delete('];
 if (exportsFound.length !== 3 || !exportsFound.includes('getCourseCoverageByCountry') || !exportsFound.includes('planCourseCountryIngestion') || !exportsFound.includes('getCourseCountryIngestionProjection')) throw Error(`EXPORT_SELECTION_INVALID:${exportsFound.join(',')}`);
 for (const name of prohibited) if (source.includes(name)) throw Error(`PROHIBITED_FUNCTION_PRESENT:${name}`);

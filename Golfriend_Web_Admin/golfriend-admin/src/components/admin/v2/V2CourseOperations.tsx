@@ -3,7 +3,7 @@ import type { AdminLocale } from './adminNavigation';
 import { courseOperationsService, type CourseOperationsService } from './courseOperationsService';
 import './V2CourseOperations.css';
 import V2CourseOperationsMonitor from './V2CourseOperationsMonitor';
-import V2CourseCoverageByCountry from './V2CourseCoverageByCountry';
+import V2KoreaDownloadControl from './V2KoreaDownloadControl';
 
 const EN = { title:'Golf courses and Golf API', sub:'Authoritative catalogue review and controlled provider reconciliation.', total:'Total courses', regions:'Countries / regions', coordinates:'With coordinates', missing:'Missing coordinates', quality:'Incomplete or stale', duplicates:'Potential duplicates', lastSync:'Last successful synchronization', search:'Search courses', all:'All records', incomplete:'Incomplete', stale:'Stale', healthy:'Healthy', name:'Name', location:'Country / region', coordStatus:'Coordinates', source:'Data source', updated:'Last updated', health:'Health', details:'Course details', canonical:'Canonical identifiers', contact:'Contact / booking', provenance:'Provenance', lastResult:'Last synchronization result', unavailable:'Not available', pipeline:'Golf API pipeline', quota:'Configured quota', quotaUnknown:'Unavailable — trusted service does not return quota totals.', growthBlocked:'Catalogue growth is unavailable: the approved callable reconciles existing course coordinates only.', warning:'Preview consumes provider quota. It writes nothing. Continue only with a bounded batch.', preview:'Preview dry-run', confirmPreview:'Confirm quota-consuming preview', cancel:'Cancel', apply:'Apply validated updates', confirmApply:'Confirm authorized apply', retry:'Retry', loading:'Loading course catalogue…', empty:'No courses match this view.', loadError:'Course catalogue could not be loaded.', runError:'Synchronization failed. Existing catalogue data was not changed.', noResult:'Preview completed with no results.', success:'Preview completed safely.', partial:'Preview completed with rejected or failed records.', used:'Requests used', remaining:'Requests remaining', added:'Added', changed:'Updated', unchanged:'Unchanged', rejected:'Rejected', duplicateCount:'Duplicates', coordinatesYes:'Coordinates present', coordinatesNo:'Coordinates missing', readOnly:'Catalogue review is read-only. Writes are available only through the existing staff-authorized callable.', batch:'Batch limit', close:'Close details' };
 const COURSE_COPY: Record<AdminLocale, typeof EN> = {
@@ -31,7 +31,7 @@ export default function V2CourseOperations({ service = courseOperationsService }
   const locale=useAdminLocale(); const copy = {...COURSE_COPY[locale],growthBlocked:GROWTH_STATE[locale]};
   return <div className="course-ops">
     <header className="course-ops-intro"><div><span>COURSE AUTHORITY</span><h2>{copy.title}</h2><p>{copy.sub}</p></div><aside><strong>{copy.readOnly}</strong></aside></header>
-    <V2CourseCoverageByCountry service={service}/>
+    <V2KoreaDownloadControl service={service}/>
     <section className="course-ops-grid"><aside className="course-pipeline"><span>SERVER-AUTHORIZED CALLABLE</span><h3>{copy.pipeline}</h3><p className="course-growth">{copy.growthBlocked}</p></aside></section>
     <V2CourseOperationsMonitor service={service}/>
   </div>;

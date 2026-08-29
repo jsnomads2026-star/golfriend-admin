@@ -20,7 +20,7 @@ const expected = [
   'hosting:admin',
 ];
 
-test('country release is pinned to the confirmed V2 target and exactly eight pipeline functions plus Admin hosting', () => {
+test('country release is pinned to the confirmed V2 project and Admin Hosting target', () => {
   assert.match(deploy, /^firebase deploy --project golfriend-v2-production-2ee34 --config firebase\.country-pipeline\.json --only /);
   for (const target of expected) assert.match(deploy, new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const selected = [...deploy.matchAll(/(?:functions:[^,\"]+|hosting:[^,\"]+)/g)].map((match) => match[0]).sort();
@@ -33,6 +33,6 @@ test('country release is pinned to the confirmed V2 target and exactly eight pip
   assert.deepEqual(catalogue.predeploy, ['node scripts/country-pipeline-deploy-preflight.mjs']);
   assert.equal(firebaseRc.projects.default, 'golfriend-v1');
   assert.equal(firebaseRc.projects['golfriend-v2-production-2ee34'], 'golfriend-v2-production-2ee34');
-  assert.deepEqual(firebaseRc.targets['golfriend-v2-production-2ee34'].hosting.admin, ['golfriend-v2-production-2ee34']);
+  assert.deepEqual(firebaseRc.targets['golfriend-v2-production-2ee34'].hosting.admin, ['golfriend-v2-admin']);
   assert.equal(firebaseJson.hosting.target, 'admin');
 });

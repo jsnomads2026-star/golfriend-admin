@@ -6,7 +6,7 @@
   "targets": {
     "golfriend-v2-production-2ee34": {
       "hosting": {
-        "admin": ["golfriend-v2-production-2ee34"]
+        "admin": ["golfriend-v2-admin"]
       }
     }
   }

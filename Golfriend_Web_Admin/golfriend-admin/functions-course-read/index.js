@@ -55,3 +55,25 @@ exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1',
     quota: quotaProjection,
   });
 });
+
+// Operational status is projected exclusively from the receipt-bound global
+// queue.  The retired legacy collection is intentionally not read here.
+exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
+  await requireStaffOrDirector(request);
+  const [policy, jobs, receipts, cutovers, quota] = await Promise.all([
+    db.collection('platform').doc('courseCountryIngestionCutover').get(),
+    db.collection('course_country_ingestion_queue').orderBy('ordinal').get(),
+    db.collection('course_country_ingestion_receipts').orderBy('recordedAt', 'desc').limit(50).get(),
+    db.collection('course_country_ingestion_cutover_receipts').orderBy('recordedAt', 'desc').limit(5).get(),
+    db.collection('golf_api_quota').orderBy(admin.firestore.FieldPath.documentId(), 'desc').limit(1).get(),
+  ]);
+  const value = quota.empty ? {} : quota.docs[0].data() || {};
+  return Object.freeze({
+    schema: 'golfriend.receipt-bound-country-queue-projection.v1',
+    cutover: policy.exists ? Object.freeze({state: policy.data()?.state || 'unavailable', receiptId: policy.data()?.receiptId || null}) : Object.freeze({state: 'not_started', receiptId: null}),
+    jobs: jobs.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
+    receipts: receipts.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
+    cutoverReceipts: cutovers.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
+    quota: Object.freeze({state: Number.isFinite(Number(value.configuredBudget)) ? 'available' : 'unavailable', configuredBudget: Number(value.configuredBudget || 0), emergencyReserve: Number(value.emergencyReserve || 0), weightedCompleted: Number(value.weightedCompleted || 0), weightedFailed: Number(value.weightedFailed || 0), weightedReserved: Number(value.weightedReserved || 0), providerReportedRemaining: Number.isFinite(Number(value.providerReportedRemaining)) ? Number(value.providerReportedRemaining) : null}),
+  });
+});
