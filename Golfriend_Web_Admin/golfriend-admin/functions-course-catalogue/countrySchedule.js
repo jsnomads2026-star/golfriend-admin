@@ -1,6 +1,6 @@
 'use strict';
 
-const HOUR=60*60*1000, DAY=24*HOUR;
+const HOUR=60*60*1000, DAY=24*HOUR, WEEK=7*DAY;
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
 const asMs=value=>{if(value&&typeof value.toMillis==='function')return value.toMillis();const parsed=Number(value);return Number.isFinite(parsed)?parsed:0;};
 function priority(coverage,now=Date.now(),policy={}){
@@ -18,7 +18,7 @@ function dueDelayMs(priorityScore,remaining){
 }
 function nextDue(coverage,quota,now=Date.now(),policy={}){
   const priorityScore=priority(coverage,now,policy),remaining=number(quota?.providerReportedRemaining),fetched=Date.parse(String(coverage?.latestGolfriendFetchTime||''));
-  const nextDueAtMs=now+dueDelayMs(priorityScore,remaining);
+  const nextDueAtMs=now+Math.max(WEEK,dueDelayMs(priorityScore,remaining));
   return Object.freeze({priorityScore,nextDueAtMs,staleAgeDays:Number.isFinite(fetched)?Math.max(0,Math.floor((now-fetched)/DAY)):90});
 }
 function quotaEligible(quota,cost=.1){return quota?.allowed===true&&number(quota?.providerReportedRemaining)>=cost;}
@@ -28,6 +28,8 @@ function nextCycle(existing,coverage,quota,now=Date.now(),policy={}){
 }
 function eligibility(job,quota,now=Date.now()){
   if(!job||job.country==='UNKNOWN'||job.state==='failed'||job.pauseReason==='ADMIN_PAUSED')return{eligible:false,reason:'NOT_ELIGIBLE'};
+  const lastProviderRequestAtMs=asMs(job.lastProviderRequestAtMs||job.lastSuccessfulRefreshAtMs||job.lastReceiptAtMs);
+  if(lastProviderRequestAtMs&&now<lastProviderRequestAtMs+WEEK)return{eligible:false,reason:'WEEKLY_REFRESH_CAP'};
   if(job.state==='queued')return{eligible:true,reason:'QUEUED'};
   if(job.state==='running')return{eligible:asMs(job.leaseExpiresAtMs)<=now,reason:asMs(job.leaseExpiresAtMs)<=now?'LEASE_EXPIRED':'LEASE_ACTIVE'};
   const due=asMs(job.retryAtMs||job.nextDueAtMs);
@@ -37,4 +39,4 @@ function eligibility(job,quota,now=Date.now()){
   return{eligible:job.state==='completed'||job.state==='paused',reason:'DUE'};
 }
 function receiptId(job){return `${job.jobId}-cycle-${Math.max(1,number(job.cycle))}`;}
-module.exports=Object.freeze({priority,nextDue,quotaEligible,nextCycle,eligibility,receiptId,HOUR,DAY});
+module.exports=Object.freeze({priority,nextDue,quotaEligible,nextCycle,eligibility,receiptId,HOUR,DAY,WEEK,asMs});
