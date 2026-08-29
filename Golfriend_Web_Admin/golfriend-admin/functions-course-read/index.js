@@ -36,3 +36,22 @@ exports.planCourseCountryIngestion = onCall({region: 'asia-southeast1', enforceA
   const coverage = projectCoverageByCountry(courses.docs.map((document) => document.data())).find((item) => item.country === country) || null;
   return Object.freeze({ schema: 'golfriend.country-ingestion-plan.v1', country, actionable: coverage !== null, providerCalls: 0, courseWrites: 0, coverage });
 });
+
+exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
+  await requireStaffOrDirector(request);
+  const [jobs, receipts, quota] = await Promise.all([
+    db.collection('course_country_ingestion_jobs').get(),
+    db.collection('course_country_ingestion_receipts').orderBy('recordedAt', 'desc').limit(50).get(),
+    db.collection('golf_api_quota').orderBy(admin.firestore.FieldPath.documentId(), 'desc').limit(1).get(),
+  ]);
+  const quotaValue = quota.empty ? null : quota.docs[0].data() || {};
+  const quotaProjection = quotaValue && Number.isFinite(Number(quotaValue.configuredBudget)) ? Object.freeze({
+    state: 'available', configuredBudget: Number(quotaValue.configuredBudget), emergencyReserve: Number(quotaValue.emergencyReserve || 0), weightedCompleted: Number(quotaValue.weightedCompleted || 0), weightedFailed: Number(quotaValue.weightedFailed || 0), weightedReserved: Number(quotaValue.weightedReserved || 0), providerReportedRemaining: Number.isFinite(Number(quotaValue.providerReportedRemaining)) ? Number(quotaValue.providerReportedRemaining) : null,
+  }) : Object.freeze({state: 'unavailable'});
+  return Object.freeze({
+    schema: 'golfriend.course-country-ingestion-projection.v1',
+    jobs: jobs.docs.map((document) => Object.freeze({id: document.id, ...document.data()})),
+    receipts: receipts.docs.map((document) => Object.freeze({id: document.id, ...document.data()})),
+    quota: quotaProjection,
+  });
+});

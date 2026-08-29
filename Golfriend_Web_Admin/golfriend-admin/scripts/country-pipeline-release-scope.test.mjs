@@ -11,14 +11,16 @@ const deploy = packageJson.scripts['deploy:country-pipeline:production'];
 const expected = [
   'functions:course-read:getCourseCoverageByCountry',
   'functions:course-read:planCourseCountryIngestion',
+  'functions:course-read:getCourseCountryIngestionProjection',
   'functions:course-catalogue:startCourseCountryIngestion',
   'functions:course-catalogue:pauseCourseCountryIngestion',
   'functions:course-catalogue:resumeCourseCountryIngestion',
+  'functions:course-catalogue:rebindAndStartKorea',
   'functions:course-catalogue:scheduledCourseCountryIngestionWorker',
   'hosting:admin',
 ];
 
-test('country release is pinned to the confirmed V2 target and exactly six pipeline functions plus Admin hosting', () => {
+test('country release is pinned to the confirmed V2 target and exactly eight pipeline functions plus Admin hosting', () => {
   assert.match(deploy, /^firebase deploy --project golfriend-v2-production-2ee34 --config firebase\.country-pipeline\.json --only /);
   for (const target of expected) assert.match(deploy, new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const selected = [...deploy.matchAll(/(?:functions:[^,\"]+|hosting:[^,\"]+)/g)].map((match) => match[0]).sort();
