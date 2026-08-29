@@ -83,6 +83,8 @@ service cloud.firestore {
       allow get, list: if request.auth != null;
       allow create, update, delete: if false;
     }
+    match /course_acquisition_requests/{document=**} { allow read, write: if false; }
+    match /course_acquisition_receipts/{document=**} { allow read, write: if false; }
     // Admin bootstrap may read only its own server-owned authority record.
     // Authorization remains the exact role/status check in the client and callables;
     // no browser write or cross-user enumeration is permitted.

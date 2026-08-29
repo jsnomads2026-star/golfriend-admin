@@ -36,3 +36,15 @@ exports.planCourseCountryIngestion = onCall({region: 'asia-southeast1', enforceA
   const coverage = projectCoverageByCountry(courses.docs.map((document) => document.data())).find((item) => item.country === country) || null;
   return Object.freeze({ schema: 'golfriend.country-ingestion-plan.v1', country, actionable: coverage !== null, providerCalls: 0, courseWrites: 0, coverage });
 });
+
+exports.getCourseOperationsProjection = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
+  await requireStaffOrDirector(request);
+  const [jobs, receipts, requests, quarantine, courses, quota] = await Promise.all([
+    db.collection('course_country_ingestion_jobs').get(), db.collection('course_country_ingestion_receipts').orderBy('recordedAt','desc').limit(50).get(),
+    db.collection('course_acquisition_requests').orderBy('requestedAt','desc').limit(50).get(), db.collection('golf_api_record_quarantine').orderBy('createdAt','desc').limit(50).get(),
+    db.collection('courses').orderBy('providerFetchedAt','desc').limit(50).get(), db.collection('golf_api_quota').orderBy(admin.firestore.FieldPath.documentId(),'desc').limit(1).get(),
+  ]);
+  const value = quota.empty ? null : quota.docs[0].data() || {};
+  const quotaState = value && Number.isFinite(Number(value.configuredBudget)) && Number.isFinite(Number(value.emergencyReserve)) ? {state:'available',configuredBudget:Number(value.configuredBudget),emergencyReserve:Number(value.emergencyReserve),weightedCompleted:Number(value.weightedCompleted||0),weightedFailed:Number(value.weightedFailed||0),weightedReserved:Number(value.weightedReserved||0),providerReportedRemaining:Number.isFinite(Number(value.providerReportedRemaining))?Number(value.providerReportedRemaining):null} : {state:'unavailable'};
+  return Object.freeze({schema:'golfriend.course-operations-projection.v1',countryReceipts:receipts.docs.map(x=>({id:x.id,...x.data()})),jobs:jobs.docs.map(x=>({id:x.id,...x.data()})),requests:requests.docs.map(x=>({id:x.id,...x.data()})),reviewExceptions:quarantine.docs.map(x=>({id:x.id,...x.data()})),changes:courses.docs.map(x=>({id:x.id,...x.data()})),quota:quotaState});
+});
