@@ -66,7 +66,8 @@ test('the first controlled incremental batch remains bounded to ten provider req
   assert.equal(domain.REFRESH_SLO.detailsPerRun, 2);
   assert.equal(domain.REFRESH_SLO.pagesPerRun + domain.REFRESH_SLO.detailsPerRun, 10);
   assert.match(runtime, /if\(detailCounter>=config\.detailsPerRun\).*DETAIL_BUDGET_DEFERRED/);
-  assert.match(runtime, /ref=db\.collection\('courses'\)\.doc\(course\.courseID\)[\s\S]*?await ref\.set\(d\.mergeCurated/);
+  assert.match(runtime, /persistCanonicalProviderMapping\(\{runId,club,course,body:detail\.body,retrievedAt:detail\.retrievedAt\}\)/);
+  assert.match(runtime, /canonicalMerge\.mergeCanonicalCourse/);
 });
 
 test('provider transport errors settle failed accounting without retrying or creating course data', async () => {
