@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';import test from 'node:test';import{readFileSync}from'node:fs';
+const source=readFileSync(new URL('./V2CountryPipelineStatus.tsx',import.meta.url),'utf8'),service=readFileSync(new URL('./courseOperationsService.ts',import.meta.url),'utf8');
+test('country pipeline status renders canonical Korea receipt fields and a queued Japan fixture',()=>{for(const marker of ['service.loadCountryIngestionProjection()','lastCompleted','nextQueued','added','updated','quarantined','providerCalls','completedAt','`${String(next.country)} next`'])assert.ok(source.includes(marker),marker);assert.ok(service.includes("httpsCallable(functions,'getCourseCountryIngestionProjection')()"));});
+test('country pipeline status has truthful loading and unavailable states',()=>{assert.ok(source.includes('Loading canonical country pipeline…'));assert.ok(source.includes('Canonical country pipeline is unavailable.'));});

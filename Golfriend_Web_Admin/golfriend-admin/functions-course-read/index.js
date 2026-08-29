@@ -68,12 +68,17 @@ exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1',
     db.collection('golf_api_quota').orderBy(admin.firestore.FieldPath.documentId(), 'desc').limit(1).get(),
   ]);
   const value = quota.empty ? {} : quota.docs[0].data() || {};
+  const queue = jobs.docs.map(document => ({id: document.id, ...document.data()}));
+  const completed = queue.filter(job => job.state === 'completed' && job.completedAt).sort((left, right) => String(right.completedAt).localeCompare(String(left.completedAt)))[0] || null;
+  const nextQueued = queue.filter(job => job.state === 'queued').sort((left, right) => Number(left.ordinal) - Number(right.ordinal))[0] || null;
+  const projectJob = job => job ? Object.freeze({country: job.country || null, state: job.state || 'unavailable', added: Number(job.counts?.added || 0), updated: Number(job.counts?.updated || 0), quarantined: Number(job.counts?.quarantined || 0), providerCalls: Number(job.providerCalls || 0), completedAt: job.completedAt || null, ordinal: Number(job.ordinal || 0)}) : null;
   return Object.freeze({
     schema: 'golfriend.receipt-bound-country-queue-projection.v1',
     cutover: policy.exists ? Object.freeze({state: policy.data()?.state || 'unavailable', receiptId: policy.data()?.receiptId || null}) : Object.freeze({state: 'not_started', receiptId: null}),
-    jobs: jobs.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
+    jobs: queue.map(job => Object.freeze(job)),
     receipts: receipts.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
     cutoverReceipts: cutovers.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
     quota: Object.freeze({state: Number.isFinite(Number(value.configuredBudget)) ? 'available' : 'unavailable', configuredBudget: Number(value.configuredBudget || 0), emergencyReserve: Number(value.emergencyReserve || 0), weightedCompleted: Number(value.weightedCompleted || 0), weightedFailed: Number(value.weightedFailed || 0), weightedReserved: Number(value.weightedReserved || 0), providerReportedRemaining: Number.isFinite(Number(value.providerReportedRemaining)) ? Number(value.providerReportedRemaining) : null}),
+    pipeline: Object.freeze({lastCompleted: projectJob(completed), nextQueued: projectJob(nextQueued), scheduledCadence: 'every 5 minutes'}),
   });
 });
