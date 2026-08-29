@@ -1,9 +1,10 @@
-import { useAdminLocale } from './AdminLocaleContext';
+import {useContext,useState} from 'react';import {httpsCallable}from 'firebase/functions';import {functions}from '../../../firebaseConfig';import { useAdminLocale } from './AdminLocaleContext';
 import type { AdminLocale } from './adminNavigation';
 import { courseOperationsService, type CourseOperationsService } from './courseOperationsService';
 import './V2CourseOperations.css';
 import V2CourseOperationsMonitor from './V2CourseOperationsMonitor';
 import V2CourseCoverageByCountry from './V2CourseCoverageByCountry';
+import {AdminIdentityContext} from './AdminIdentityContext';
 
 const EN = { title:'Golf courses and Golf API', sub:'Authoritative catalogue review and controlled provider reconciliation.', total:'Total courses', regions:'Countries / regions', coordinates:'With coordinates', missing:'Missing coordinates', quality:'Incomplete or stale', duplicates:'Potential duplicates', lastSync:'Last successful synchronization', search:'Search courses', all:'All records', incomplete:'Incomplete', stale:'Stale', healthy:'Healthy', name:'Name', location:'Country / region', coordStatus:'Coordinates', source:'Data source', updated:'Last updated', health:'Health', details:'Course details', canonical:'Canonical identifiers', contact:'Contact / booking', provenance:'Provenance', lastResult:'Last synchronization result', unavailable:'Not available', pipeline:'Golf API pipeline', quota:'Configured quota', quotaUnknown:'Unavailable — trusted service does not return quota totals.', growthBlocked:'Catalogue growth is unavailable: the approved callable reconciles existing course coordinates only.', warning:'Preview consumes provider quota. It writes nothing. Continue only with a bounded batch.', preview:'Preview dry-run', confirmPreview:'Confirm quota-consuming preview', cancel:'Cancel', apply:'Apply validated updates', confirmApply:'Confirm authorized apply', retry:'Retry', loading:'Loading course catalogue…', empty:'No courses match this view.', loadError:'Course catalogue could not be loaded.', runError:'Synchronization failed. Existing catalogue data was not changed.', noResult:'Preview completed with no results.', success:'Preview completed safely.', partial:'Preview completed with rejected or failed records.', used:'Requests used', remaining:'Requests remaining', added:'Added', changed:'Updated', unchanged:'Unchanged', rejected:'Rejected', duplicateCount:'Duplicates', coordinatesYes:'Coordinates present', coordinatesNo:'Coordinates missing', readOnly:'Catalogue review is read-only. Writes are available only through the existing staff-authorized callable.', batch:'Batch limit', close:'Close details' };
 const COURSE_COPY: Record<AdminLocale, typeof EN> = {
@@ -28,11 +29,11 @@ const GROWTH_STATE:Record<AdminLocale,string>={
 };
 
 export default function V2CourseOperations({ service = courseOperationsService }: { service?: CourseOperationsService }) {
-  const locale=useAdminLocale(); const copy = {...COURSE_COPY[locale],growthBlocked:GROWTH_STATE[locale]};
+  const locale=useAdminLocale(),identity=useContext(AdminIdentityContext),[busy,setBusy]=useState(false),[notice,setNotice]=useState<Record<string,unknown>|null>(null); const copy = {...COURSE_COPY[locale],growthBlocked:GROWTH_STATE[locale]};const enable=async()=>{setBusy(true);setNotice(null);try{const activation=await httpsCallable(functions,'activateCourseCatalogue')({});const weekly=await service.enableWeeklyCourseRefresh();setNotice({...weekly,activationReceiptId:(activation.data as {receiptId?:unknown}).receiptId});}catch{setNotice({error:'Weekly refresh was not enabled. The server kept provider access unchanged.'});}finally{setBusy(false);}};
   return <div className="course-ops">
     <header className="course-ops-intro"><div><span>COURSE AUTHORITY</span><h2>{copy.title}</h2><p>{copy.sub}</p></div><aside><strong>{copy.readOnly}</strong></aside></header>
     <V2CourseCoverageByCountry service={service}/>
-    <section className="course-ops-grid"><aside className="course-pipeline"><span>SERVER-AUTHORIZED CALLABLE</span><h3>{copy.pipeline}</h3><p className="course-growth">{copy.growthBlocked}</p></aside></section>
+    <section className="course-ops-grid"><aside className="course-pipeline"><span>SERVER-AUTHORIZED CALLABLE</span><h3>{copy.pipeline}</h3><p className="course-growth">{copy.growthBlocked}</p>{identity?.role==='Director'&&identity?.status?.trim().toLocaleLowerCase()==='active'&&identity.appCheck&&<div className="weekly-enable"><h4>Enable weekly course refresh</h4><p>This creates an immutable activation receipt, enables the weekly launch-market plan, and makes no Golf API call now.</p><button className="primary" disabled={busy} onClick={()=>void enable()}>{busy?'Enabling weekly refresh…':'Enable weekly course refresh'}</button>{notice&&('error'in notice?<p role="alert">{String(notice.error)}</p>:<p role="status">Weekly refresh enabled. Activation receipt: {String(notice.activationReceiptId)} · Weekly receipt: {String(notice.receiptId)} · Next run: {String(notice.nextDueAt)}</p>)}</div>}</aside></section>
     <V2CourseOperationsMonitor service={service}/>
   </div>;
 }

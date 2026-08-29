@@ -22,6 +22,7 @@ export interface CourseOperationsService {
   commitRegion(jobId:string): Promise<Record<string,unknown>>;
   loadIngestionOperations():Promise<Record<string,unknown>>;
   loadOperationsProjection():Promise<Record<string,unknown>>;
+  enableWeeklyCourseRefresh():Promise<Record<string,unknown>>;
   prepareFailedRetry(jobId:string):Promise<Record<string,unknown>>;
   loadAcquisitionDashboard():Promise<Record<string,unknown>>;
   previewAcquisitionPlan(payload:{coverage:unknown[];manual:unknown[]}):Promise<Record<string,unknown>>;
@@ -60,6 +61,7 @@ export const courseOperationsService: CourseOperationsService = {
   },
   async loadIngestionOperations(){const response=await httpsCallable(functions,'getGolfApiCatalogueStatus')();const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-catalogue-status.v3')throw new Error('COURSE_CATALOGUE_STATUS_INVALID');return value;},
   async loadOperationsProjection(){const response=await httpsCallable(functions,'getCourseOperationsProjection')();const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-operations-projection.v1')throw new Error('COURSE_OPERATIONS_PROJECTION_INVALID');return value;},
+  async enableWeeklyCourseRefresh(){return (await httpsCallable(functions,'enableWeeklyCourseRefresh')({})).data as Record<string,unknown>;},
   async prepareFailedRetry(jobId){void jobId;throw new Error('COURSE_PROVIDER_OPERATOR_PATH_RETIRED');},
   async loadAcquisitionDashboard(){return this.loadIngestionOperations();},
   async previewAcquisitionPlan(payload){void payload;throw new Error('COURSE_PROVIDER_OPERATOR_PATH_RETIRED');},
