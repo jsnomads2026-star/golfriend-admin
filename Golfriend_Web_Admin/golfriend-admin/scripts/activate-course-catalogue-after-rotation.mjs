@@ -33,12 +33,19 @@ async function read(url) {
   return body ? JSON.parse(body) : {};
 }
 
-const [secret, functionPage] = await Promise.all([
-  read(`https://secretmanager.googleapis.com/v1/projects/${PROJECT}/secrets/GOLF_API_KEY/versions/${secretVersion}`),
-  read(`https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/functions?pageSize=100`),
-]);
+const secret = await read(`https://secretmanager.googleapis.com/v1/projects/${PROJECT}/secrets/GOLF_API_KEY/versions/${secretVersion}`);
 if (secret.state !== 'ENABLED') throw new Error('SECRET_VERSION_NOT_ENABLED');
-const functions = (functionPage.functions || [])
+const functionItems=[];
+let pageToken=null;
+for (let page=0; page<10; page+=1) {
+  const suffix=pageToken?`&pageToken=${encodeURIComponent(pageToken)}`:'';
+  const response=await read(`https://cloudfunctions.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/functions?pageSize=100${suffix}`);
+  functionItems.push(...(response.functions||[]));
+  pageToken=response.nextPageToken||null;
+  if(!pageToken)break;
+}
+if(pageToken)throw new Error('FUNCTION_LIST_PAGE_LIMIT_EXCEEDED');
+const functions = functionItems
   .filter((item) => item.labels?.['firebase-functions-codebase'] === 'course-catalogue' && ACTIVATION_FUNCTIONS.includes(item.name?.split('/').pop()))
   .map((item) => ({
     id: item.name?.split('/').pop(), state: item.state,

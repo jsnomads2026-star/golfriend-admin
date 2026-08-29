@@ -22,9 +22,10 @@ test('activation callable is App Check protected and active Director or Admin on
 });
 
 test('activation derives exact country and acquisition bindings, rejects stale identities, and cannot call provider or Scheduler',()=>{
-  const callable=source.slice(source.indexOf('async function loadLiveActivationBindings'),source.indexOf('async function reconcileExpiredReservations'));
+  const callable=source.slice(source.indexOf('async function listDeploymentFunctions'),source.indexOf('async function reconcileExpiredReservations'));
   assert.match(callable,/ACTIVATION_REVISION_SERVICES/);
   assert.match(callable,/cloudfunctions\.googleapis\.com/);
+  assert.match(callable,/nextPageToken/);
   assert.match(callable,/run\.googleapis\.com/);
   assert.match(callable,/STALE_OR_INVALID_ACTIVATION_BINDING/);
   assert.match(callable,/transaction\.create\(receiptRef/);
