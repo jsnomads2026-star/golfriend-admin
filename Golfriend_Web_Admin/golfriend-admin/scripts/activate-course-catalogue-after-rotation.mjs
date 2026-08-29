@@ -6,12 +6,16 @@ import { createRequire } from 'node:module';
 const PROJECT = 'golfriend-v2-production-2ee34';
 const REGION = 'asia-southeast1';
 const SCHEDULER_MODE = 'deferred_by_design';
-const CALLABLE_FUNCTIONS = [
-  'armGolfApiCalibrationCanary', 'getGolfApiCatalogueStatus',
-  'reconcileGolfApiPendingSettlements', 'runGolfApiCalibrationCanary',
-  'searchGolfApiCatalogue',
+const ACTIVATION_FUNCTIONS = [
+  'activateCourseCatalogue',
+  'pauseCourseCountryIngestion',
+  'requestGolfApiCourseAcquisition',
+  'resumeCourseCountryIngestion',
+  'scheduledCourseCountryIngestionWorker',
+  'scheduledGolfApiCourseAcquisitionWorker',
+  'startCourseCountryIngestion',
 ].sort();
-const PROVIDER_CALLABLES = ['runGolfApiCalibrationCanary'];
+const PROVIDER_FUNCTIONS = ['scheduledCourseCountryIngestionWorker', 'scheduledGolfApiCourseAcquisitionWorker'];
 const versionArg = process.argv.find((value) => value.startsWith('--secret-version='));
 const secretVersion = versionArg?.split('=')[1];
 if (!/^\d+$/.test(secretVersion || '')) throw new Error('SECRET_VERSION_METADATA_REQUIRED');
@@ -35,7 +39,7 @@ const [secret, functionPage] = await Promise.all([
 ]);
 if (secret.state !== 'ENABLED') throw new Error('SECRET_VERSION_NOT_ENABLED');
 const functions = (functionPage.functions || [])
-  .filter((item) => item.labels?.['firebase-functions-codebase'] === 'course-catalogue')
+  .filter((item) => item.labels?.['firebase-functions-codebase'] === 'course-catalogue' && ACTIVATION_FUNCTIONS.includes(item.name?.split('/').pop()))
   .map((item) => ({
     id: item.name?.split('/').pop(), state: item.state,
     service: item.serviceConfig?.service?.split('/').pop(),
@@ -43,12 +47,10 @@ const functions = (functionPage.functions || [])
   }))
   .sort((left, right) => left.id.localeCompare(right.id));
 const ids = functions.map((item) => item.id);
-const missing = CALLABLE_FUNCTIONS.filter((name) => !ids.includes(name));
-const unexpected = ids.filter((name) => !CALLABLE_FUNCTIONS.includes(name));
+const missing = ACTIVATION_FUNCTIONS.filter((name) => !ids.includes(name));
 if (missing.length) throw new Error(`CALLABLE_FUNCTION_MISSING:${missing.join(',')}`);
-if (unexpected.length) throw new Error(`UNEXPECTED_CATALOGUE_FUNCTION:${unexpected.join(',')}`);
 if (functions.some((item) => item.state !== 'ACTIVE')) throw new Error('CATALOGUE_CALLABLE_NOT_ACTIVE');
-for (const name of PROVIDER_CALLABLES) {
+for (const name of PROVIDER_FUNCTIONS) {
   const fn = functions.find((item) => item.id === name);
   if (fn?.secretVersion !== secretVersion) throw new Error(`FUNCTION_SECRET_BINDING_MISMATCH:${name}`);
 }
@@ -64,6 +66,6 @@ const verifiedAt = new Date().toISOString();
 console.log(JSON.stringify({
   projectId: PROJECT, region: REGION, schedulerMode: SCHEDULER_MODE,
   receiptValidation: { state: 'verified_not_written', secretName: 'GOLF_API_KEY', secretVersion, verifiedAt, functionRevisions: revisions },
-  callableFunctions: functions, providerSecretBindings: PROVIDER_CALLABLES.map((id) => ({ id, version: functions.find((item) => item.id === id)?.secretVersion ?? null })),
+  activationFunctions: functions, providerSecretBindings: PROVIDER_FUNCTIONS.map((id) => ({ id, version: functions.find((item) => item.id === id)?.secretVersion ?? null })),
   providerRequests: 0, firestoreWrites: 0, configurationWrites: 0, checkpointWrites: 0, schedulerMutations: 0, secretValueAccessed: false,
 }, null, 2));

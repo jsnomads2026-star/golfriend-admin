@@ -16,8 +16,9 @@ test('activation evidence is deferred-manual and has no control-plane mutation c
 });
 
 test('activation has no scheduled activation list or receipt/binding mutation flags',()=>{
-  assert.match(activation,/const CALLABLE_FUNCTIONS = \[/);
-  assert.doesNotMatch(activation,/scheduledGolfApiCatalogue|scheduledCourseCountryIngestionWorker|scheduledGolfApiCourseAcquisitionWorker/);
+  assert.match(activation,/const ACTIVATION_FUNCTIONS = \[/);
+  for(const name of ['activateCourseCatalogue','startCourseCountryIngestion','pauseCourseCountryIngestion','resumeCourseCountryIngestion','requestGolfApiCourseAcquisition','scheduledCourseCountryIngestionWorker','scheduledGolfApiCourseAcquisitionWorker'])assert.match(activation,new RegExp(`'${name}'`));
+  assert.doesNotMatch(activation,/scheduledGolfApiCatalogueIncremental|scheduledGolfApiCatalogueRetries|scheduledGolfApiCatalogueCanary/);
   assert.doesNotMatch(activation,/RECEIPT_ONLY=|SAFE_BIND=|bindingReceiptId|course_catalogue_activation_receipts/);
 });
 
