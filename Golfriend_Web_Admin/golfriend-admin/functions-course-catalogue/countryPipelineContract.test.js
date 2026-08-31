@@ -18,9 +18,11 @@ test('Korea rebind remains Director and App Check gated before provider work',()
   assert.match(rebind,/DIRECTOR_REBIND_KOREA/);
   assert.match(rebind,/KOREA_JOB_ALREADY_RUNNING/);
 });
-test('dashboard projection contains authoritative job, immutable receipt, and quota views',()=>{
+test('dashboard projection contains only receipt-bound queue, immutable receipt, and canonical venue views',()=>{
   assert.match(projection,/exports\.getCourseCountryIngestionProjection/);
+  assert.match(projection,/course_country_ingestion_queue/);
   assert.match(projection,/course_country_ingestion_receipts/);
-  assert.match(projection,/golf_api_quota/);
-  assert.match(projection,/golfriend\.course-country-ingestion-projection\.v1/);
+  assert.match(projection,/collection\('clubhouses'\)/);
+  assert.doesNotMatch(projection,/golf_api_quota/);
+  assert.match(projection,/golfriend\.receipt-bound-country-queue-projection\.v1/);
 });

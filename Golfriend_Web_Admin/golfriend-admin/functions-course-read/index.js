@@ -3,6 +3,7 @@ const {onCall, HttpsError} = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const { projectCoverageByCountry } = require('./coverage');
 const { normalizedCountry } = require('./coverage');
+const { attachCountryCoverage, projectReceiptBoundQueue } = require('./countryIngestionProjection');
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 const ACTIVE_ROLES = new Set(['Director', 'Manager', 'Support']);
@@ -37,48 +38,27 @@ exports.planCourseCountryIngestion = onCall({region: 'asia-southeast1', enforceA
   return Object.freeze({ schema: 'golfriend.country-ingestion-plan.v1', country, actionable: coverage !== null, providerCalls: 0, courseWrites: 0, coverage });
 });
 
-exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
-  await requireStaffOrDirector(request);
-  const [jobs, receipts, quota] = await Promise.all([
-    db.collection('course_country_ingestion_jobs').get(),
-    db.collection('course_country_ingestion_receipts').orderBy('recordedAt', 'desc').limit(50).get(),
-    db.collection('golf_api_quota').orderBy(admin.firestore.FieldPath.documentId(), 'desc').limit(1).get(),
-  ]);
-  const quotaValue = quota.empty ? null : quota.docs[0].data() || {};
-  const quotaProjection = quotaValue && Number.isFinite(Number(quotaValue.configuredBudget)) ? Object.freeze({
-    state: 'available', configuredBudget: Number(quotaValue.configuredBudget), emergencyReserve: Number(quotaValue.emergencyReserve || 0), weightedCompleted: Number(quotaValue.weightedCompleted || 0), weightedFailed: Number(quotaValue.weightedFailed || 0), weightedReserved: Number(quotaValue.weightedReserved || 0), providerReportedRemaining: Number.isFinite(Number(quotaValue.providerReportedRemaining)) ? Number(quotaValue.providerReportedRemaining) : null,
-  }) : Object.freeze({state: 'unavailable'});
-  return Object.freeze({
-    schema: 'golfriend.course-country-ingestion-projection.v1',
-    jobs: jobs.docs.map((document) => Object.freeze({id: document.id, ...document.data()})),
-    receipts: receipts.docs.map((document) => Object.freeze({id: document.id, ...document.data()})),
-    quota: quotaProjection,
-  });
-});
-
 // Operational status is projected exclusively from the receipt-bound global
 // queue.  The retired legacy collection is intentionally not read here.
 exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
   await requireStaffOrDirector(request);
-  const [policy, jobs, receipts, cutovers, quota] = await Promise.all([
+  const [policy, jobs, receipts, cutovers, courses, clubhouses] = await Promise.all([
     db.collection('platform').doc('courseCountryIngestionCutover').get(),
     db.collection('course_country_ingestion_queue').orderBy('ordinal').get(),
     db.collection('course_country_ingestion_receipts').orderBy('recordedAt', 'desc').limit(50).get(),
     db.collection('course_country_ingestion_cutover_receipts').orderBy('recordedAt', 'desc').limit(5).get(),
-    db.collection('golf_api_quota').orderBy(admin.firestore.FieldPath.documentId(), 'desc').limit(1).get(),
+    db.collection('courses').get(),
+    db.collection('clubhouses').get(),
   ]);
-  const value = quota.empty ? {} : quota.docs[0].data() || {};
   const queue = jobs.docs.map(document => ({id: document.id, ...document.data()}));
-  const completed = queue.filter(job => job.state === 'completed' && job.completedAt).sort((left, right) => String(right.completedAt).localeCompare(String(left.completedAt)))[0] || null;
-  const nextQueued = queue.filter(job => job.state === 'queued').sort((left, right) => Number(left.ordinal) - Number(right.ordinal))[0] || null;
-  const projectJob = job => job ? Object.freeze({country: job.country || null, state: job.state || 'unavailable', added: Number(job.counts?.added || 0), updated: Number(job.counts?.updated || 0), quarantined: Number(job.counts?.quarantined || 0), providerCalls: Number(job.providerCalls || 0), completedAt: job.completedAt || null, ordinal: Number(job.ordinal || 0)}) : null;
+  const immutableReceipts = receipts.docs.map(document => Object.freeze({id: document.id, ...document.data()}));
+  const projection = attachCountryCoverage(projectReceiptBoundQueue(queue, immutableReceipts), courses.docs.map(document => document.data() || {}), clubhouses.docs.map(document => document.data() || {}));
   return Object.freeze({
     schema: 'golfriend.receipt-bound-country-queue-projection.v1',
     cutover: policy.exists ? Object.freeze({state: policy.data()?.state || 'unavailable', receiptId: policy.data()?.receiptId || null}) : Object.freeze({state: 'not_started', receiptId: null}),
-    jobs: queue.map(job => Object.freeze(job)),
-    receipts: receipts.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
+    jobs: projection.jobs,
+    receipts: immutableReceipts,
     cutoverReceipts: cutovers.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
-    quota: Object.freeze({state: Number.isFinite(Number(value.configuredBudget)) ? 'available' : 'unavailable', configuredBudget: Number(value.configuredBudget || 0), emergencyReserve: Number(value.emergencyReserve || 0), weightedCompleted: Number(value.weightedCompleted || 0), weightedFailed: Number(value.weightedFailed || 0), weightedReserved: Number(value.weightedReserved || 0), providerReportedRemaining: Number.isFinite(Number(value.providerReportedRemaining)) ? Number(value.providerReportedRemaining) : null}),
-    pipeline: Object.freeze({lastCompleted: projectJob(completed), nextQueued: projectJob(nextQueued), scheduledCadence: 'every 5 minutes'}),
+    pipeline: projection.pipeline,
   });
 });

@@ -6,5 +6,5 @@ const prohibited = ['acquireCourseCandidates', 'syncCoursesFromProvider', 'night
 if (exportsFound.length !== 3 || !exportsFound.includes('getCourseCoverageByCountry') || !exportsFound.includes('planCourseCountryIngestion') || !exportsFound.includes('getCourseCountryIngestionProjection')) throw Error(`EXPORT_SELECTION_INVALID:${exportsFound.join(',')}`);
 for (const name of prohibited) if (source.includes(name)) throw Error(`PROHIBITED_FUNCTION_PRESENT:${name}`);
 if (!source.includes("enforceAppCheck: true") || !source.includes("collection('admin_users')") || !source.includes("collection('courses')")) throw Error('AUTHORITATIVE_READ_BOUNDARY_MISSING');
-if (!source.includes('projectCoverageByCountry') || !source.includes('course_country_ingestion_receipts') || !source.includes('golf_api_quota')) throw Error('COVERAGE_PROJECTION_MISSING');
+if (!source.includes('projectCoverageByCountry') || !source.includes('course_country_ingestion_receipts') || !source.includes("collection('clubhouses')")) throw Error('COVERAGE_PROJECTION_MISSING');
 console.log('course-read selection proof PASS: staff-gated aggregate and Firebase-only plan/projection, zero provider capability and zero course writes');
