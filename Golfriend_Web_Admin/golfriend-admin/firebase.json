@@ -44,6 +44,9 @@
   },
   "hosting": {
     "target": "admin",
+    "predeploy": [
+      "npm run build:v2-admin-production"
+    ],
     "public": "dist",
     "ignore": [
       "firebase.json",
