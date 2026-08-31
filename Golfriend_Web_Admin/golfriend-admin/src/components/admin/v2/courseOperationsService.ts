@@ -21,6 +21,8 @@ export interface CourseOperationsService {
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
   commitRegion(jobId:string): Promise<Record<string,unknown>>;
   loadIngestionOperations():Promise<Record<string,unknown>>;
+  loadOperationsProjection():Promise<Record<string,unknown>>;
+  requestCourseImport(payload:{providerClubId:string;providerCourseId:string}):Promise<Record<string,unknown>>;
   loadCountryIngestionProjection():Promise<Record<string,unknown>>;
   startGlobalCatalogueCutover():Promise<Record<string,unknown>>;
   prepareFailedRetry(jobId:string):Promise<Record<string,unknown>>;
@@ -60,6 +62,8 @@ export const courseOperationsService: CourseOperationsService = {
     void jobId;throw new Error('COURSE_PROVIDER_OPERATOR_PATH_RETIRED');
   },
   async loadIngestionOperations(){const response=await httpsCallable(functions,'getGolfApiCatalogueStatus')();const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-catalogue-status.v3')throw new Error('COURSE_CATALOGUE_STATUS_INVALID');return value;},
+  async loadOperationsProjection(){const response=await httpsCallable(functions,'getCourseOperationsProjection')();const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.course-operations-projection.v1')throw new Error('COURSE_OPERATIONS_PROJECTION_INVALID');return value;},
+  async requestCourseImport(payload){return (await httpsCallable(functions,'requestGolfApiCourseAcquisition')(payload)).data as Record<string,unknown>;},
   async loadCountryIngestionProjection(){const response=await httpsCallable(functions,'getCourseCountryIngestionProjection')();const value=response.data as Record<string,unknown>;if(value?.schema!=='golfriend.receipt-bound-country-queue-projection.v1')throw new Error('COUNTRY_INGESTION_PROJECTION_INVALID');return value;},
   async startGlobalCatalogueCutover(){return (await httpsCallable(functions,'startGlobalCatalogueCutover')({confirmed:true})).data as Record<string,unknown>;},
   async prepareFailedRetry(jobId){void jobId;throw new Error('COURSE_PROVIDER_OPERATOR_PATH_RETIRED');},
