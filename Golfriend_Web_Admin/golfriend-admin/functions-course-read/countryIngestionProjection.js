@@ -1,4 +1,5 @@
 'use strict';
+const {displayTime, timestampMillis} = require('./projectionTime');
 
 const receiptIdFor = job => `${String(job.jobId || job.id || '')}-batch-${Math.max(1, Number(job.batch || 1))}`;
 const countsFor = receipt => Object.freeze({
@@ -17,7 +18,9 @@ function projectJob(job, receipt) {
     state,
     counts: countsFor(receipt),
     providerCalls: Number(receipt?.providerCalls || 0),
-    completedAt: receipt?.recordedAt || null,
+    // The receipt write time is the immutable completion evidence.  Provider
+    // timestamps are never used for Admin completion status.
+    completedAt: displayTime(receipt?.completedAt ?? receipt?.recordedAt),
     error: errorFor(receipt),
     ordinal: Number(job.ordinal || 0),
     requiresReceiptId: job.requiresReceiptId || null,
@@ -29,10 +32,13 @@ function projectReceiptBoundQueue(queue, receipts) {
   const jobs = queue
     .map(job => projectJob(job, receiptById.get(receiptIdFor(job))))
     .sort((left, right) => left.ordinal - right.ordinal);
-  const completed = jobs.filter(job => job.state === 'completed').sort((left, right) => String(right.completedAt).localeCompare(String(left.completedAt)))[0] || null;
+  const completed = jobs.filter(job => job.state === 'completed').sort((left, right) => (timestampMillis(right.completedAt) || 0) - (timestampMillis(left.completedAt) || 0))[0] || null;
   const korea = jobs.find(job => job.country === 'KOREA' && job.state === 'completed') || null;
   const nextEligible = jobs.find(job => job.state === 'queued' && receiptById.get(job.requiresReceiptId)?.state === 'completed') || null;
-  return Object.freeze({jobs: Object.freeze(jobs), pipeline: Object.freeze({korea, lastCompleted: completed, nextEligible, scheduledCadence: 'every 5 minutes'})});
+  const dueTimes = queue.map(job => ({country: job.country || null, at: timestampMillis(job.retryAtMs ?? job.nextDueAtMs ?? job.nextEligibleAtMs)})).filter(item => item.at !== null && item.at > Date.now()).sort((left, right) => left.at - right.at);
+  const nextScheduled = dueTimes[0] || null;
+  const allScheduledCountriesUpToDate = jobs.length > 0 && jobs.every(job => job.state === 'completed') && nextScheduled !== null;
+  return Object.freeze({jobs: Object.freeze(jobs), pipeline: Object.freeze({korea, lastCompleted: completed, nextEligible, nextScheduledRunAt: nextScheduled ? displayTime(nextScheduled.at) : null, nextScheduledCountry: nextScheduled?.country || null, allScheduledCountriesUpToDate, scheduledCadence: 'every 5 minutes'})});
 }
 
 function attachCountryCoverage(projection, courses, clubhouses) {

@@ -1,10 +1,12 @@
 const text=value=>typeof value==='string'?value.trim():'';
 const when=value=>{
-  if(typeof value==='number'&&Number.isFinite(value))return value;
+  if(typeof value==='number'&&Number.isFinite(value))return Math.abs(value)<100000000000?value*1000:value;
   if(value&&typeof value.toMillis==='function')return value.toMillis();
+  if(value&&typeof value==='object'&&Number.isFinite(Number(value.seconds??value._seconds))){const seconds=Number(value.seconds??value._seconds),nanos=Number(value.nanoseconds??value._nanoseconds??0);return seconds*1000+Math.floor(nanos/1000000);}
+  if(typeof value==='string'&&value.trim()!==''&&Number.isFinite(Number(value)))return when(Number(value));
   const parsed=Date.parse(String(value||''));return Number.isFinite(parsed)?parsed:null;
 };
-const identity=row=>`${text(row.providerClubId)}:${text(row.providerCourseId)}`;
+const identity=row=>{const club=text(row.providerClubId),course=text(row.providerCourseId);return club&&course?`${club}:${course}`:'';};
 
 export function requestStatus(row){
   if(row?.alreadyInFirebase===true||row?.state==='cached')return 'Already in Firebase';

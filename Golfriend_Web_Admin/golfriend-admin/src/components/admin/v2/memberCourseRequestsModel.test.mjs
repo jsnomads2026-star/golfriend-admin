@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { projectMemberCourseRequests, requestStatus, sortMemberCourseRequests } from './memberCourseRequestsModel.mjs';
 
 test('empty request queue remains empty',()=>assert.deepEqual(projectMemberCourseRequests([]),[]));
+test('request timestamps support Firestore, ISO, milliseconds, seconds, and null',()=>{
+  const values=[{toMillis:()=>1788130800000},'2026-08-30T23:00:00.000Z',1788130800000,1788130800,null];
+  const rows=projectMemberCourseRequests(values.map((requestedAt,index)=>({id:String(index),requestName:String(index),requestedAt})));
+  assert.deepEqual(rows.map(row=>row.requestedAtMs).sort((a,b)=>(a||0)-(b||0)),[null,1788130800000,1788130800000,1788130800000,1788130800000]);
+});
 test('identical provider identities deduplicate into one member request',()=>{
   const rows=projectMemberCourseRequests([{id:'one',providerClubId:'club-1',providerCourseId:'course-1',requestName:'One',requestedAtMs:1},{id:'two',providerClubId:'club-1',providerCourseId:'course-1',requestName:'One',requestedAtMs:2}]);
   assert.equal(rows.length,1);assert.equal(rows[0].requestCount,2);assert.equal(rows[0].status,'Ready to import');

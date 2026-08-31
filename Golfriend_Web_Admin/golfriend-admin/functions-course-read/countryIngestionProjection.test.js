@@ -24,6 +24,30 @@ test('retains the immutable provider failure without inventing a retry', () => {
   assert.equal(result.pipeline.nextEligible, null);
 });
 
+test('uses the immutable receipt completion time and supports all stored timestamp forms', () => {
+  const rows = [
+    projectReceiptBoundQueue([job('KOREA', 0, 'completed')], [receipt('korea', 'completed', {recordedAt: {_seconds: 1788138000, _nanoseconds: 0}})]),
+    projectReceiptBoundQueue([job('KOREA', 0, 'completed')], [receipt('korea', 'completed', {recordedAt: '2026-08-30T23:00:00.000Z'})]),
+    projectReceiptBoundQueue([job('KOREA', 0, 'completed')], [receipt('korea', 'completed', {recordedAt: 1788130800000})]),
+    projectReceiptBoundQueue([job('KOREA', 0, 'completed')], [receipt('korea', 'completed', {recordedAt: 1788130800})]),
+  ];
+  for (const row of rows) assert.match(row.pipeline.lastCompleted.completedAt, /^2026-/);
+  const absent = projectReceiptBoundQueue([job('KOREA', 0, 'completed')], [receipt('korea', 'completed', {recordedAt: null})]);
+  assert.equal(absent.pipeline.lastCompleted.completedAt, null);
+});
+
+test('reports the earliest next eligible run when every scheduled country is within its refresh window', () => {
+  const future = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const result = projectReceiptBoundQueue([
+    {...job('KOREA', 0, 'completed'), nextDueAtMs: future + 1000},
+    {...job('JAPAN', 1, 'completed'), nextDueAtMs: future},
+  ], [receipt('korea', 'completed'), receipt('japan', 'completed')]);
+  assert.equal(result.pipeline.nextEligible, null);
+  assert.equal(result.pipeline.allScheduledCountriesUpToDate, true);
+  assert.equal(result.pipeline.nextScheduledCountry, 'JAPAN');
+  assert.match(result.pipeline.nextScheduledRunAt, /^20\d\d-/);
+});
+
 test('distinguishes booking venues from playable course layouts and flags a missing club ID', () => {
   const base = projectReceiptBoundQueue([job('THAILAND', 0)], []);
   const result = attachCountryCoverage(base, [{country: 'Thailand', providerCourseId: 'layout-a', providerClubId: 'club-a'}, {country: 'Thailand', providerCourseId: 'layout-b', providerClubId: 'club-a'}, {country: 'Thailand', providerCourseId: 'layout-c'}], [{country: 'Thailand', providerClubId: 'club-a'}]);

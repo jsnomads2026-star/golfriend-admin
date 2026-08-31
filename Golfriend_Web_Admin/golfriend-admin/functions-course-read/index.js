@@ -4,6 +4,7 @@ const admin = require('firebase-admin');
 const { projectCoverageByCountry } = require('./coverage');
 const { normalizedCountry } = require('./coverage');
 const { attachCountryCoverage, projectReceiptBoundQueue } = require('./countryIngestionProjection');
+const {displaySafe} = require('./projectionTime');
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 const ACTIVE_ROLES = new Set(['Director', 'Manager', 'Support']);
@@ -50,8 +51,8 @@ exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1',
     db.collection('courses').get(),
     db.collection('clubhouses').get(),
   ]);
-  const queue = jobs.docs.map(document => ({id: document.id, ...document.data()}));
-  const immutableReceipts = receipts.docs.map(document => Object.freeze({id: document.id, ...document.data()}));
+  const queue = jobs.docs.map(document => displaySafe({id: document.id, ...document.data()}));
+  const immutableReceipts = receipts.docs.map(document => Object.freeze(displaySafe({id: document.id, ...document.data()})));
   const projection = attachCountryCoverage(projectReceiptBoundQueue(queue, immutableReceipts), courses.docs.map(document => document.data() || {}), clubhouses.docs.map(document => document.data() || {}));
   const catalogue = Object.freeze({clubhouseCount: clubhouses.size, courseLayoutCount: courses.size, needsClubhouseIdentityReviewCount: courses.docs.reduce((count, document) => count + (!document.data()?.providerClubId ? 1 : 0), 0)});
   return Object.freeze({
@@ -59,7 +60,7 @@ exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1',
     cutover: policy.exists ? Object.freeze({state: policy.data()?.state || 'unavailable', receiptId: policy.data()?.receiptId || null}) : Object.freeze({state: 'not_started', receiptId: null}),
     jobs: projection.jobs,
     receipts: immutableReceipts,
-    cutoverReceipts: cutovers.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
+    cutoverReceipts: cutovers.docs.map(document => Object.freeze(displaySafe({id: document.id, ...document.data()}))),
     pipeline: projection.pipeline,
     catalogue,
   });
@@ -75,14 +76,14 @@ exports.getCourseOperationsProjection = onCall({region: 'asia-southeast1', enfor
     db.collection('course_acquisition_receipts').orderBy('recordedAt', 'desc').limit(100).get(),
   ]);
   const receiptByRequest = new Map(receipts.docs.map(document => {
-    const value = document.data() || {};
+    const value = displaySafe(document.data() || {});
     return [String(value.requestId || document.id), Object.freeze({id: document.id, state: value.state || null, reason: value.reason || null, recordedAt: value.recordedAt || null})];
   }));
   return Object.freeze({
     schema: 'golfriend.course-operations-projection.v1',
     requests: requests.docs.map(document => {
-      const value = document.data() || {}, receipt = receiptByRequest.get(document.id) || null;
-      return Object.freeze({id: document.id, ...value, receiptId: receipt?.id || null, receiptState: receipt?.state || null, reason: value.reason || value.lastError || receipt?.reason || null});
+      const value = displaySafe(document.data() || {}), receipt = receiptByRequest.get(document.id) || null;
+      return Object.freeze({id: document.id, ...value, receiptId: receipt?.id || null, receiptState: receipt?.state || null, receiptCompletedAt: receipt?.recordedAt || null, reason: value.reason || value.lastError || receipt?.reason || null});
     }),
   });
 });
