@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source=fs.readFileSync(new URL('../src/components/admin/v2/EconomyMasterControl.tsx',import.meta.url),'utf8');
+assert.match(source,/getTeeEconomyOperationsProjection/);
+assert.match(source,/operation:'master_controls'/);
+assert.match(source,/operation:'create_policy_draft'/);
+assert.doesNotMatch(source,/getAdminControlProjectionV1/);
+assert.match(source,/No approved Economy policy yet/);
+assert.match(source,/Director authority required/);
+assert.match(source,/Economy policy authority unavailable/);
+assert.match(source,/Create policy version/);
+assert.match(source,/Tee packages/);
+assert.match(source,/Service prices/);
+console.log('Economy Master Controls client contract PASS');
