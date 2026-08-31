@@ -12,8 +12,8 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const src = readFileSync(resolve(__dirname, '../src/index.ts'), 'utf8');
-const activationSrc = readFileSync(resolve(__dirname, '../src/partnerActivationRuntime.ts'), 'utf8');
+const src = readFileSync(resolve(process.cwd(), 'src/index.ts'), 'utf8');
+const activationSrc = readFileSync(resolve(process.cwd(), 'src/partnerActivationRuntime.ts'), 'utf8');
 const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 const bodyOf = (name: string): string => {
   const m = src.match(new RegExp('export const ' + name + ' = onCall\\([\\s\\S]*?\\r?\\n\\}\\);'));
@@ -39,7 +39,7 @@ check('no process.env God-Mode/bypass identifier anywhere', () => {
 });
 
 // ---- RETAINED (approved V2): must authorize via server-owned module ----
-const RETAINED_STAFF = ['adminResolveBooking', 'setManualCourseCoordinates'];
+const RETAINED_STAFF = ['setManualCourseCoordinates'];
 const RETAINED_DIRECTOR = ['applyModerationStrike'];
 
 for (const name of RETAINED_STAFF) {
@@ -49,6 +49,15 @@ for (const name of RETAINED_STAFF) {
     assert.ok(!/admin@golfriend\.co/.test(code), `${name} must not contain the God-Mode email`);
   });
 }
+check('adminResolveBooking: retained name is an active-staff-gated refusal with no booking writes', () => {
+  const code = stripComments(bodyOf('adminResolveBooking'));
+  assert.ok(/isActiveStaff\s*\(/.test(code), 'refusal must retain the staff gate');
+  assert.ok(/adminBookingResolutionRefusal\s*\(/.test(code), 'refusal helper must be invoked');
+  assert.ok(!/runTransaction|writeBatch|bookingRef|slotRef|stampBookingAudit|\.set\s*\(|\.update\s*\(|\.delete\s*\(/.test(code), 'refusal must contain no mutation path');
+  assert.ok(!/db\.collection\(['"](?:bookings|tee_time_slots|booking_audit)['"]\)/.test(code), 'refusal must not access booking record collections');
+  assert.ok(!/status\s*:\s*['"](?:confirmed|rejected|cancelled)['"]/.test(code), 'refusal must not restore booking status writes');
+  assert.ok(!/['"]admin_(?:confirmed|rejected|cancelled)['"]/.test(code), 'refusal must not restore admin audit actions');
+});
 for (const name of RETAINED_DIRECTOR) {
   check(`retained ${name}: authorizes via isActiveDirector, no God-Mode`, () => {
     const code = stripComments(bodyOf(name));
@@ -79,14 +88,14 @@ check('claimCourseOperator: App Check plus approved organization membership, no 
   assert.ok(!/callerEmail|candidateIds|admin@golfriend\.co/.test(activationSrc));
 });
 check('manageTeeTimeSlot: modular App Check plus organization membership', () => {
-  const availability = readFileSync(resolve(__dirname, '../src/partnerAvailabilityRuntime.ts'), 'utf8');
+  const availability = readFileSync(resolve(process.cwd(), 'src/partnerAvailabilityRuntime.ts'), 'utf8');
   assert.ok(/enforceAppCheck:true/.test(availability));
   assert.ok(/membership\(caller\)/.test(availability));
   assert.ok(/course_operators/.test(availability));
   assert.ok(!/admin@golfriend\.co/.test(availability));
 });
 check('booking responses: modular App Check plus exact enterprise course grant', () => {
-  const booking = readFileSync(resolve(__dirname, '../src/partnerBookingRuntime.ts'), 'utf8');
+  const booking = readFileSync(resolve(process.cwd(), 'src/partnerBookingRuntime.ts'), 'utf8');
   assert.ok(/enforceAppCheck:\s*true/.test(booking));
   assert.ok(/resolveEnterpriseBookingCourseAuthority/.test(booking));
   assert.ok(/transactionBookingAuthority/.test(booking));
@@ -95,7 +104,7 @@ check('booking responses: modular App Check plus exact enterprise course grant',
   assert.ok(!/admin@golfriend\.co/.test(booking));
 });
 check('Enterprise staff authority: canonical runtime is server-owned and exact-scope', () => {
-  const authority = readFileSync(resolve(__dirname, '../src/enterpriseAuthorityRuntime.ts'), 'utf8');
+  const authority = readFileSync(resolve(process.cwd(), 'src/enterpriseAuthorityRuntime.ts'), 'utf8');
   assert.ok(/resolveEnterpriseCourseAuthority/.test(authority));
   assert.ok(/m\.organizationId!==organizationId/.test(authority));
   assert.ok(/m\.scope\.propertyId!==propertyId/.test(authority));

@@ -6,6 +6,7 @@ import * as functionsV1 from "firebase-functions/v1"; // 🔥 Explicitly target 
 import vision from "@google-cloud/vision"; // 🔥 ADDED
 import { isSlotBookable, applySeatDelta, statusAfter, userStatusKeyFor } from "./bookingLogic.js";
 import { isActiveStaff, isActiveDirector } from "./authority.js";
+import { adminBookingResolutionRefusal } from "./adminBookingResolutionRefusal.js";
 import {
   MEMBERSHIP_REGISTRY_VERSION,
   MEMBERSHIP_REGISTRY_COLLECTION,
@@ -680,100 +681,20 @@ void legacySendBookingMessage;
 // 📖 ADMIN BOOKING OVERSIGHT (Non-Financial Force-Resolve: Confirm / Reject / Cancel)
 // ==========================================
 // Platform-staff override for the booking lifecycle. NON-FINANCIAL: no refund,
-// payout, escrow or settlement — only seat/status transitions with audit. The
-// client names a decision; the seat release + status change happen server-side.
+// Retained name only: Admin booking decisions must flow through the canonical
+// partner-authorized booking contract. This callable always refuses.
 export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'You must be logged in.');
   }
   const callerUid = request.auth.uid;
-  const { bookingId, decision } = request.data || {};
-  if (!bookingId || typeof bookingId !== 'string') {
-    throw new HttpsError('invalid-argument', 'A bookingId is required.');
-  }
-  if (decision !== 'confirm' && decision !== 'reject' && decision !== 'cancel') {
-    throw new HttpsError('invalid-argument', 'decision must be confirm, reject or cancel.');
-  }
-
   // AUTHORIZATION: active platform staff only (server-owned admin_users role). No email/God-Mode.
   const adminSnap = await db.collection('admin_users').doc(callerUid).get();
   if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
     throw new HttpsError('permission-denied', 'You are not authorized to resolve bookings.');
   }
-
-  const bookingRef = db.collection('bookings').doc(bookingId);
-
-  try {
-    const out = await db.runTransaction(async (tx) => {
-      const bSnap = await tx.get(bookingRef);
-      if (!bSnap.exists) throw new HttpsError('not-found', 'Booking not found.');
-      const booking = bSnap.data() || {};
-      const slotRef = db.collection('tee_time_slots').doc(booking.slotId);
-
-      const releaseSeat = async () => {
-        const slotSnap = await tx.get(slotRef);
-        if (slotSnap.exists) {
-          const bookedCount = Number(slotSnap.data()?.bookedCount || 0);
-          tx.set(slotRef, {
-            bookedCount: applySeatDelta(bookedCount, -1),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-        }
-      };
-
-      // ---- CONFIRM: only a pending booking; seat stays counted ----
-      if (decision === 'confirm') {
-        if (booking.status !== 'pending') {
-          throw new HttpsError('failed-precondition', `Booking is already ${booking.status}.`);
-        }
-        tx.set(bookingRef, {
-          status: 'confirmed', userStatusKey: 'booking_confirmed',
-          resolvedByUid: callerUid,
-          resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        stampBookingAudit(tx, bookingId, 'admin_confirmed', callerUid, 'staff');
-        return { bookingId, status: 'confirmed' };
-      }
-
-      // ---- REJECT: only a pending booking; release the seat ----
-      if (decision === 'reject') {
-        if (booking.status !== 'pending') {
-          throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be rejected.`);
-        }
-        await releaseSeat();
-        tx.set(bookingRef, {
-          status: 'rejected', userStatusKey: 'booking_rejected',
-          resolvedByUid: callerUid,
-          resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        stampBookingAudit(tx, bookingId, 'admin_rejected', callerUid, 'staff');
-        return { bookingId, status: 'rejected' };
-      }
-
-      // ---- CANCEL: a pending/confirmed booking; release the seat ----
-      if (booking.status !== 'pending' && booking.status !== 'confirmed') {
-        throw new HttpsError('failed-precondition', `A ${booking.status} booking cannot be cancelled.`);
-      }
-      await releaseSeat();
-      tx.set(bookingRef, {
-        status: 'cancelled', userStatusKey: 'booking_cancelled',
-        resolvedByUid: callerUid,
-        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-      stampBookingAudit(tx, bookingId, 'admin_cancelled', callerUid, 'staff');
-      return { bookingId, status: 'cancelled' };
-    });
-
-    logger.info(`📖 Booking ${out.bookingId} → ${out.status} by admin ${callerUid}.`);
-    return { success: true, ...out };
-  } catch (error: any) {
-    if (error instanceof HttpsError) throw error;
-    logger.error("📖 Admin booking resolution failed:", error);
-    throw new HttpsError('internal', error.message || 'Admin booking resolution failed.');
-  }
+  const refusal = adminBookingResolutionRefusal(request.data?.decision);
+  throw new HttpsError(refusal.code, refusal.message);
 });
 
 // ==========================================

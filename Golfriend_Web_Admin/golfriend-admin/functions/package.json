@@ -9,6 +9,7 @@
     "test:booking": "tsc && node lib/bookingLogic.test.js",
     "test:authority": "tsc && node lib/authority.test.js",
     "test:v2authority": "tsc && node lib/v2AuthorityConformance.test.js",
+    "test:admin-booking-refusal": "tsc --ignoreConfig --module NodeNext --moduleResolution NodeNext --target es2017 --strict --types node --outDir node_modules/.cache/admin-booking-refusal/helper src/adminBookingResolutionRefusal.ts src/adminBookingResolutionRefusal.test.ts && node node_modules/.cache/admin-booking-refusal/helper/adminBookingResolutionRefusal.test.js && tsc --ignoreConfig --ignoreDeprecations 6.0 --module Node16 --moduleResolution Node16 --target es2017 --strict --types node --esModuleInterop --outDir node_modules/.cache/admin-booking-refusal/guard src/v2AuthorityConformance.test.ts && node node_modules/.cache/admin-booking-refusal/guard/v2AuthorityConformance.test.js",
     "test:janitor": "tsc && node lib/janitorLogic.test.js",
     "test:coursewrites": "tsc && node lib/courseWriteAuthority.test.js",
     "test:intake": "tsc && node lib/partnerIntakeLogic.test.js",
