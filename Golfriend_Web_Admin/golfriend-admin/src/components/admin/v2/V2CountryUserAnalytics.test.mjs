@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{readFileSync}from'node:fs';
+const source=readFileSync(new URL('./V2CountryUserAnalytics.tsx',import.meta.url),'utf8'),service=readFileSync(new URL('./countryUserAnalyticsService.ts',import.meta.url),'utf8');
+test('renders the operational country table without raw-user scans or dead date boxes',()=>{for(const text of ['Verified members','New members','Active members','Course coverage','Member course requests','Current need','7 days','30 days','Not collected yet'])assert.ok(source.includes(text),text);assert.ok(!source.includes('type="date"'));assert.ok(service.includes('getCountryOperationsProjection'));});

@@ -1,0 +1,1 @@
+{"functions":[{"source":"functions-country-analytics","codebase":"country-analytics","runtime":"nodejs20","ignore":["node_modules",".git"]}],"hosting":{"target":"admin","public":"dist","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]}}
