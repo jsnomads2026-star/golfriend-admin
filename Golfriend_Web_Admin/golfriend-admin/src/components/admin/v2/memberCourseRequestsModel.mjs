@@ -35,3 +35,8 @@ export function projectMemberCourseRequests(rows=[]){
     receiptId:text(row.receiptId)||null, error:text(row.reason)||text(row.lastError)||null,
   })).sort((a,b)=>(b.requestedAtMs||0)-(a.requestedAtMs||0));
 }
+
+export function sortMemberCourseRequests(rows, sort='most_requested'){
+  const attention=value=>['Failed','Needs review','Needs provider match'].includes(value.status)?1:0;
+  return [...rows].sort((left,right)=>sort==='newest'?(right.requestedAtMs||0)-(left.requestedAtMs||0):sort==='needs_attention'?attention(right)-attention(left)||(right.requestedAtMs||0)-(left.requestedAtMs||0):(right.requestCount-left.requestCount)||(right.requestedAtMs||0)-(left.requestedAtMs||0));
+}

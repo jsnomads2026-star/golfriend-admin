@@ -53,6 +53,7 @@ exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1',
   const queue = jobs.docs.map(document => ({id: document.id, ...document.data()}));
   const immutableReceipts = receipts.docs.map(document => Object.freeze({id: document.id, ...document.data()}));
   const projection = attachCountryCoverage(projectReceiptBoundQueue(queue, immutableReceipts), courses.docs.map(document => document.data() || {}), clubhouses.docs.map(document => document.data() || {}));
+  const catalogue = Object.freeze({clubhouseCount: clubhouses.size, courseLayoutCount: courses.size, needsClubhouseIdentityReviewCount: courses.docs.reduce((count, document) => count + (!document.data()?.providerClubId ? 1 : 0), 0)});
   return Object.freeze({
     schema: 'golfriend.receipt-bound-country-queue-projection.v1',
     cutover: policy.exists ? Object.freeze({state: policy.data()?.state || 'unavailable', receiptId: policy.data()?.receiptId || null}) : Object.freeze({state: 'not_started', receiptId: null}),
@@ -60,5 +61,28 @@ exports.getCourseCountryIngestionProjection = onCall({region: 'asia-southeast1',
     receipts: immutableReceipts,
     cutoverReceipts: cutovers.docs.map(document => Object.freeze({id: document.id, ...document.data()})),
     pipeline: projection.pipeline,
+    catalogue,
+  });
+});
+
+// The Admin member-request queue is deliberately independent of quota diagnostics.
+// It is a Firebase-only, staff-gated projection over the durable request records and
+// immutable results; no provider capability is present in this codebase.
+exports.getCourseOperationsProjection = onCall({region: 'asia-southeast1', enforceAppCheck: true}, async (request) => {
+  await requireStaffOrDirector(request);
+  const [requests, receipts] = await Promise.all([
+    db.collection('course_acquisition_requests').orderBy('requestedAt', 'desc').limit(100).get(),
+    db.collection('course_acquisition_receipts').orderBy('recordedAt', 'desc').limit(100).get(),
+  ]);
+  const receiptByRequest = new Map(receipts.docs.map(document => {
+    const value = document.data() || {};
+    return [String(value.requestId || document.id), Object.freeze({id: document.id, state: value.state || null, reason: value.reason || null, recordedAt: value.recordedAt || null})];
+  }));
+  return Object.freeze({
+    schema: 'golfriend.course-operations-projection.v1',
+    requests: requests.docs.map(document => {
+      const value = document.data() || {}, receipt = receiptByRequest.get(document.id) || null;
+      return Object.freeze({id: document.id, ...value, receiptId: receipt?.id || null, receiptState: receipt?.state || null, reason: value.reason || value.lastError || receipt?.reason || null});
+    }),
   });
 });
