@@ -7,6 +7,7 @@ const countsFor = receipt => Object.freeze({
   quarantined: Number(receipt?.counts?.quarantined || 0),
 });
 const errorFor = receipt => receipt?.requestEvidence?.errorClassification || null;
+const countryKey = value => { const country = String(value || 'UNKNOWN').trim().toLocaleUpperCase(); return country === 'SOUTH KOREA' ? 'KOREA' : country; };
 
 function projectJob(job, receipt) {
   const state = receipt?.state || (job?.state === 'queued' ? 'queued' : 'unavailable');
@@ -36,9 +37,9 @@ function projectReceiptBoundQueue(queue, receipts) {
 
 function attachCountryCoverage(projection, courses, clubhouses) {
   const courseCounts = new Map(), venueCounts = new Map();
-  for (const course of courses) { const country = course.country || 'UNKNOWN', current = courseCounts.get(country) || {courseLayoutCount: 0, needsClubhouseIdentityReviewCount: 0}; current.courseLayoutCount++; if (!course.providerClubId) current.needsClubhouseIdentityReviewCount++; courseCounts.set(country, current); }
-  for (const clubhouse of clubhouses) { const country = clubhouse.country || 'UNKNOWN'; venueCounts.set(country, (venueCounts.get(country) || 0) + 1); }
-  return Object.freeze({...projection, jobs: Object.freeze(projection.jobs.map(job => Object.freeze({...job, clubhouseCount: venueCounts.get(job.country) || 0, ...(courseCounts.get(job.country) || {courseLayoutCount: 0, needsClubhouseIdentityReviewCount: 0})})))});
+  for (const course of courses) { const country = countryKey(course.country), current = courseCounts.get(country) || {courseLayoutCount: 0, needsClubhouseIdentityReviewCount: 0}; current.courseLayoutCount++; if (!course.providerClubId) current.needsClubhouseIdentityReviewCount++; courseCounts.set(country, current); }
+  for (const clubhouse of clubhouses) { const country = countryKey(clubhouse.country); venueCounts.set(country, (venueCounts.get(country) || 0) + 1); }
+  return Object.freeze({...projection, jobs: Object.freeze(projection.jobs.map(job => { const country = countryKey(job.country); return Object.freeze({...job, clubhouseCount: venueCounts.get(country) || 0, ...(courseCounts.get(country) || {courseLayoutCount: 0, needsClubhouseIdentityReviewCount: 0})}); }))});
 }
 
 module.exports = {attachCountryCoverage, projectReceiptBoundQueue};

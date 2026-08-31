@@ -26,7 +26,7 @@ test('retains the immutable provider failure without inventing a retry', () => {
 
 test('distinguishes booking venues from playable course layouts and flags a missing club ID', () => {
   const base = projectReceiptBoundQueue([job('THAILAND', 0)], []);
-  const result = attachCountryCoverage(base, [{country: 'THAILAND', providerCourseId: 'layout-a', providerClubId: 'club-a'}, {country: 'THAILAND', providerCourseId: 'layout-b', providerClubId: 'club-a'}, {country: 'THAILAND', providerCourseId: 'layout-c'}], [{country: 'THAILAND', providerClubId: 'club-a'}]);
+  const result = attachCountryCoverage(base, [{country: 'Thailand', providerCourseId: 'layout-a', providerClubId: 'club-a'}, {country: 'Thailand', providerCourseId: 'layout-b', providerClubId: 'club-a'}, {country: 'Thailand', providerCourseId: 'layout-c'}], [{country: 'Thailand', providerClubId: 'club-a'}]);
   assert.deepEqual(result.jobs[0].clubhouseCount, 1);
   assert.deepEqual(result.jobs[0].courseLayoutCount, 3);
   assert.deepEqual(result.jobs[0].needsClubhouseIdentityReviewCount, 1);
