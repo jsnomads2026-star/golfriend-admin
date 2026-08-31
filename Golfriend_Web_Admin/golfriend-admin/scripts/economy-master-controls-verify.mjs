@@ -1,15 +1,4 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import assert from 'node:assert/strict';import fs from 'node:fs';
 const source=fs.readFileSync(new URL('../src/components/admin/v2/EconomyMasterControl.tsx',import.meta.url),'utf8');
-assert.match(source,/getTeeEconomyOperationsProjection/);
-assert.match(source,/operation:'master_controls'/);
-assert.match(source,/operation:'create_policy_draft'/);
-assert.doesNotMatch(source,/getAdminControlProjectionV1/);
-assert.match(source,/No approved Economy policy yet/);
-assert.match(source,/Director authority required/);
-assert.match(source,/Economy Control Tower unavailable/);
-assert.match(source,/Create policy draft/);
-assert.match(source,/Tee packages/);
-assert.match(source,/Service charges/);
-for (const marker of ['Economy overview','Commercial performance','Active commercial policy','Policy workbench','Control audit','Technical details','No Tee economy activity yet','Create policy draft']) assert.match(source,new RegExp(marker));
-console.log('Economy Master Controls client contract PASS');
+for(const marker of ['Tees issued','Available','Held','Spent / redeemed','Outstanding Tee liability','Reconciliation status','Exceptions','No post-trace Tee activity yet','Tee package sales','Service demand','No Tee economy activity yet','Status:','No approved policy yet','Rates are never inferred from legacy data','No previous approved policy versions','Package name','Tees included','Cash price','Currency','Availability','+ Add Tee package','Service','Tee charge','+ Add service price','Welcome reward','Verified achievement reward','Referral reward','Promotional Tee expiry in days','Per-member earning cap','Subscription rollover limit','Draft policy version','Effective-from date and timezone','Change reason','Before → after comparison','Save draft','Submit for Director approval','Technical details'])assert.equal(source.includes(marker),true,marker);
+assert.match(source,/booking_concierge/);assert.match(source,/Remove Tee package/);assert.match(source,/Remove service price/);assert.doesNotMatch(source,/getAdminControlProjectionV1/);console.log('Economy Control Tower UI labels PASS');
