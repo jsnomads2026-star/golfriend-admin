@@ -3,7 +3,7 @@ import {createRequire} from 'node:module';
 import crypto from 'node:crypto';
 
 const require=createRequire(import.meta.url),args=Object.fromEntries(process.argv.slice(2).map(value=>{const [key,...rest]=value.replace(/^--/,'').split('=');return[key,rest.join('=')||true]}));
-const project=String(args.project||''),limit=Math.min(2000,Math.max(1,Number(args.limit||2000))),execute=args.execute==='BACKFILL_CLUBHOUSES_FROM_COURSES';
+const project=String(args.project||''),limit=Math.min(6000,Math.max(1,Number(args.limit||6000))),execute=args.execute==='BACKFILL_CLUBHOUSES_FROM_COURSES';
 if(!project||!execute)throw Error('EXPLICIT_BACKFILL_APPROVAL_REQUIRED');
 const auth=require(process.env.FIREBASE_TOOLS_AUTH_MODULE||'C:/Users/Windows/AppData/Roaming/npm/node_modules/firebase-tools/lib/auth'),account=auth.getGlobalDefaultAccount(),scopes=Array.isArray(account.tokens.scopes)?account.tokens.scopes:String(account.tokens.scope||'').split(/\s+/).filter(Boolean),credential=await auth.getAccessToken(account.tokens.refresh_token,scopes),access=credential.access_token,root=`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 const decode=value=>value?.stringValue??value?.booleanValue??value?.timestampValue??(value?.integerValue!==undefined?Number(value.integerValue):value?.doubleValue??(value?.nullValue===null?null:value?.mapValue?Object.fromEntries(Object.entries(value.mapValue.fields||{}).map(([key,item])=>[key,decode(item)])):value?.arrayValue?(value.arrayValue.values||[]).map(decode):undefined));
