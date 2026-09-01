@@ -12,6 +12,18 @@ import { isActiveStaff, isActiveDirector } from "./authority.js";
 import { planDuplicatePurge, isLocked, canDeletePlannedCourse, type CourseRec } from "./janitorLogic.js";
 import { normalizeManualCourseCorrection } from "./courseWriteAuthority.js";
 export {previewCourseRegionImport, commitCourseRegionImport} from "./courseIngestion.js";
+export {
+  partnerSaveApplication,
+  partnerRegisterEvidenceMetadata,
+  partnerSubmitApplication,
+  partnerGetApplication,
+  partnerListSubmittedApplications,
+  partnerGetReviewDetail,
+  partnerRequestEvidence,
+  partnerDeclineApplication,
+  partnerApproveApplication,
+  partnerResolveOrganisation,
+} from "./partnerAuthority.js";
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {

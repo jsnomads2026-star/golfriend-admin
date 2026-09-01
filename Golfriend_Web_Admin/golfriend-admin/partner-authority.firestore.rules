@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Partner Authority is callable-only. A browser must never supply state,
+    // organisation IDs, memberships, audit records, or evidence metadata.
+    match /partner_applications/{document=**} { allow read, write: if false; }
+    match /partner_organisations/{document=**} { allow read, write: if false; }
+    match /partner_memberships/{document=**} { allow read, write: if false; }
+    match /partner_application_evidence/{document=**} { allow read, write: if false; }
+    match /partner_authority_audit/{document=**} { allow read, write: if false; }
+
+    // This repository has no pre-existing V2 Firestore Rules contract to merge.
+    // Deny by default until a separately reviewed full V2 Rules baseline exists.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
