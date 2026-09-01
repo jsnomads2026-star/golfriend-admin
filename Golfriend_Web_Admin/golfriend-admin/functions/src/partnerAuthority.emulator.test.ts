@@ -80,17 +80,17 @@ async function main() {
   assert.equal(director, uidDirector);
   console.log("  ✓ unauthenticated and non-Director review calls are denied");
 
-  // Evidence metadata is private metadata only. Submission fails closed because
-  // this batch has no durable private Storage writer.
+  // An upload authority record alone is not ready evidence. Submission must
+  // fail closed until the Storage object is server-finalised and verified.
   await registerPartnerEvidenceMetadata(db, uidA, {
     applicationId: appA,
     idempotencyKey: `evidence_a_${run}`,
-    metadata: {fileName: "tiny-test.txt", contentType: "text/plain", byteSize: 4},
+    metadata: {fileName: "tiny-test.pdf", contentType: "application/pdf"},
   });
-  await expectCode(submitPartnerApplication(db, uidA, {applicationId: appA, idempotencyKey: `submit_a_${run}`}), "failed-precondition", "Evidence storage is not yet commissioned.");
+  await expectCode(submitPartnerApplication(db, uidA, {applicationId: appA, idempotencyKey: `submit_a_${run}`}), "failed-precondition", "At least one server-verified ready evidence item is required before submission.");
   assert.equal(await count("partner_organisations", appA), 0);
   assert.equal(await count("partner_memberships", appA), 0);
-  console.log("  ✓ uncommissioned evidence cannot submit or create authority records");
+  console.log("  ✓ unfinalised evidence cannot submit or create authority records");
 
   // 3. Evidence request and decline require reasons and write audit records.
   const evidenceApp = app("evidence");

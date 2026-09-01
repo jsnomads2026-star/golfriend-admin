@@ -57,10 +57,25 @@ owner role.
 
 `partner_application_evidence` stores only metadata necessary to validate and
 refer to applicant evidence: `applicationId`, submitter UID, content metadata,
-private object reference, and server timestamps.  Object bytes need a future
-private Storage implementation: the path must not be public and access must be
-limited to the application owner and authorised Director reviewers.  This ADR
-does not claim that a durable storage adapter exists.
+private object reference, server-computed SHA-256, and server timestamps.
+Evidence is requested through a callable, then uploaded once to the
+server-created path `partner_application_evidence/{applicationId}/{evidenceId}/original`.
+The only allowed types are PDF, JPEG, and PNG; each object is at most 10 MB.
+Storage Rules allow the owner to create only that exact pending path and deny
+list, overwrite, and delete. Finalisation downloads the private object through
+the Admin SDK, verifies type and size, computes SHA-256 server-side, and marks
+the immutable evidence record `ready`. No public or download URL is created.
+
+Authenticated owner and active-Director review access is a protected Storage
+`get` only; the access callable returns no URL. A future cloud delivery signer
+is outside this contract and must fail closed unless separately commissioned.
+
+Every Partner Authority callable requires a valid Firebase App Check token in
+production, before application, evidence, audit, organisation, or membership
+access. The Partner Portal must be registered with the V2 Firebase project's
+chosen App Check provider and initialise its App Check SDK before calling any
+Partner Authority callable; this document does not configure that provider or
+claim that production attestation is commissioned.
 
 `partner_authority_audit` is append-only and contains `applicationId`, action,
 actor UID, actor role, prior state, resulting state, server timestamp,

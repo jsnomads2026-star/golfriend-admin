@@ -2,6 +2,7 @@
 import assert from "node:assert";
 import * as admin from "firebase-admin";
 import {initializeApp, deleteApp} from "firebase/app";
+import {CustomProvider, initializeAppCheck} from "firebase/app-check";
 import {getAuth, connectAuthEmulator, signInAnonymously} from "firebase/auth";
 import {getFunctions, connectFunctionsEmulator, httpsCallable} from "firebase/functions";
 
@@ -10,9 +11,29 @@ if (!admin.apps.length) admin.initializeApp({projectId: process.env.GCLOUD_PROJE
 const db = admin.firestore();
 const run = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 const applicationId = `partner_callable_${run}`;
+const blockedApplicationId = `partner_appcheck_blocked_${run}`;
+type AppCheckMode = "missing" | "invalid" | "valid";
 
-function client(name: string) {
+function syntheticAppCheckToken(subject: string) {
+  const header = Buffer.from(JSON.stringify({alg: "none", typ: "JWT"})).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({sub: subject, aud: "demo-partner-authority", exp: Math.floor(Date.now() / 1000) + 3600})).toString("base64url");
+  return `${header}.${payload}.emulator-test-only`;
+}
+
+function client(name: string, appCheckMode: AppCheckMode = "valid") {
   const app = initializeApp({apiKey: "demo-partner-authority", authDomain: "demo-partner-authority.local", projectId: process.env.GCLOUD_PROJECT || "demo-partner-authority"}, name);
+  if (appCheckMode !== "missing") {
+    // The dedicated emulator runner enables firebase-functions' documented
+    // test-only token verifier bypass. This client still supplies a token;
+    // production never receives that environment flag and enforces App Check.
+    initializeAppCheck(app, {
+      provider: new CustomProvider({getToken: async () => ({
+        token: appCheckMode === "valid" ? syntheticAppCheckToken(`appcheck-${name}`) : "not-a-valid-app-check-token",
+        expireTimeMillis: Date.now() + 60_000,
+      })}),
+      isTokenAutoRefreshEnabled: false,
+    });
+  }
   const auth = getAuth(app);
   const functions = getFunctions(app, "asia-southeast1");
   connectAuthEmulator(auth, "http://127.0.0.1:9099", {disableWarnings: true});
@@ -25,9 +46,25 @@ async function expectCode(work: Promise<unknown>, code: string) {
 }
 
 async function main() {
-  const unsigned = client(`partner-unsigned-${run}`);
+  const unsigned = client(`partner-unsigned-${run}`, "missing");
   await expectCode(httpsCallable(unsigned.functions, "partnerListSubmittedApplications")({}), "functions/unauthenticated");
+  await expectCode(httpsCallable(unsigned.functions, "partnerRequestEvidenceUpload")({applicationId, idempotencyKey: `request_${run}`, fileName: "synthetic.pdf", contentType: "application/pdf"}), "functions/unauthenticated");
+  await expectCode(httpsCallable(unsigned.functions, "partnerFinalizeEvidenceUpload")({applicationId, evidenceId: applicationId, idempotencyKey: `finalize_${run}`}), "functions/unauthenticated");
   await deleteApp(unsigned.app);
+
+  const missingAppCheck = client(`partner-appcheck-missing-${run}`, "missing");
+  await signInAnonymously(missingAppCheck.auth);
+  await expectCode(httpsCallable(missingAppCheck.functions, "partnerSaveApplication")({
+    applicationId: blockedApplicationId,
+    idempotencyKey: `appcheck_missing_${run}`,
+    draft: {
+      partnershipType: "enterprise",
+      legalBusiness: {legalName: "Blocked Synthetic Co", countryOfRegistration: "TH", registrationOrTaxId: "TEST-BLOCKED"},
+      golfCourse: {name: "Blocked Links", location: "Pattaya", address: "3 Test Lane", phone: "+660000003"},
+    },
+  }), "functions/unauthenticated");
+  assert.equal((await db.collection("partner_applications").doc(blockedApplicationId).get()).exists, false);
+  await deleteApp(missingAppCheck.app);
 
   const applicant = client(`partner-applicant-${run}`);
   const applicantCredential = await signInAnonymously(applicant.auth);
@@ -55,7 +92,7 @@ async function main() {
   assert.equal((decision.data as any).state, "evidence_requested");
   assert.equal((await db.collection("partner_authority_audit").where("applicationId", "==", applicationId).get()).size, 1);
   await deleteApp(directorClient.app);
-  console.log("Partner Authority callable emulator proof PASS: unauthenticated/non-Director denied; active Director list and reasoned evidence request succeed.");
+  console.log("Partner Authority callable emulator proof PASS: synthetic valid App Check preserves applicant and active-Director authority gates.");
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });

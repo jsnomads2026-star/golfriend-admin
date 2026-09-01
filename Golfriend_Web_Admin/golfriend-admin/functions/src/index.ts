@@ -15,10 +15,13 @@ export {previewCourseRegionImport, commitCourseRegionImport} from "./courseInges
 export {
   partnerSaveApplication,
   partnerRegisterEvidenceMetadata,
+  partnerRequestEvidenceUpload,
+  partnerFinalizeEvidenceUpload,
   partnerSubmitApplication,
   partnerGetApplication,
   partnerListSubmittedApplications,
   partnerGetReviewDetail,
+  partnerGetEvidenceAccess,
   partnerRequestEvidence,
   partnerDeclineApplication,
   partnerApproveApplication,

@@ -1,0 +1,69 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function evidence(evidenceId) {
+      return firestore.get(/databases/(default)/documents/partner_application_evidence/$(evidenceId));
+    }
+
+    function evidenceExists(evidenceId) {
+      return firestore.exists(/databases/(default)/documents/partner_application_evidence/$(evidenceId));
+    }
+
+    function application(applicationId) {
+      return firestore.get(/databases/(default)/documents/partner_applications/$(applicationId));
+    }
+
+    function activeDirector() {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/admin_users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admin_users/$(request.auth.uid)).data.role == 'Director'
+        && firestore.get(/databases/(default)/documents/admin_users/$(request.auth.uid)).data.status != 'Suspended';
+    }
+
+    function expectedUpload(applicationId, evidenceId) {
+      return signedIn()
+        && evidenceExists(evidenceId)
+        && evidence(evidenceId).data.applicationId == applicationId
+        && evidence(evidenceId).data.ownerUid == request.auth.uid
+        && evidence(evidenceId).data.storagePath == 'partner_application_evidence/' + applicationId + '/' + evidenceId + '/original'
+        && evidence(evidenceId).data.storageState == 'upload_requested'
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType == evidence(evidenceId).data.expectedContentType
+        && (request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'image/jpeg'
+          || request.resource.contentType == 'image/png');
+    }
+
+    function ownerCanGet(applicationId, evidenceId) {
+      return signedIn()
+        && evidenceExists(evidenceId)
+        && evidence(evidenceId).data.applicationId == applicationId
+        && evidence(evidenceId).data.ownerUid == request.auth.uid
+        && evidence(evidenceId).data.storageState == 'ready';
+    }
+
+    function directorCanGet(applicationId, evidenceId) {
+      return activeDirector()
+        && evidenceExists(evidenceId)
+        && evidence(evidenceId).data.applicationId == applicationId
+        && evidence(evidenceId).data.storageState == 'ready'
+        && (application(applicationId).data.state == 'submitted'
+          || application(applicationId).data.state == 'evidence_requested');
+    }
+
+    match /partner_application_evidence/{applicationId}/{evidenceId}/original {
+      allow create: if resource == null && expectedUpload(applicationId, evidenceId);
+      allow get: if ownerCanGet(applicationId, evidenceId) || directorCanGet(applicationId, evidenceId);
+      allow list, update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
