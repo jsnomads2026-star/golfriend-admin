@@ -9,6 +9,7 @@
     "gate:authority": "node scripts/authority-gate.mjs",
     "gate:dead-route": "node scripts/dead-route-gate.mjs",
     "gate:v2": "node scripts/v2-mode-gate.mjs",
+    "gate:partner-authority-appcheck-local": "node scripts/partner-authority-local-appcheck-gate.mjs",
     "gate:a11y": "node scripts/portal-a11y-gate.mjs",
     "gate:fnauth": "node scripts/functions-authority-gate.mjs",
     "gate:godmode": "node scripts/functions-godmode-gate.mjs",

@@ -42,6 +42,20 @@ export const PRECOMMISSION_CONFIG = {
   appId: '1:000000000000:web:demoPrecommissionEmulator',
 };
 
+/**
+ * The canonical V2 web application, used only by the local Partner Authority
+ * emulator session. This is intentionally not a Firebase deploy target: the
+ * Portal's `.firebaserc` default remains golfriend-v1.
+ */
+export const PARTNER_AUTHORITY_LOCAL_CONFIG = {
+  apiKey: 'AIzaSyALtbDuqrMQ3XeILiXOh8enl1-93_r_yHk',
+  authDomain: 'golfriend-v2-production-2ee34.firebaseapp.com',
+  projectId: 'golfriend-v2-production-2ee34',
+  storageBucket: 'golfriend-v2-production-2ee34.firebasestorage.app',
+  messagingSenderId: '533338463502',
+  appId: '1:533338463502:web:8a45afed98abc0cdc38b5f',
+};
+
 const REQUIRED = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
 
 /** Non-empty string guard. */
@@ -77,6 +91,21 @@ export function resolveFirebaseTarget(mode, env = {}) {
       for (const bad of V1_FORBIDDEN) {
         if (String(cfg[k]).includes(bad)) {
           throw new Error(`precommission config field "${k}" resolves a V1 identifier ("${bad}"); forbidden.`);
+        }
+      }
+    }
+    return cfg;
+  }
+
+  if (mode === 'partner-authority-local') {
+    // The canonical V2 web identity is deliberately fixed here instead of
+    // accepting an arbitrary VITE_* target. Endpoint wiring is separately
+    // mandatory below, so this mode has no cloud fallback.
+    const cfg = { ...PARTNER_AUTHORITY_LOCAL_CONFIG };
+    for (const k of REQUIRED) {
+      for (const bad of V1_FORBIDDEN) {
+        if (String(cfg[k]).includes(bad)) {
+          throw new Error(`partner-authority-local config field "${k}" resolves a V1 identifier ("${bad}"); forbidden.`);
         }
       }
     }
@@ -125,7 +154,7 @@ export function resolveFirebaseTarget(mode, env = {}) {
  * @returns {null | { host: string, ports: { auth:number, firestore:number, functions:number, storage:number } }}
  */
 export function resolveEmulatorEndpoints(mode, env = {}) {
-  if (mode !== 'precommission') return null;
+  if (mode !== 'precommission' && mode !== 'partner-authority-local') return null;
   const host = env.VITE_FIREBASE_EMULATOR_HOST;
   const rawPorts = {
     auth: env.VITE_EMU_AUTH_PORT,
@@ -138,9 +167,12 @@ export function resolveEmulatorEndpoints(mode, env = {}) {
   for (const [k, v] of Object.entries(rawPorts)) if (!present(String(v ?? ''))) missing.push(`VITE_EMU_${k.toUpperCase()}_PORT`);
   if (missing.length) {
     throw new Error(
-      `precommission mode requires local emulator endpoints; missing/empty: ${missing.join(', ')}. ` +
+      `${mode} mode requires local emulator endpoints; missing/empty: ${missing.join(', ')}. ` +
       `It fails closed and NEVER falls back to production.`,
     );
+  }
+  if (mode === 'partner-authority-local' && !['127.0.0.1', 'localhost', '::1'].includes(host)) {
+    throw new Error('partner-authority-local requires a loopback emulator host (127.0.0.1, localhost, or ::1).');
   }
   const ports = {};
   for (const [k, v] of Object.entries(rawPorts)) {
