@@ -1,7 +1,8 @@
 // Local Partner Authority App Check boundary verifier. It is static only: it
 // neither starts an emulator nor obtains, prints, registers, or validates a
 // debug token.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   PARTNER_AUTHORITY_LOCAL_CONFIG,
   V1_FORBIDDEN,
@@ -14,6 +15,11 @@ const fail = (message) => { throw new Error(message); };
 const assert = (condition, message) => { if (!condition) fail(message); };
 const throws = (fn) => { try { fn(); return false; } catch { return true; } };
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const sourceRoot = resolve(import.meta.dirname, '../src');
+const walk = (directory) => readdirSync(directory).flatMap((entry) => {
+  const path = join(directory, entry);
+  return statSync(path).isDirectory() ? walk(path) : [path];
+});
 
 const fullEmulatorEnv = {
   VITE_FIREBASE_EMULATOR_HOST: '127.0.0.1',
@@ -44,7 +50,13 @@ assert(firebaseConfig.indexOf('FIREBASE_APPCHECK_DEBUG_TOKEN') < firebaseConfig.
 assert(/new ReCaptchaEnterpriseProvider\(siteKey\.trim\(\)\)/.test(firebaseConfig), 'local mode must support Firebase App Check reCAPTCHA Enterprise initialization');
 assert(/new ReCaptchaV3Provider\(siteKey\.trim\(\)\)/.test(firebaseConfig), 'local mode must support Firebase App Check reCAPTCHA v3 initialization');
 assert(/providerKind === 'recaptcha-enterprise'/.test(firebaseConfig) && /providerKind === 'recaptcha-v3'/.test(firebaseConfig), 'local mode must allow only explicit Firebase App Check provider kinds');
-assert(/getFunctions\(app, 'asia-southeast1'\)/.test(firebaseConfig), 'local mode must explicitly select asia-southeast1 Functions');
+assert(/export const FUNCTIONS_REGION = 'asia-southeast1';/.test(firebaseConfig), 'local mode must resolve FUNCTIONS_REGION to asia-southeast1');
+const sharedFunctionsConstructions = firebaseConfig.match(/getFunctions\(app, FUNCTIONS_REGION\)/g) || [];
+assert(sharedFunctionsConstructions.length === 1, 'local mode must construct one shared Functions client with FUNCTIONS_REGION');
+const functionsClients = walk(sourceRoot)
+  .filter((path) => /\.(ts|tsx)$/.test(path))
+  .flatMap((path) => readFileSync(path, 'utf8').match(/getFunctions\s*\(/g) || []);
+assert(functionsClients.length === 1, 'Admin source must contain only the shared regional getFunctions client');
 assert(!/getDownloadURL|X-Firebase-AppCheck|enforceAppCheck\s*:\s*false|FIREBASE_DEBUG_FEATURES/.test(firebaseConfig), 'local mode must not add an App Check or callable bypass');
 
 const viteConfig = read('../vite.config.ts');
