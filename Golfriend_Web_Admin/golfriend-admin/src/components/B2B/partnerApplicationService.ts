@@ -1,6 +1,7 @@
-import {getFunctions, httpsCallable} from "firebase/functions";
+import {httpsCallable} from "firebase/functions";
+import { functions } from '../../firebaseConfig';
 
-const call = async <T>(name: string, payload: Record<string, unknown> = {}) => (await httpsCallable(getFunctions(), name)(payload)).data as T;
+const call = async <T>(name: string, payload: Record<string, unknown> = {}) => (await httpsCallable(functions, name)(payload)).data as T;
 export const commandId = () => crypto.randomUUID().replaceAll("-", "_");
 export const partnerApplicationService = {
   load: () => call<any>("getMyPartnerApplicationV2"),

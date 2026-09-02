@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const adminRoot = join(root, 'src', 'components', 'admin');
+const clientRoot = join(root, 'src');
 const walk = (directory) => readdirSync(directory).flatMap((entry) => {
   const path = join(directory, entry);
   return statSync(path).isDirectory() ? walk(path) : [path];
@@ -14,10 +14,11 @@ assert.match(firebaseConfig, /export const FUNCTIONS_REGION = 'asia-southeast1';
 assert.match(firebaseConfig, /getFunctions\(app, FUNCTIONS_REGION\)/);
 assert.doesNotMatch(firebaseConfig, /getFunctions\(app\)(?!,)/);
 
-const rawClients = walk(adminRoot)
+const rawClients = walk(clientRoot)
   .filter((path) => /\.(ts|tsx)$/.test(path))
+  .filter((path) => path !== join(root, 'src', 'firebaseConfig.ts'))
   .filter((path) => /getFunctions\s*\(/.test(readFileSync(path, 'utf8')));
-assert.deepEqual(rawClients, [], `Admin must use the shared regional client: ${rawClients.join(', ')}`);
+assert.deepEqual(rawClients, [], `The Admin client must use the shared regional client: ${rawClients.join(', ')}`);
 
 const app = readFileSync(join(root, 'src', 'App.tsx'), 'utf8');
 const activeBookingRoute = app.match(/\{activeArea === 'bookings'[^\n]*/)?.[0] || '';

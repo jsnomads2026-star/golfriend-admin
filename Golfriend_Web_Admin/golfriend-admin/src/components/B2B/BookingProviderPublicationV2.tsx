@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
+import { functions } from '../../firebaseConfig';
 
 type Copy = {
   title: string;
@@ -184,7 +185,7 @@ const COPY: Record<string, Copy> = {
   },
 };
 
-const call = async (name: string, data: unknown) => (await httpsCallable(getFunctions(), name)(data)).data as any;
+const call = async (name: string, data: unknown) => (await httpsCallable(functions, name)(data)).data as any;
 const command = () => crypto.randomUUID().replaceAll("-", "_");
 const labelFor = (map: Record<string, string>, raw: string, fallback: string) => (map[raw] || fallback || raw);
 

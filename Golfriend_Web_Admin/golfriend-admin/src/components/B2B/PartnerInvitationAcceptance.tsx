@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {getFunctions, httpsCallable} from "firebase/functions";
+import {httpsCallable} from "firebase/functions";
+import { functions } from '../../firebaseConfig';
 import {useLocale} from "../../i18n/hooks";
 import EnterpriseInvitationAcceptance from "./enterpriseAuthority/EnterpriseInvitationAcceptance";
 
@@ -16,6 +17,6 @@ function LegacyPartnerInvitation({invitationId}:{invitationId:string|null}) {
   const copy=COPY[useLocale()]||EN;
   const [state,setState]=useState<"idle"|"busy"|"done"|"error">("idle");
   if(!invitationId)return null;
-  const accept=async()=>{setState("busy");try{await httpsCallable(getFunctions(),"acceptPartnerInvitation")({invitationId,commandId:crypto.randomUUID().replaceAll("-","_")});setState("done");location.assign("/partner")}catch{setState("error")}};
+  const accept=async()=>{setState("busy");try{await httpsCallable(functions,"acceptPartnerInvitation")({invitationId,commandId:crypto.randomUUID().replaceAll("-","_")});setState("done");location.assign("/partner")}catch{setState("error")}};
   return <section className="partner-status" aria-live="polite"><h2>{copy.title}</h2><p>{copy.lead}</p>{state==="error"&&<p role="alert">{copy.error}</p>}{state==="done"?<p role="status">{copy.done}</p>:<button disabled={state==="busy"} onClick={()=>void accept()}>{state==="busy"?copy.busy:copy.accept}</button>}</section>;
 }

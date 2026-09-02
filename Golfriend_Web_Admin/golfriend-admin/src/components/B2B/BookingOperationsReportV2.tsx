@@ -1,7 +1,8 @@
-import{useCallback,useEffect,useState}from"react";import{getFunctions,httpsCallable}from"firebase/functions";
+import{useCallback,useEffect,useState}from"react";import{httpsCallable}from"firebase/functions";
+import { functions } from '../../firebaseConfig';
 
 const STATUS_OPTIONS=["pending","alternative_proposed","confirmed","completed","cancelled","expired"];
-const call=async(n:string,d:any)=>(await httpsCallable(getFunctions(),n)(d)).data as any,
+const call=async(n:string,d:any)=>(await httpsCallable(functions,n)(d)).data as any,
   command=()=>crypto.randomUUID().replaceAll("-", "_");
 
 const EN={

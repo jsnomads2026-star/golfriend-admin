@@ -1,4 +1,5 @@
-import {getFunctions, httpsCallable} from "firebase/functions";
+import {httpsCallable} from "firebase/functions";
+import { functions } from '../../firebaseConfig';
 import {commandId} from "./partnerApplicationService";
 
 export type CourseOnboardingDraft = {
@@ -10,7 +11,7 @@ export type CourseOnboardingDraft = {
 };
 
 const call = async <T>(name: string, payload: Record<string, unknown> = {}) =>
-  (await httpsCallable(getFunctions(), name)(payload)).data as T;
+  (await httpsCallable(functions, name)(payload)).data as T;
 
 export const verifiedCourseOnboardingService = {
   load: () => call<any>("getMyVerifiedCourseOnboardingV2"),

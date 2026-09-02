@@ -1,4 +1,5 @@
-import {getFunctions, httpsCallable} from "firebase/functions";
+import {httpsCallable} from "firebase/functions";
+import { functions } from '../../../firebaseConfig';
 import {emptyUnavailableProjection, isEnterpriseAuthorityProjection, type AuthorityScope, type EnterpriseAuthorityProjection, type EnterpriseRole} from "./organizationAuthorityModel";
 
 export const ORGANIZATION_AUTHORITY_CALLABLES = Object.freeze({
@@ -25,7 +26,7 @@ export interface AuthorityCommandResult {
 
 type Callable = <T>(name: string, payload: Record<string, unknown>) => Promise<T>;
 const firebaseCall: Callable = async <T>(name: string, payload: Record<string, unknown>) =>
-  (await httpsCallable(getFunctions(), name)(payload)).data as T;
+  (await httpsCallable(functions, name)(payload)).data as T;
 export const newAuthorityCommandId = () => crypto.randomUUID().replaceAll("-", "_");
 const envelope = (organizationId: string, expectedVersion: number, stableCommandId = newAuthorityCommandId()): AuthorityCommandEnvelope => ({
   schema: "golfriend.enterprise-organization-authority.command.v1",

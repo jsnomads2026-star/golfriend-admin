@@ -13,8 +13,8 @@
 // ==========================================
 import { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../firebaseConfig';
 import { useT, useLocale } from '../../i18n/hooks.ts';
 import { DOCUMENTS } from '../../i18n/partner/documents.ts';
 import { INTAKE } from '../../i18n/partner/intake.ts';
@@ -67,7 +67,7 @@ export default function PartnerDocuments({ partnerUid }: { partnerUid: string })
     if (!consent || !attest) { setNote({ msg: t('needConsentAttest'), type: 'error' }); return; }
     setSubmitting(true); setNote(null);
     try {
-      const fn = httpsCallable(getFunctions(), 'submitPartnerApplication');
+      const fn = httpsCallable(functions, 'submitPartnerApplication');
       const res = await fn({ checklist, consentAccepted: consent, attestationAccepted: attest, locale });
       if (!(res.data as { success?: boolean })?.success) throw new Error('not accepted');
       // Keep the onboarding hub's local consent signal in sync (client-side only).

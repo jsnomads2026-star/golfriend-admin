@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebaseConfig';
 
 type Course = Record<string, any>;
 type Preview = {
@@ -89,7 +89,7 @@ export default function CourseSeeder() {
     setWorking('preview');
     setPreview(null);
     try {
-      const call = httpsCallable(getFunctions(), 'previewCourseRegionImport');
+      const call = httpsCallable(functions, 'previewCourseRegionImport');
       const response = await call({latitude, longitude, radiusKm: Number(radiusKm)});
       const result = response.data as Preview;
       setPreview(result);
@@ -105,7 +105,7 @@ export default function CourseSeeder() {
     if (!preview) return;
     setWorking('commit');
     try {
-      const call = httpsCallable(getFunctions(), 'commitCourseRegionImport');
+      const call = httpsCallable(functions, 'commitCourseRegionImport');
       const response = await call({jobId: preview.jobId});
       const result = response.data as CommitResult;
       addLog(`Commit complete: ${result.added} added, ${result.skippedExisting} skipped, ${result.reviewRequired} need review, ${result.failed} failed, ${result.apiCallsUsed} API calls used.`);
@@ -128,7 +128,7 @@ export default function CourseSeeder() {
     }
     setWorking('manual');
     try {
-      const setManualCoordinates = httpsCallable(getFunctions(), 'setManualCourseCoordinates');
+      const setManualCoordinates = httpsCallable(functions, 'setManualCourseCoordinates');
       await setManualCoordinates({courseId, latitude, longitude});
       setManualGps((current) => ({...current, [courseId]: ''}));
       addLog(`Saved audited coordinator coordinates for ${course.clubName || course.name}.`);

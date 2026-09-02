@@ -3,8 +3,8 @@
 // ==========================================
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../firebaseConfig';
 
 interface Player {
   uid: string;
@@ -85,7 +85,7 @@ export default function CourseTeeSheet() {
     try {
       // 🔒 SERVER-AUTHORITATIVE: reputation/moderation writes go through the
       // reportPlayerIncident Cloud Function (authorized, fixed penalty, audited).
-      const reportPlayerIncident = httpsCallable(getFunctions(), 'reportPlayerIncident');
+      const reportPlayerIncident = httpsCallable(functions, 'reportPlayerIncident');
       const res: any = await reportPlayerIncident({
         targetUid: uid,
         gameId: selectedFlight.id,
