@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { defineString } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { isActiveStaff } from "./authority.js";
 import {
   assertNonFinancial,
@@ -17,6 +18,29 @@ if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore(),
   notifier = defineString("PARTNER_NOTIFICATION_PROVIDER", { default: "" }),
   now = () => admin.firestore.FieldValue.serverTimestamp();
+const bookingRoundId = (booking: any) => typeof booking?.roundId === "string" && booking.roundId.trim() ? booking.roundId : null;
+const bookingSnapshotRef = (booking: any) => typeof booking?.submissionSnapshotRef === "string" && booking.submissionSnapshotRef.trim() ? booking.submissionSnapshotRef : null;
+const projectionVersion = (booking: any, nextVersion: number) => Number.isInteger(booking?.projectionVersion) && booking.projectionVersion >= 0 ? booking.projectionVersion + 1 : nextVersion;
+const transitionRecord = (input: { receiptId: string; bookingId: string; booking: any; kind: string; status: string; actor: string; actorRole: string; projectionVersion: number; alternativeOffer?: any; partnerMessage?: string | null; partnerVisible?: boolean }) => ({
+  schema: "golfriend.booking-transition.v2", transitionId: input.receiptId, receiptId: input.receiptId,
+  bookingId: input.bookingId, roundId: bookingRoundId(input.booking), actor: input.actor, actorUid: input.actor,
+  actorRole: input.actorRole, kind: input.kind, status: input.status, submissionSnapshotRef: bookingSnapshotRef(input.booking),
+  projectionVersion: input.projectionVersion, alternativeOffer: input.alternativeOffer || null,
+  partnerMessage: input.partnerMessage || null, partnerVisible: input.partnerVisible === true,
+  timestamp: now(), createdAt: now(), immutable: true,
+});
+const localDateTime = (timeZone: string, at: Date) => {
+  try {
+    const fields = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(at).filter((part) => ["year", "month", "day", "hour", "minute"].includes(part.type)).map((part) => [part.type, part.value]));
+    return `${fields.year}-${fields.month}-${fields.day}T${fields.hour}:${fields.minute}`;
+  } catch { return null; }
+};
+const bookingIsPast = (booking: any, at: Date) => {
+  const date = typeof booking?.date === "string" ? booking.date : "", time = typeof booking?.time === "string" ? booking.time : "", zone = typeof booking?.timeZone === "string" ? booking.timeZone : "";
+  const current = localDateTime(zone, at);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && current !== null && `${date}T${time}` < current;
+};
 function uid(r: any) {
   if (!r.auth?.uid)
     throw new HttpsError("unauthenticated", "Sign in required.");
@@ -54,6 +78,9 @@ const safeBooking = (x: any) => ({
   version: x.version,
   memberDisplayName: x.memberDisplayName || "Golfriend member",
   alternative: x.alternative || null,
+  alternativeOffer: x.alternativeOffer || null,
+  projectionVersion: Number.isInteger(x.projectionVersion) ? x.projectionVersion : null,
+  submissionSnapshotRef: typeof x.submissionSnapshotRef === "string" ? x.submissionSnapshotRef : null,
   lastMessageAt: x.lastMessageAt || null,
 });
 export const requestPlayBookingV2 = onCall(
@@ -103,6 +130,7 @@ export const requestPlayBookingV2 = onCall(
       if (booked >= capacity)
         throw new HttpsError("resource-exhausted", "Availability full.");
       const receiptId = bookingReceiptId(id, cmd);
+      const submissionSnapshotRef = `bookings/${id}/submission_snapshots/${receiptId}`;
       tx.update(slotRef, { bookedCount: booked + 1, updatedAt: now() });
       tx.create(ref, {
         schema: BOOKING_SCHEMA,
@@ -117,19 +145,23 @@ export const requestPlayBookingV2 = onCall(
         memberDisplayName: user.data()?.nickname || "Golfriend member",
         status: "pending",
         version: 1,
+        projectionVersion: 1,
         commandId: cmd,
+        submissionSnapshotRef,
         providerNeutral: true,
         financialFields: false,
         createdAt: now(),
       });
-      tx.create(db.collection("play_booking_audits").doc(receiptId), {
-        receiptId,
-        bookingId: id,
-        kind: "requested",
-        actorUid: memberUid,
-        actorRole: "member",
-        createdAt: now(),
+      tx.create(ref.collection("submission_snapshots").doc(receiptId), {
+        schema: "golfriend.booking-submission-snapshot.v2", submissionSnapshotRef, snapshotId: receiptId,
+        bookingId: id, commandId: cmd, memberUid, slotId, courseId: slot.data()?.courseId,
+        date: slot.data()?.date, time: slot.data()?.time, timeZone: slot.data()?.timeZone,
+        projectionVersion: 1, immutable: true, createdAt: now(),
       });
+      tx.create(db.collection("play_booking_audits").doc(receiptId), transitionRecord({
+        receiptId, bookingId: id, booking: { roundId: null, submissionSnapshotRef }, kind: "requested", status: "pending",
+        actor: memberUid, actorRole: "member", projectionVersion: 1,
+      }));
       return {
         success: true,
         bookingId: id,
@@ -187,8 +219,8 @@ export const managePlayBookingV2 = onCall(
           "permission-denied",
           "Active claimed course required.",
         );
-    let status: string;
-    let alternative: ReturnType<typeof validateAlternative> | null = null;
+      let status: string;
+      let alternative: ReturnType<typeof validateAlternative> | null = null;
       try {
         status = transition(String(booking.data()?.status), action);
         if (action === "alternative") alternative = validateAlternative(r.data);
@@ -199,11 +231,25 @@ export const managePlayBookingV2 = onCall(
         );
       }
       const next = version(Number(booking.data()?.version || 0), expected),
+        nextProjectionVersion = projectionVersion(booking.data(), next),
         receiptId = bookingReceiptId(id, cmd),
         slotRef = db
           .collection("tee_time_slots")
           .doc(String(booking.data()?.slotId));
-      if (action === "cancel") {
+      let alternativeOffer: any = null;
+      if (action === "alternative" && alternative) {
+        const alternativeSlot = await tx.get(db.collection("tee_time_slots").doc(alternative.slotId));
+        const alternativeClaim = alternativeSlot.exists ? await tx.get(db.collection("course_operators").doc(String(alternativeSlot.data()?.courseId))) : null;
+        if (!alternativeSlot.exists || alternativeSlot.data()?.organizationId !== m.organizationId || alternativeSlot.data()?.status !== "open" || Number(alternativeSlot.data()?.bookedCount || 0) >= Number(alternativeSlot.data()?.capacity || 0) || !alternativeClaim?.exists || alternativeClaim.data()?.organizationId !== m.organizationId || alternativeClaim.data()?.status !== "active") {
+          throw new HttpsError("failed-precondition", "Alternative availability is not an active claimed open slot.");
+        }
+        alternativeOffer = {
+          transitionId: receiptId, slotId: alternative.slotId, courseId: String(alternativeSlot.data()?.courseId || ""),
+          proposedTime: { date: alternativeSlot.data()?.date || null, time: alternativeSlot.data()?.time || null, timeZone: alternativeSlot.data()?.timeZone || null },
+          capacity: Number(alternativeSlot.data()?.capacity || 0), partnerMessage: alternative.partnerMessage,
+        };
+      }
+      if (action === "cancel" || action === "decline") {
         const slot = await tx.get(slotRef);
         if (slot.exists)
           tx.update(slotRef, {
@@ -211,20 +257,22 @@ export const managePlayBookingV2 = onCall(
             updatedAt: now(),
           });
       }
-      tx.update(ref, { status, version: next, alternative, updatedAt: now() });
-      tx.create(db.collection("play_booking_audits").doc(receiptId), {
-        receiptId,
-        bookingId: id,
-        kind: action,
-        actorUid: caller,
-        actorRole: m.role,
-        createdAt: now(),
+      tx.update(ref, {
+        status, version: next, projectionVersion: nextProjectionVersion,
+        alternative: alternativeOffer ? { slotId: alternativeOffer.slotId, message: alternativeOffer.partnerMessage || "" } : null,
+        alternativeOffer, updatedAt: now(),
       });
+      const kind = action === "alternative" ? "alternative_offered" : action === "decline" ? "declined" : action === "cancel" ? "cancelled" : action;
+      tx.create(db.collection("play_booking_audits").doc(receiptId), transitionRecord({
+        receiptId, bookingId: id, booking: booking.data(), kind, status, actor: caller, actorRole: m.role,
+        projectionVersion: nextProjectionVersion, alternativeOffer, partnerMessage: alternativeOffer?.partnerMessage || null,
+      }));
       return {
         success: true,
         bookingId: id,
         status,
         version: next,
+        projectionVersion: nextProjectionVersion,
         receiptId,
         notificationStatus: notifier.value()
           ? "queued"
@@ -233,6 +281,65 @@ export const managePlayBookingV2 = onCall(
     });
   },
 );
+export const respondToPlayBookingAlternativeV2 = onCall(
+  { enforceAppCheck: true },
+  async (r) => {
+    const caller = uid(r), cmd = command(r), id = String(r.data?.bookingId || ""), expected = validateVersion(r.data?.expectedVersion), answer = String(r.data?.answer || "");
+    if (!["accept", "decline"].includes(answer)) throw new HttpsError("invalid-argument", "Alternative response invalid.");
+    const ref = db.collection("bookings").doc(id);
+    return db.runTransaction(async (tx) => {
+      const booking = await tx.get(ref), current = booking.data();
+      if (!booking.exists || current?.memberUid !== caller || current?.status !== "alternative_proposed") throw new HttpsError("permission-denied", "Alternative response unavailable.");
+      const offer = current?.alternativeOffer;
+      if (!offer || typeof offer.slotId !== "string" || typeof offer.transitionId !== "string") throw new HttpsError("failed-precondition", "Authoritative alternative offer unavailable.");
+      const next = version(Number(current.version || 0), expected), nextProjectionVersion = projectionVersion(current, next), receiptId = bookingReceiptId(id, cmd), originalSlot = db.collection("tee_time_slots").doc(String(current.slotId));
+      const [original, alternativeSlot] = await Promise.all([tx.get(originalSlot), tx.get(db.collection("tee_time_slots").doc(offer.slotId))]);
+      if (answer === "accept") {
+        if (offer.slotId === current.slotId || !alternativeSlot.exists || alternativeSlot.data()?.organizationId !== current.organizationId || alternativeSlot.data()?.status !== "open" || Number(alternativeSlot.data()?.bookedCount || 0) >= Number(alternativeSlot.data()?.capacity || 0)) throw new HttpsError("failed-precondition", "Alternative availability is no longer available.");
+        if (original.exists) tx.update(originalSlot, { bookedCount: Math.max(0, Number(original.data()?.bookedCount || 0) - 1), updatedAt: now() });
+        tx.update(alternativeSlot.ref, { bookedCount: Number(alternativeSlot.data()?.bookedCount || 0) + 1, updatedAt: now() });
+        tx.update(ref, { status: "pending", slotId: offer.slotId, courseId: offer.courseId || null, date: offer.proposedTime?.date || null, time: offer.proposedTime?.time || null, timeZone: offer.proposedTime?.timeZone || null, version: next, projectionVersion: nextProjectionVersion, alternative: null, alternativeOffer: null, acceptedAlternativeOffer: offer, updatedAt: now() });
+      } else {
+        if (original.exists) tx.update(originalSlot, { bookedCount: Math.max(0, Number(original.data()?.bookedCount || 0) - 1), updatedAt: now() });
+        tx.update(ref, { status: "declined", version: next, projectionVersion: nextProjectionVersion, alternative: null, alternativeOffer: null, updatedAt: now() });
+      }
+      const kind = answer === "accept" ? "alternative_accepted" : "alternative_declined";
+      const status = answer === "accept" ? "pending" : "declined";
+      tx.create(db.collection("play_booking_audits").doc(receiptId), transitionRecord({ receiptId, bookingId: id, booking: current, kind, status, actor: caller, actorRole: "member", projectionVersion: nextProjectionVersion, alternativeOffer: offer, partnerVisible: true }));
+      return { success: true, bookingId: id, status, version: next, projectionVersion: nextProjectionVersion, receiptId, restarted: false };
+    });
+  },
+);
+export const withdrawPlayBookingV2 = onCall(
+  { enforceAppCheck: true },
+  async (r) => {
+    const caller = uid(r), cmd = command(r), id = String(r.data?.bookingId || ""), expected = validateVersion(r.data?.expectedVersion), ref = db.collection("bookings").doc(id);
+    return db.runTransaction(async (tx) => {
+      const booking = await tx.get(ref), current = booking.data();
+      if (!booking.exists || current?.memberUid !== caller) throw new HttpsError("permission-denied", "Booking withdrawal unavailable.");
+      let status: string;
+      try { status = transition(String(current?.status), "withdraw"); } catch { throw new HttpsError("failed-precondition", "Booking withdrawal invalid."); }
+      const next = version(Number(current?.version || 0), expected), nextProjectionVersion = projectionVersion(current, next), receiptId = bookingReceiptId(id, cmd), slotRef = db.collection("tee_time_slots").doc(String(current?.slotId)), slot = await tx.get(slotRef);
+      if (slot.exists) tx.update(slotRef, { bookedCount: Math.max(0, Number(slot.data()?.bookedCount || 0) - 1), updatedAt: now() });
+      tx.update(ref, { status, version: next, projectionVersion: nextProjectionVersion, updatedAt: now() });
+      tx.create(db.collection("play_booking_audits").doc(receiptId), transitionRecord({ receiptId, bookingId: id, booking: current, kind: "player_withdrawn", status, actor: caller, actorRole: "member", projectionVersion: nextProjectionVersion, partnerVisible: true }));
+      return { success: true, bookingId: id, status, version: next, projectionVersion: nextProjectionVersion, receiptId, restarted: false };
+    });
+  },
+);
+export const expirePlayBookingsV2 = onSchedule({ schedule: "every 15 minutes", timeZone: "UTC" }, async () => {
+  const candidates = await db.collection("bookings").where("status", "in", ["pending", "alternative_proposed"]).limit(500).get();
+  await Promise.all(candidates.docs.filter((doc) => bookingIsPast(doc.data(), new Date())).map(async (doc) => {
+    await db.runTransaction(async (tx) => {
+      const booking = await tx.get(doc.ref), current = booking.data();
+      if (!booking.exists || !["pending", "alternative_proposed"].includes(String(current?.status)) || !bookingIsPast(current, new Date())) return;
+      const next = Number(current?.version || 0) + 1, nextProjectionVersion = projectionVersion(current, next), receiptId = bookingReceiptId(doc.id, `expire_${next}`), slotRef = db.collection("tee_time_slots").doc(String(current?.slotId)), slot = await tx.get(slotRef);
+      if (slot.exists) tx.update(slotRef, { bookedCount: Math.max(0, Number(slot.data()?.bookedCount || 0) - 1), updatedAt: now() });
+      tx.update(doc.ref, { status: "expired", version: next, projectionVersion: nextProjectionVersion, updatedAt: now() });
+      tx.create(db.collection("play_booking_audits").doc(receiptId), transitionRecord({ receiptId, bookingId: doc.id, booking: current, kind: "expired", status: "expired", actor: "system", actorRole: "system", projectionVersion: nextProjectionVersion }));
+    });
+  }));
+});
 export const sendPlayBookingMessageV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {

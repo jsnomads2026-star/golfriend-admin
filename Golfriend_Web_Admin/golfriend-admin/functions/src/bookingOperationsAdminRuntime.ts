@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { isActiveStaff } from './authority.js';
-import { correctionRequestId, linkedRoundSnapshot, normalizeCorrectionRequest, BOOKING_OPERATIONS_ADMIN_SCHEMA } from './bookingOperationsAdminDomain.js';
+import { bookingTransitionSnapshot, correctionRequestId, linkedRoundSnapshot, normalizeCorrectionRequest, BOOKING_OPERATIONS_ADMIN_SCHEMA } from './bookingOperationsAdminDomain.js';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -18,16 +18,6 @@ async function staff(request: any) {
 const stringOrNull = (value: unknown) => typeof value === 'string' && value.trim() ? value : null;
 const timestampOrNull = (value: unknown) => value ?? null;
 
-function auditEvent(value: Record<string, any>) {
-  return {
-    receiptId: stringOrNull(value.receiptId),
-    kind: stringOrNull(value.kind) || stringOrNull(value.action) || 'transition',
-    actorUid: stringOrNull(value.actorUid) || stringOrNull(value.byUid),
-    actorRole: stringOrNull(value.actorRole) || stringOrNull(value.byRole),
-    at: timestampOrNull(value.createdAt) || timestampOrNull(value.at),
-  };
-}
-
 export const getAdminBookingOperationsV2 = onCall({ enforceAppCheck: true }, async (request) => {
   await staff(request);
   const filters = request.data?.filters || {};
@@ -40,9 +30,10 @@ export const getAdminBookingOperationsV2 = onCall({ enforceAppCheck: true }, asy
   ]);
   const auditsByBooking = new Map<string, any[]>();
   audits.docs.forEach((doc) => {
-    const event = auditEvent(doc.data());
-    const bookingId = stringOrNull(doc.data().bookingId);
-    if (bookingId) auditsByBooking.set(bookingId, [...(auditsByBooking.get(bookingId) || []), event]);
+    const value = doc.data();
+    const bookingId = stringOrNull(value.bookingId);
+    const event = bookingId ? bookingTransitionSnapshot(bookingId, { ...value, receiptId: stringOrNull(value.receiptId) || doc.id }) : null;
+    if (bookingId && event) auditsByBooking.set(bookingId, [...(auditsByBooking.get(bookingId) || []), event]);
   });
   const correctionsByBooking = new Map<string, any[]>();
   corrections.docs.forEach((doc) => {
@@ -54,7 +45,7 @@ export const getAdminBookingOperationsV2 = onCall({ enforceAppCheck: true }, asy
   });
   const rows = bookings.docs.map((doc) => {
     const booking = doc.data() as Record<string, any>;
-    const transitions = (auditsByBooking.get(doc.id) || []).sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+    const transitions = (auditsByBooking.get(doc.id) || []).sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
     return {
       bookingId: doc.id,
       lifecycleState: stringOrNull(booking.status) || 'unknown',
@@ -62,11 +53,13 @@ export const getAdminBookingOperationsV2 = onCall({ enforceAppCheck: true }, asy
       submission: {
         commandId: stringOrNull(booking.commandId),
         submittedAt: timestampOrNull(booking.createdAt),
+        submissionSnapshotRef: stringOrNull(booking.submissionSnapshotRef),
         memberDisplayName: stringOrNull(booking.memberDisplayName) || 'Golfriend member',
       },
+      projectionVersion: Number.isInteger(booking.projectionVersion) ? Number(booking.projectionVersion) : null,
       schedule: { courseId: stringOrNull(booking.courseId), slotId: stringOrNull(booking.slotId), date: stringOrNull(booking.date), time: stringOrNull(booking.time), timeZone: stringOrNull(booking.timeZone) },
-      partnerResponse: { state: stringOrNull(booking.status), alternative: booking.alternative || null, respondedAt: timestampOrNull(booking.respondedAt), respondedByUid: stringOrNull(booking.respondedByUid), cancelledAt: timestampOrNull(booking.cancelledAt), cancelledByUid: stringOrNull(booking.cancelledByUid) },
-      playerChangeEvents: transitions.filter((event) => event.actorRole === 'member'),
+      partnerResponse: { state: stringOrNull(booking.status), alternativeOffer: booking.alternativeOffer || null, partnerMessage: stringOrNull(booking.alternativeOffer?.partnerMessage), respondedAt: timestampOrNull(booking.respondedAt), respondedByUid: stringOrNull(booking.respondedByUid), cancelledAt: timestampOrNull(booking.cancelledAt), cancelledByUid: stringOrNull(booking.cancelledByUid) },
+      playerChangeEvents: transitions.filter((event) => event.partnerVisible === true),
       transitions,
       correctionHistory: correctionsByBooking.get(doc.id) || [],
     };

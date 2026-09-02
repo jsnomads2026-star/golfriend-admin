@@ -7,21 +7,30 @@ type BookingRow = {
   bookingId: string;
   lifecycleState: string;
   linkedRound: { roundId: string | null; lifecycleState: string | null; source: string };
-  submission: { commandId: string | null; submittedAt: unknown; memberDisplayName: string };
+  submission: { commandId: string | null; submittedAt: unknown; submissionSnapshotRef: string | null; memberDisplayName: string };
+  projectionVersion: number | null;
   schedule: { courseId: string | null; slotId: string | null; date: string | null; time: string | null; timeZone: string | null };
-  partnerResponse: { state: string | null; alternative: unknown; respondedAt: unknown; respondedByUid: string | null; cancelledAt: unknown; cancelledByUid: string | null };
-  playerChangeEvents: Array<{ kind: string; actorUid: string | null; actorRole: string | null; at: unknown }>;
-  transitions: Array<{ kind: string; actorUid: string | null; actorRole: string | null; at: unknown }>;
+  partnerResponse: { state: string | null; alternativeOffer: AlternativeOffer | null; partnerMessage: string | null; respondedAt: unknown; respondedByUid: string | null; cancelledAt: unknown; cancelledByUid: string | null };
+  playerChangeEvents: Transition[];
+  transitions: Transition[];
   correctionHistory: Array<{ correctionRequestId: string; reason: string | null; actorUid: string | null; actorRole: string | null; createdAt: unknown; immutable: boolean }>;
 };
 
-const STATUS_OPTIONS = ['', 'pending', 'alternative_proposed', 'confirmed', 'completed', 'cancelled', 'expired'];
+type AlternativeOffer = { transitionId?: string | null; slotId?: string | null; courseId?: string | null; proposedTime?: { date?: string | null; time?: string | null; timeZone?: string | null } | null; capacity?: number | null; partnerMessage?: string | null };
+type Transition = { transitionId: string | null; bookingId: string; roundId: string | null; actor: string | null; actorRole: string | null; timestamp: unknown; submissionSnapshotRef: string | null; projectionVersion: number | null; kind: string; status: string | null; partnerMessage: string | null; alternativeOffer: AlternativeOffer | null; partnerVisible: boolean };
+
+const STATUS_OPTIONS = ['', 'pending', 'alternative_proposed', 'confirmed', 'completed', 'declined', 'cancelled', 'expired', 'player_withdrawn'];
 const commandId = () => `admin_${crypto.randomUUID().replaceAll('-', '_')}`;
 const value = (input: unknown) => {
   if (!input) return 'Not recorded';
   if (typeof input === 'string') return input;
   if (typeof input === 'object' && input && 'toDate' in input && typeof (input as any).toDate === 'function') return (input as any).toDate().toLocaleString();
   return String(input);
+};
+const offerValue = (offer: AlternativeOffer | null) => {
+  if (!offer) return 'None';
+  const when = offer.proposedTime ? `${offer.proposedTime.date || 'No date'} ${offer.proposedTime.time || ''} ${offer.proposedTime.timeZone || ''}`.trim() : 'Time not recorded';
+  return `transition ${offer.transitionId || 'Not recorded'} · course ${offer.courseId || 'Not recorded'} · ${when} · capacity ${offer.capacity ?? 'Not recorded'}`;
 };
 
 export default function BookingOperationsV2() {
@@ -85,11 +94,11 @@ export default function BookingOperationsV2() {
       <h2>{row.bookingId}</h2>
       <p><strong>Booking lifecycle:</strong> {row.lifecycleState} · <strong>Course:</strong> {row.schedule.courseId || 'Not recorded'} · <strong>Slot:</strong> {row.schedule.slotId || 'Not recorded'} · {row.schedule.date || 'No date'} {row.schedule.time || ''} {row.schedule.timeZone || ''}</p>
       <p><strong>Linked round lifecycle:</strong> {row.linkedRound.roundId ? `${row.linkedRound.roundId} · ${row.linkedRound.lifecycleState || 'State not recorded'}` : 'No linked round record was returned for this booking.'}</p>
-      <p><strong>Submission snapshot:</strong> {row.submission.memberDisplayName} · command {row.submission.commandId || 'Not recorded'} · submitted {value(row.submission.submittedAt)}</p>
-      <p><strong>Partner response:</strong> {row.partnerResponse.state || 'Not recorded'} · alternative {row.partnerResponse.alternative ? JSON.stringify(row.partnerResponse.alternative) : 'None'} · responded {value(row.partnerResponse.respondedAt)} by {row.partnerResponse.respondedByUid || 'Actor not recorded'} · cancelled {value(row.partnerResponse.cancelledAt)} by {row.partnerResponse.cancelledByUid || 'Actor not recorded'}</p>
+      <p><strong>Submission snapshot:</strong> {row.submission.memberDisplayName} · command {row.submission.commandId || 'Not recorded'} · ref {row.submission.submissionSnapshotRef || 'Not recorded'} · submitted {value(row.submission.submittedAt)} · <strong>Projection version:</strong> {row.projectionVersion ?? 'Not recorded'}</p>
+      <p><strong>Partner response:</strong> {row.partnerResponse.state || 'Not recorded'} · alternative offer {offerValue(row.partnerResponse.alternativeOffer)} · partner message {row.partnerResponse.partnerMessage || 'None'} · responded {value(row.partnerResponse.respondedAt)} by {row.partnerResponse.respondedByUid || 'Actor not recorded'} · cancelled {value(row.partnerResponse.cancelledAt)} by {row.partnerResponse.cancelledByUid || 'Actor not recorded'}</p>
       <details><summary>Lifecycle transitions and player-change events</summary>
-        {row.transitions.length === 0 ? <p>No immutable transition receipts were returned.</p> : <ul>{row.transitions.map((event, index) => <li key={`${event.kind}-${index}`}>{event.kind} · {value(event.at)} · {event.actorRole || 'Actor role not recorded'} · {event.actorUid || 'Actor UID not recorded in this immutable receipt'}</li>)}</ul>}
-        <p><strong>Explicit partner-visible player-change events:</strong> {row.playerChangeEvents.length ? row.playerChangeEvents.map((event) => `${event.kind} (${value(event.at)})`).join(', ') : 'None recorded.'}</p>
+        {row.transitions.length === 0 ? <p>No immutable transition receipts were returned.</p> : <ul>{row.transitions.map((event, index) => <li key={event.transitionId || `${event.kind}-${index}`}><strong>{event.kind}</strong> → {event.status || 'State not recorded'} · transition {event.transitionId || 'Not recorded'} · booking {event.bookingId} · round {event.roundId || 'No linked round recorded'} · {value(event.timestamp)} · actor {event.actor || 'Not recorded'} ({event.actorRole || 'Role not recorded'}) · submission {event.submissionSnapshotRef || 'Not recorded'} · projection {event.projectionVersion ?? 'Not recorded'} · alternative {offerValue(event.alternativeOffer)} · partner message {event.partnerMessage || 'None'}</li>)}</ul>}
+        <p><strong>Explicit partner-visible player-change events:</strong> {row.playerChangeEvents.length ? row.playerChangeEvents.map((event) => `${event.kind} (${value(event.timestamp)})`).join(', ') : 'None recorded.'}</p>
       </details>
       <details><summary>Immutable correction and audit history</summary>
         {row.correctionHistory.length === 0 ? <p>No correction requests recorded.</p> : <ul>{row.correctionHistory.map((item) => <li key={item.correctionRequestId}>{item.correctionRequestId} · {item.reason || 'No reason recorded'} · {value(item.createdAt)} · {item.actorRole || 'Actor role not recorded'} · {item.actorUid || 'Actor UID not recorded'} · {item.immutable ? 'immutable' : 'integrity state unavailable'}</li>)}</ul>}

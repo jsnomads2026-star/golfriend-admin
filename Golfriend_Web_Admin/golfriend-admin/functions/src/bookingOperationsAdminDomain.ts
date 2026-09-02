@@ -28,3 +28,26 @@ export function linkedRoundSnapshot(booking: Record<string, unknown>) {
       : null;
   return { roundId, lifecycleState, source: roundId ? 'booking_snapshot' : 'none' };
 }
+
+const stringOrNull = (value: unknown) => typeof value === 'string' && value.trim() ? value : null;
+const timestampOrNull = (value: unknown) => value ?? null;
+const nonNegativeIntegerOrNull = (value: unknown) => Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
+
+export function bookingTransitionSnapshot(bookingId: string, value: Record<string, unknown>) {
+  const alternativeOffer = value.alternativeOffer && typeof value.alternativeOffer === 'object' ? value.alternativeOffer : null;
+  return {
+    transitionId: stringOrNull(value.transitionId) || stringOrNull(value.receiptId),
+    bookingId: stringOrNull(value.bookingId) || bookingId,
+    roundId: stringOrNull(value.roundId),
+    actor: stringOrNull(value.actor) || stringOrNull(value.actorUid) || stringOrNull(value.byUid),
+    actorRole: stringOrNull(value.actorRole) || stringOrNull(value.byRole),
+    timestamp: timestampOrNull(value.timestamp) || timestampOrNull(value.createdAt) || timestampOrNull(value.at),
+    submissionSnapshotRef: stringOrNull(value.submissionSnapshotRef),
+    projectionVersion: nonNegativeIntegerOrNull(value.projectionVersion),
+    kind: stringOrNull(value.kind) || stringOrNull(value.action) || 'transition',
+    status: stringOrNull(value.status),
+    partnerMessage: stringOrNull(value.partnerMessage),
+    alternativeOffer,
+    partnerVisible: value.partnerVisible === true,
+  };
+}

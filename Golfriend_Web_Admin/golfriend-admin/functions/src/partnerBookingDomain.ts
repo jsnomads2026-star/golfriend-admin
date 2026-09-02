@@ -4,7 +4,10 @@ export const BOOKING_SCHEMA = "golfriend.play-booking.v2",
     "pending",
     "alternative_proposed",
     "confirmed",
+    "declined",
     "cancelled",
+    "expired",
+    "player_withdrawn",
     "completed",
   ] as const,
   FINANCIAL_FIELDS = [
@@ -32,6 +35,7 @@ export function permissions(role: string) {
     ),
     confirm: ["primary_owner", "manager", "course_staff"].includes(role),
     alternative: ["primary_owner", "manager", "course_staff"].includes(role),
+    decline: ["primary_owner", "manager", "course_staff"].includes(role),
     cancel: ["primary_owner", "manager"].includes(role),
     complete: ["primary_owner", "manager", "course_staff"].includes(role),
   };
@@ -40,14 +44,20 @@ export function transition(from: string, action: string): string {
   const map: any = {
     confirm: ["pending", "alternative_proposed"],
     alternative: ["pending"],
+    decline: ["pending", "alternative_proposed"],
     cancel: ["pending", "alternative_proposed", "confirmed"],
+    withdraw: ["pending", "alternative_proposed", "confirmed"],
+    expire: ["pending", "alternative_proposed"],
     complete: ["confirmed"],
   };
   if (!map[action]?.includes(from)) throw new Error("TRANSITION_DENIED");
   return ({
     confirm: "confirmed",
     alternative: "alternative_proposed",
+    decline: "declined",
     cancel: "cancelled",
+    withdraw: "player_withdrawn",
+    expire: "expired",
     complete: "completed",
   } as Record<string, string>)[action];
 }
@@ -57,12 +67,12 @@ export function version(current: number, expected: number) {
 }
 export function validateAlternative(x: any) {
   const slotId = String(x?.alternativeSlotId || ""),
-    message = String(x?.message || "")
+    partnerMessage = String(x?.partnerMessage ?? x?.message ?? "")
       .trim()
       .slice(0, 500);
-  if (!/^[A-Za-z0-9_-]{3,160}$/.test(slotId) || !message)
+  if (!/^[A-Za-z0-9_-]{3,160}$/.test(slotId))
     throw new Error("ALTERNATIVE_INVALID");
-  return { slotId, message };
+  return { slotId, partnerMessage: partnerMessage || null };
 }
 export function assertNonFinancial(x: any) {
   const keys = Object.keys(x || {}).map((k) => k.toLowerCase());
