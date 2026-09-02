@@ -11,9 +11,6 @@ import SmallBusinessDashboard from './components/B2B/SmallBusinessDashboard';
 import PartnerApplicationJourney from './components/B2B/PartnerApplicationJourney';
 import PartnerInvitationAcceptance from './components/B2B/PartnerInvitationAcceptance';
 import CourseAvailabilityV2 from './components/B2B/CourseAvailabilityV2';
-import PlayBookingLifecycleV2 from './components/B2B/PlayBookingLifecycleV2';
-import BookingOperationsReportV2 from './components/B2B/BookingOperationsReportV2';
-import BookingProviderPublicationV2 from './components/B2B/BookingProviderPublicationV2';
 import EnterpriseDashboard from './components/B2B/EnterpriseDashboard';
 import B2BStorefront from './components/public/B2BStorefront';
 import CourseDiscovery from './components/public/CourseDiscovery';
@@ -34,13 +31,15 @@ import EventGenesisConsole from './components/admin/EventGenesisConsole';
 // SponsorOnboardingWizard QUARANTINED (dead code w/ client ledger writes) — not routed.
 import SponsorDashboard from './components/admin/sponsors/SponsorDashboard';
 import LiveAutomationLog from './components/admin/LiveAutomationLog';
-import SupportModerationHub from './components/admin/SupportModerationHub';
 import PartnerVault from './components/admin/PartnerVault';
 // B2BPartners removed from navigation (adminManagePartner quarantined — fail-closed).
 import HRManagement from './components/admin/HRManagement'; // 🔥 HR & Staff
-import BookingOversight from './components/admin/BookingOversight'; // 📖 Booking oversight + refund/escalation
 import PartnerIngestion from './components/admin/PartnerIngestion'; // 📥 Partner application ingestion queue
-import BookingAudit from './components/admin/BookingAudit'; // 🧾 Booking audit trail (read-only)
+// Retained only for the unreachable legacy shell below; the active V2 route
+// renders BookingOperationsV2 exclusively.
+import BookingOversight from './components/admin/BookingOversight';
+import BookingAudit from './components/admin/BookingAudit';
+import SupportModerationHub from './components/admin/SupportModerationHub';
 
 // 🔥 B2B COMMERCE (OEM) COMPONENTS
 import VendorControlSystem from './components/admin/oem/VendorControlSystem';
@@ -55,6 +54,7 @@ import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
 import V2PartnerApplications from './components/admin/v2/V2PartnerApplications';
 import V2PartnerAuthority from './components/admin/v2/V2PartnerAuthority';
+import BookingOperationsV2 from './components/admin/v2/BookingOperationsV2';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 
 export default function App() {
@@ -251,7 +251,7 @@ function Dashboard({ mode }: { mode: 'admin' | 'partner' }) {
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
-    {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingProviderPublicationV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
+    {activeArea === 'bookings' && <BookingOperationsV2 />}
     {activeArea === 'partners' && <V2PartnerApplications />}
     {activeArea === 'partners' && <V2PartnerAuthority />}
     {activeArea === 'partners' && <V2PartnerOperations />}

@@ -2,9 +2,9 @@
 // FILE: src/components/admin/oem/OrderFulfillmentHub.tsx
 // ==========================================
 import { useState, useEffect } from 'react';
-import { db } from '../../../firebaseConfig';
+import { db, functions } from '../../../firebaseConfig';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 interface FulfillmentOrder {
   id: string;
@@ -51,7 +51,7 @@ export default function OrderFulfillmentHub() {
     try {
       // Order/settlement state is finalized server-side. The vendor-protocol
       // lookup + status decision now live in the updateFulfillmentOrder function.
-      const fn = httpsCallable(getFunctions(), 'updateFulfillmentOrder');
+      const fn = httpsCallable(functions, 'updateFulfillmentOrder');
       const res: any = await fn({ orderId, action: 'dispatch' });
       if (!res?.data?.success) throw new Error('Dispatch failed.');
     } catch (error: any) {
@@ -67,7 +67,7 @@ export default function OrderFulfillmentHub() {
 
     setIsProcessing(orderId);
     try {
-      const fn = httpsCallable(getFunctions(), 'updateFulfillmentOrder');
+      const fn = httpsCallable(functions, 'updateFulfillmentOrder');
       const res: any = await fn({ orderId, action: 'confirmShipment', courier: data.courier, tracking: data.tracking });
       if (!res?.data?.success) throw new Error('Shipment update failed.');
       // Clear the local input state after success

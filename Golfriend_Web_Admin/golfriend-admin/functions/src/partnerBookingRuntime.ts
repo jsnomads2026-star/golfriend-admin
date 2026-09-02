@@ -126,6 +126,7 @@ export const requestPlayBookingV2 = onCall(
         receiptId,
         bookingId: id,
         kind: "requested",
+        actorUid: memberUid,
         actorRole: "member",
         createdAt: now(),
       });
@@ -215,6 +216,7 @@ export const managePlayBookingV2 = onCall(
         receiptId,
         bookingId: id,
         kind: action,
+        actorUid: caller,
         actorRole: m.role,
         createdAt: now(),
       });

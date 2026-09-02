@@ -7,8 +7,8 @@
 // ==========================================
 import { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../firebaseConfig';
 
 interface CourseOption {
   courseID: string;
@@ -105,7 +105,7 @@ export default function TeeTimeInventory() {
     if (!courseId) return notify('Select a course first.', 'error');
     setIsBusy(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'manageTeeTimeSlot');
+      const fn = httpsCallable(functions, 'manageTeeTimeSlot');
       const res: any = await fn({
         action: 'create',
         courseId,
@@ -125,7 +125,7 @@ export default function TeeTimeInventory() {
   const setStatus = async (slotId: string, status: 'open' | 'closed') => {
     setIsBusy(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'manageTeeTimeSlot');
+      const fn = httpsCallable(functions, 'manageTeeTimeSlot');
       const res: any = await fn({ action: 'setStatus', slotId, status });
       if (!res?.data?.success) throw new Error('Status change was not accepted.');
       notify(`Slot ${status === 'open' ? 'opened' : 'closed'}.`, 'success');

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db } from '../../firebaseConfig';
+import { db, functions } from '../../firebaseConfig';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 export default function HRManagement() {
   const [staff, setStaff] = useState<any[]>([]);
@@ -35,7 +35,6 @@ export default function HRManagement() {
     setInviteResult(null);
 
     try {
-      const functions = getFunctions();
       const inviteEmployee = httpsCallable(functions, 'inviteEmployee');
       
       const response: any = await inviteEmployee({
@@ -66,7 +65,7 @@ export default function HRManagement() {
       // 🔒 SERVER-AUTHORITATIVE: staff access changes go through the
       // Director-gated setEmployeeStatus Cloud Function, not a client write.
       try {
-        const setEmployeeStatus = httpsCallable(getFunctions(), 'setEmployeeStatus');
+        const setEmployeeStatus = httpsCallable(functions, 'setEmployeeStatus');
         const res: any = await setEmployeeStatus({ uid, status: newStatus });
         if (!res?.data?.success) throw new Error('Status change was not accepted.');
       } catch (error: any) {

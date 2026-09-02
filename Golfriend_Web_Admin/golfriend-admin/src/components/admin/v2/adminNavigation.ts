@@ -3,7 +3,7 @@ export type AdminLocale = (typeof ADMIN_LOCALES)[number];
 export const ADMIN_AREAS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Golf courses / Golf API data' },
-  { id: 'bookings', label: 'Booking communications' },
+  { id: 'bookings', label: 'Booking Operations' },
   { id: 'partners', label: 'Partners / portal requests' },
   { id: 'marketing', label: 'Marketing assets' },
   { id: 'advertising', label: 'Advertising' },

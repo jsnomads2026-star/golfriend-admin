@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db } from '../../firebaseConfig';
+import { db, functions } from '../../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 export default function ManualOverride({ injectedUid = "", onClose }: { injectedUid?: string, onClose?: () => void }) {
   // 🔥 Core State
@@ -74,7 +74,7 @@ export default function ManualOverride({ injectedUid = "", onClose }: { injected
     try {
       // 🔒 SERVER-AUTHORITATIVE: chip mint/burn + ledger are settled by the
       // adminOverrideUser Cloud Function (Director-gated, floored, audited).
-      const fn = httpsCallable(getFunctions(), 'adminOverrideUser');
+      const fn = httpsCallable(functions, 'adminOverrideUser');
       const res: any = await fn({
         action: 'economy',
         targetUid: targetUid.trim(),
@@ -101,7 +101,7 @@ export default function ManualOverride({ injectedUid = "", onClose }: { injected
     try {
       // 🔒 SERVER-AUTHORITATIVE: reputation/verification metrics are validated
       // and written by adminOverrideUser (Director-gated, audited).
-      const fn = httpsCallable(getFunctions(), 'adminOverrideUser');
+      const fn = httpsCallable(functions, 'adminOverrideUser');
       const res: any = await fn({
         action: 'reliability',
         targetUid: targetUid.trim(),

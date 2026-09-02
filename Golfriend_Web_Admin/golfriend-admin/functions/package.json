@@ -17,6 +17,7 @@
     "test:partner-activation": "tsc && node lib/partnerActivationDomain.test.js",
     "test:partner-availability": "tsc && node lib/partnerAvailabilityDomain.test.js",
     "test:partner-booking": "tsc && node lib/partnerBookingDomain.test.js",
+    "test:booking-operations-admin": "tsc && node lib/bookingOperationsAdminDomain.test.js",
     "test:partner-booking-reporting": "tsc && node lib/bookingReportingDomain.test.js",
     "test:booking-provider-publication": "tsc && node lib/bookingProviderPublicationDomain.test.js",
     "test:enterprise-authority": "tsc && node --test lib/enterpriseAuthorityDomain.test.js",

@@ -7,8 +7,8 @@
 // ==========================================
 import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '../../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
 import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
 import BookingDetailPanel from './booking/BookingDetailPanel';
@@ -95,7 +95,7 @@ export default function BookingOversight() {
   const resolve = async (bookingId: string, decision: Decision) => {
     setBusyId(bookingId);
     try {
-      const fn = httpsCallable(getFunctions(), 'adminResolveBooking');
+      const fn = httpsCallable(functions, 'adminResolveBooking');
       const res: any = await fn({ bookingId, decision });
       if (!res?.data?.success) throw new Error('Resolution was not accepted by the server.');
       const label = decision === 'confirm' ? 'confirmed' : decision === 'reject' ? 'rejected' : 'cancelled';
@@ -231,7 +231,6 @@ export default function BookingOversight() {
             ) : (
               visible.map((b) => {
                 const busy = busyId === b.id;
-                const canConfirm = b.status === 'pending';
                 const canReject  = b.status === 'pending';
                 const canCancel  = b.status === 'pending' || b.status === 'confirmed';
                 return (
@@ -258,9 +257,9 @@ export default function BookingOversight() {
                       </button>
                       <button
                         onClick={() => resolve(b.id, 'confirm')}
-                        disabled={busy || !canConfirm}
-                        style={actionBtn(V2Theme.successGreen, busy || !canConfirm)}
-                        title={canConfirm ? 'Force confirm this booking' : 'Only pending bookings can be confirmed'}
+                        disabled
+                        style={actionBtn(V2Theme.successGreen, true)}
+                        title="Force Confirm is unavailable: only the authorised partner or course action may confirm a booking."
                       >
                         {busy ? '…' : 'Force Confirm'}
                       </button>

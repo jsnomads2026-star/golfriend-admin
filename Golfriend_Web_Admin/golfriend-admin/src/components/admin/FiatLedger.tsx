@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { db } from '../../firebaseConfig';
+import { db, functions } from '../../firebaseConfig';
 import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 interface FiatTransaction {
   id: string;
@@ -92,7 +92,7 @@ export default function FiatLedger() {
 
     setIsSubmitting(true);
     try {
-      const logPlatformExpense = httpsCallable(getFunctions(), 'logPlatformExpense');
+      const logPlatformExpense = httpsCallable(functions, 'logPlatformExpense');
       const res: any = await logPlatformExpense({
         amount: parseFloat(expenseAmount),
         vendor: finalVendor.trim()

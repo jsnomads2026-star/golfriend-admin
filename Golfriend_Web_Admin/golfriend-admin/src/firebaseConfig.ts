@@ -29,6 +29,10 @@ const env = (import.meta.env ?? {}) as unknown as Record<string, string | undefi
 const ACTIVE_PROJECT = env.VITE_FIREBASE_PROJECT || 'golfriend-v1';
 
 export const ACTIVE_FIREBASE_PROJECT = ACTIVE_PROJECT;
+// All Admin callables, including the externally retained V2 commissioning
+// callable, are deployed in the V2 regional endpoint. Keeping this exported
+// and unconditional prevents a production-mode fallback to us-central1.
+export const FUNCTIONS_REGION = 'asia-southeast1';
 export const USING_PARTNER_AUTHORITY_LOCAL = ACTIVE_PROJECT === 'partner-authority-local';
 export const USING_EMULATORS = ACTIVE_PROJECT === 'precommission' || USING_PARTNER_AUTHORITY_LOCAL;
 
@@ -69,9 +73,7 @@ if (USING_PARTNER_AUTHORITY_LOCAL) {
 
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = USING_PARTNER_AUTHORITY_LOCAL
-  ? getFunctions(app, 'asia-southeast1')
-  : getFunctions(app);
+export const functions = getFunctions(app, FUNCTIONS_REGION);
 export const storage = getStorage(app);
 
 // Development-only emulator wiring. All four services are pinned to the local

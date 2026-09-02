@@ -14,6 +14,7 @@
     "gate:fnauth": "node scripts/functions-authority-gate.mjs",
     "gate:godmode": "node scripts/functions-godmode-gate.mjs",
     "test:godmode-aliases": "node scripts/functions-godmode-alias-contract.test.mjs",
+    "test:admin-functions-region": "node scripts/admin-functions-region.test.mjs",
     "gate:clientcallable": "node scripts/client-callable-gate.mjs",
     "gate:fnexport": "node scripts/functions-export-gate.mjs",
     "gate:coursewrites": "node scripts/course-write-authority-gate.mjs",

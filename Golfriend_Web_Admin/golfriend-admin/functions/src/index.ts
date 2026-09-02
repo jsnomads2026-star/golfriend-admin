@@ -22,6 +22,7 @@ export {activatePartner,claimCourseOperator,managePartnerStaff,acceptPartnerInvi
 export {reviewCourseOperatorClaim} from "./partnerClaimReviewRuntime.js";
 export {manageCourseAvailabilityV2,manageCourseAvailabilityV2 as manageTeeTimeSlot,reviewCourseAvailabilityV2,getCourseAvailabilityV2,listCourseAvailabilityAdminV2} from "./partnerAvailabilityRuntime.js";
 export {requestPlayBookingV2,managePlayBookingV2,managePlayBookingV2 as respondBooking,managePlayBookingV2 as cancelBooking,sendPlayBookingMessageV2,sendPlayBookingMessageV2 as sendBookingMessage,getPlayBookingsPortalV2,getPlayBookingsAdminV2} from "./partnerBookingRuntime.js";
+export {getAdminBookingOperationsV2,requestBookingCorrectionV2} from "./bookingOperationsAdminRuntime.js";
 export {getBookingOperationsPortalV2,getBookingOperationsAdminV2,reconcileBookingOperationsV2,exportBookingOperationsV2,getBookingOperationsReceiptV2} from "./bookingReportingRuntime.js";
 export {prepareBookingProviderPublicationV2,publishBookingProviderPublicationV2,getBookingProviderPublicationsV2} from "./bookingProviderPublicationRuntime.js";
 export {getEnterpriseOrganizationAuthorityV2} from "./enterpriseAuthorityRuntime.js";
@@ -760,6 +761,11 @@ export const adminResolveBooking = onCall({ memory: "256MiB" }, async (request) 
   if (!isActiveStaff(adminSnap.exists ? adminSnap.data() : null)) {
     throw new HttpsError('permission-denied', 'You are not authorized to resolve bookings.');
   }
+
+  // The canonical V2 contract permits only the active partner/course authority
+  // to confirm a booking. Keep this named Admin callable as a truthful refusal
+  // for older clients; it must never become an Admin lifecycle writer.
+  throw new HttpsError('failed-precondition', 'Force Confirm is unavailable. Only the authorised partner or course action may confirm a booking.');
 
   const bookingRef = db.collection('bookings').doc(bookingId);
 

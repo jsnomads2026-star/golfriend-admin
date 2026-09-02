@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db } from '../../firebaseConfig';
+import { db, functions } from '../../firebaseConfig';
 import { collection, onSnapshot, doc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import TournamentTV from './TournamentTV'; // 🔥 NEW: Importing the TV Component
 import RaffleEngine from './RaffleEngine'; // 🔥 NEW: Importing the Raffle Engine
 
@@ -73,7 +73,7 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
 
     try {
       // 🚀 Schema Locked: Route authoritative display-state write through the server
-      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const fn = httpsCallable(functions, 'manageTournamentOps');
       const res: any = await fn({ tournamentId, action: 'setDisplayState', displayState: state });
       if (!res?.data?.success) throw new Error('Server rejected TV signal.');
       showNotification(`📺 TV Signal Sent: ${state.toUpperCase()}`, "success");
@@ -86,7 +86,7 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
   const toggleRegistration = async () => {
     try {
       const newStatus = tournamentStatus === 'registration_open' ? 'registration_closed' : 'registration_open';
-      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const fn = httpsCallable(functions, 'manageTournamentOps');
       const res: any = await fn({ tournamentId, action: 'setRegistration', status: newStatus });
       if (!res?.data?.success) throw new Error('Server rejected registration change.');
       showNotification(`Registration is now: ${newStatus.replace('_', ' ').toUpperCase()}`, "success");
@@ -101,7 +101,7 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
 
     try {
       // 🔐 Authoritative flight clear happens server-side; client only requests the action
-      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const fn = httpsCallable(functions, 'manageTournamentOps');
       const res: any = await fn({ tournamentId, action: 'resetFlights' });
       if (!res?.data?.success) throw new Error('Server rejected flight reset.');
       showNotification("♻️ Flights reset. Players returned to waiting room.", "success");
@@ -159,7 +159,7 @@ export default function TournamentManager({ tournamentId = 'PUI_SPORTS_BAR_0007'
 
       if (currentFlightList.length > 0) lockFlight();
 
-      const fn = httpsCallable(getFunctions(), 'manageTournamentOps');
+      const fn = httpsCallable(functions, 'manageTournamentOps');
       const res: any = await fn({ tournamentId, action: 'assignFlights', assignments });
       if (!res?.data?.success) throw new Error('Server rejected flight assignments.');
       showNotification("✅ AI Sorting Complete! Friend groups preserved.", "success");
