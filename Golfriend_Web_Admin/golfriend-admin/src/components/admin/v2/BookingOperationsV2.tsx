@@ -19,7 +19,7 @@ type BookingRow = {
 type AlternativeOffer = { transitionId?: string | null; slotId?: string | null; courseId?: string | null; proposedTime?: { date?: string | null; time?: string | null; timeZone?: string | null } | null; capacity?: number | null; partnerMessage?: string | null };
 type Transition = { transitionId: string | null; bookingId: string; roundId: string | null; actor: string | null; actorRole: string | null; timestamp: unknown; submissionSnapshotRef: string | null; projectionVersion: number | null; kind: string; status: string | null; partnerMessage: string | null; alternativeOffer: AlternativeOffer | null; partnerVisible: boolean };
 
-const STATUS_OPTIONS = ['', 'pending', 'alternative_proposed', 'confirmed', 'completed', 'declined', 'cancelled', 'expired', 'player_withdrawn'];
+const STATUS_OPTIONS = ['', 'pending', 'alternative_proposed', 'awaiting_partner', 'confirmed', 'completed', 'declined', 'cancelled', 'expired', 'player_withdrawn'];
 const commandId = () => `admin_${crypto.randomUUID().replaceAll('-', '_')}`;
 const value = (input: unknown) => {
   if (!input) return 'Not recorded';

@@ -3,6 +3,7 @@ export const BOOKING_SCHEMA = "golfriend.play-booking.v2",
   BOOKING_STATES = [
     "pending",
     "alternative_proposed",
+    "awaiting_partner",
     "confirmed",
     "declined",
     "cancelled",
@@ -42,12 +43,12 @@ export function permissions(role: string) {
 }
 export function transition(from: string, action: string): string {
   const map: any = {
-    confirm: ["pending", "alternative_proposed"],
+    confirm: ["pending", "alternative_proposed", "awaiting_partner"],
     alternative: ["pending"],
-    decline: ["pending", "alternative_proposed"],
-    cancel: ["pending", "alternative_proposed", "confirmed"],
-    withdraw: ["pending", "alternative_proposed", "confirmed"],
-    expire: ["pending", "alternative_proposed"],
+    decline: ["pending", "alternative_proposed", "awaiting_partner"],
+    cancel: ["pending", "alternative_proposed", "awaiting_partner", "confirmed"],
+    withdraw: ["pending", "alternative_proposed", "awaiting_partner", "confirmed"],
+    expire: ["pending", "alternative_proposed", "awaiting_partner"],
     complete: ["confirmed"],
   };
   if (!map[action]?.includes(from)) throw new Error("TRANSITION_DENIED");

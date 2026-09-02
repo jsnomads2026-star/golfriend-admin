@@ -298,13 +298,13 @@ export const respondToPlayBookingAlternativeV2 = onCall(
         if (offer.slotId === current.slotId || !alternativeSlot.exists || alternativeSlot.data()?.organizationId !== current.organizationId || alternativeSlot.data()?.status !== "open" || Number(alternativeSlot.data()?.bookedCount || 0) >= Number(alternativeSlot.data()?.capacity || 0)) throw new HttpsError("failed-precondition", "Alternative availability is no longer available.");
         if (original.exists) tx.update(originalSlot, { bookedCount: Math.max(0, Number(original.data()?.bookedCount || 0) - 1), updatedAt: now() });
         tx.update(alternativeSlot.ref, { bookedCount: Number(alternativeSlot.data()?.bookedCount || 0) + 1, updatedAt: now() });
-        tx.update(ref, { status: "pending", slotId: offer.slotId, courseId: offer.courseId || null, date: offer.proposedTime?.date || null, time: offer.proposedTime?.time || null, timeZone: offer.proposedTime?.timeZone || null, version: next, projectionVersion: nextProjectionVersion, alternative: null, alternativeOffer: null, acceptedAlternativeOffer: offer, updatedAt: now() });
+        tx.update(ref, { status: "awaiting_partner", slotId: offer.slotId, courseId: offer.courseId || null, date: offer.proposedTime?.date || null, time: offer.proposedTime?.time || null, timeZone: offer.proposedTime?.timeZone || null, version: next, projectionVersion: nextProjectionVersion, alternative: null, alternativeOffer: null, acceptedAlternativeOffer: offer, updatedAt: now() });
       } else {
         if (original.exists) tx.update(originalSlot, { bookedCount: Math.max(0, Number(original.data()?.bookedCount || 0) - 1), updatedAt: now() });
         tx.update(ref, { status: "declined", version: next, projectionVersion: nextProjectionVersion, alternative: null, alternativeOffer: null, updatedAt: now() });
       }
       const kind = answer === "accept" ? "alternative_accepted" : "alternative_declined";
-      const status = answer === "accept" ? "pending" : "declined";
+      const status = answer === "accept" ? "awaiting_partner" : "declined";
       tx.create(db.collection("play_booking_audits").doc(receiptId), transitionRecord({ receiptId, bookingId: id, booking: current, kind, status, actor: caller, actorRole: "member", projectionVersion: nextProjectionVersion, alternativeOffer: offer, partnerVisible: true }));
       return { success: true, bookingId: id, status, version: next, projectionVersion: nextProjectionVersion, receiptId, restarted: false };
     });
