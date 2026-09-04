@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } fr
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db, APP_CHECK_ACTIVE } from './firebaseConfig';
-import { resolvePortalAccess, adminAccessPresentation, STATE_COPY } from './auth/roleJourney.js';
+import { resolvePortalAccess, adminAccessPresentation, isActiveDirectorDoc, STATE_COPY } from './auth/roleJourney.js';
 import { FOUNDER_ACCESS } from './i18n/admin/founderAccess.ts';
 import { useT } from './i18n/hooks.ts';
 import { ACCESS_STATES } from './i18n/partner/accessStates.ts';
@@ -539,7 +539,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
         {/* 🔥 RENDER THE ENGINE */}
         {activeTab === 'courses' && <CourseSeeder />}
         {activeTab === 'teetimes' && <TeeTimeInventory />}
-        {activeTab === 'coursesync' && <CourseSyncConsole />}
+        {activeTab === 'coursesync' && <CourseSyncConsole isDirector={isActiveDirectorDoc(adminData)} />}
         {activeTab === 'teesheet' && <CourseTeeSheet />}
         {activeTab === 'tournaments' && <TournamentGovernancePanel admin />}
         {activeTab === 'genesis' && <EventGenesisConsole />}
