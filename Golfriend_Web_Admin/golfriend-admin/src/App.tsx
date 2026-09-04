@@ -52,6 +52,7 @@ import V2AdminShell from './components/admin/v2/V2AdminShell';
 import V2AdminOverview from './components/admin/v2/V2AdminOverview';
 import V2AdminReports from './components/admin/v2/V2AdminReports';
 import V2CourseOperations from './components/admin/v2/V2CourseOperations';
+import V2GolfApiCoordinateDiagnostic from './components/admin/v2/V2GolfApiCoordinateDiagnostic';
 import V2MarketingLibrary from './components/admin/v2/V2MarketingLibrary';
 import V2PartnerOperations from './components/admin/v2/V2PartnerOperations';
 import V2PartnerApplications from './components/admin/v2/V2PartnerApplications';
@@ -446,6 +447,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
     <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
     {activeArea === 'courses' && <V2CourseOperations />}
+    {activeArea === 'courses' && <V2GolfApiCoordinateDiagnostic />}
     {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
     {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingProviderPublicationV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
     {activeArea === 'partners' && <V2PartnerApplications />}
