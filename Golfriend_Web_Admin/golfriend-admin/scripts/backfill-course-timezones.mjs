@@ -8,7 +8,7 @@ const auth=require(process.env.FIREBASE_TOOLS_AUTH_MODULE||'C:/Users/Windows/App
 const timeZone=require('../functions-course-catalogue/courseTimeZone.js');
 
 const args=Object.fromEntries(process.argv.slice(2).map(value=>{const [key,...rest]=value.replace(/^--/,'').split('=');return[key,rest.join('=')||true];}));
-const project=String(args.project||''),mode=String(args.mode||'plan'),limit=Math.min(250,Math.max(1,Number(args.limit||100))),runId=typeof args['run-id']==='string'?args['run-id']:null;
+const project=String(args.project||''),mode=String(args.mode||'plan'),limit=Math.min(500,Math.max(1,Number(args.limit||100))),runId=typeof args['run-id']==='string'?args['run-id']:null;
 if(!project)throw Error('EXPLICIT_PROJECT_REQUIRED');
 if(!['plan','apply'].includes(mode))throw Error('MODE_MUST_BE_PLAN_OR_APPLY');
 if(mode==='apply'&&!runId)throw Error('EXPLICIT_RUN_ID_REQUIRED_FOR_APPLY');
