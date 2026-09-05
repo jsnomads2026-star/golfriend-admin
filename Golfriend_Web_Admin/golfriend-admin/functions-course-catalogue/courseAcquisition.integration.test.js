@@ -1,0 +1,6 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),request=require('./courseAcquisitionRequest');
+const source=fs.readFileSync(path.join(__dirname,'index.js'),'utf8'),rules=fs.readFileSync(path.join(__dirname,'../enterprise-authority.firestore.rules'),'utf8');
+test('request identity is deterministic and queue input is idempotent',()=>{const input={providerClubId:'club-1',providerCourseId:'course-1'};assert.equal(request.requestId(input),request.requestId(input));assert.equal(request.sameRequest(request.queued(input,{uid:'u'}),input),true);});
+test('client queue writes are denied and callable is App Check protected',()=>{assert.match(source,/exports\.requestGolfApiCourseAcquisition=onCall\(\{region:REGION,enforceAppCheck:true\}/);assert.match(rules,/match \/course_acquisition_requests\/\{document=\*\*\} \{ allow read, write: if false; \}/);});
+test('acquisition worker cannot call the provider before immutable activation',()=>{const worker=source.slice(source.indexOf('async function runCourseAcquisitionWorker'),source.indexOf('exports.scheduledGolfApiCourseAcquisitionWorker'));assert(worker.indexOf('if(!activation.allowed)return')<worker.indexOf('provider('));assert.match(worker,/COUNTRY_ACQUISITION_REVISION_SERVICES/);});
