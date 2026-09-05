@@ -54,21 +54,77 @@ sits immediately before `configuration()` and `runCourseAcquisitionWorker` sits 
 `reconcileExpiredReservations` — `activationCapability.test.js` asserts that the
 `loadLiveActivationBindings..reconcileExpiredReservations` slice makes no `provider(` call.
 
+## TWO LINEAGES ARE LIVE IN THIS CODEBASE AT ONCE
+
+This is the general finding, not a detail about one function.
+
+**A scoped deploy does not reconcile a codebase.** `firebase deploy --only
+functions:<codebase>:<name>` updates the named function and leaves every other function in that
+codebase exactly as it was — including functions built from source that no longer exists anywhere.
+Only a codebase-level deploy reconciles, and reconciling is what deletes.
+
+`course-catalogue` therefore runs functions from two generations simultaneously, proven by
+downloading both deployed source archives from `gs://gcf-v2-sources-533338463502-asia-southeast1`:
+
+| deployed | archive | worker cadence | `weeklyRefresh.js` | `countrySchedule` exports |
+|---|---|---|---|---|
+| **29 Aug** 05:02:10Z (`enableWeeklyCourseRefresh`) | `…#1787979690253689` | **every 7 days** | present | `…HOUR, DAY, WEEK, asMs` |
+| **31 Aug** 02:26:42Z (`scheduledCourseCountryIngestionWorker`) | `…#1788143193161249` | **every 5 minutes** ×3 | absent | `…HOUR, DAY` |
+
+The 31 August scoped deploy replaced the worker and left `enableWeeklyCourseRefresh` untouched,
+still running its 29 August code. Had it been a codebase deploy, that function would already be gone.
+
+**Corrected history — the seven-day behaviour is real production history, not foreign lineage.**
+An earlier report of mine called it "unruled branch lineage". That was wrong. It was deployed to
+production on 29 August and superseded on 31 August. The 31 August 5-minute worker remains the
+observed production contract; the correction concerns provenance, not the ruling.
+
 ## EXCLUDED — function
 
-### `enableWeeklyCourseRefresh`
+### `enableWeeklyCourseRefresh` — UNMANAGED-PRESERVE
 
-- **Production identity:** `enableweeklycourserefresh-00001-nit`, codebase `course-catalogue`, ACTIVE.
-- **Missing dependency:** `weeklyRefresh.js` (blob `304ec5bca8bfcbbc62ba255f579ab66432a7934d`,
-  `df9e480`) does `const {WEEK, asMs} = require('./countrySchedule')`. This baseline's
-  `countrySchedule.js` **defines `asMs` but does not export it**, and has **no `WEEK` at all**.
-  `weeklyJob()` throws `asMs is not a function`.
-- **Why lineage, not defect:** the source lineage exports `{...,WEEK,asMs}`. Importing the function
-  would require editing `countrySchedule.js`, a diverged file outside the four ruled for import.
-- **Owner:** countrySchedule recovery packet.
+- **Production identity:** `enableweeklycourserefresh-00001-nit`, codebase `course-catalogue`,
+  GEN_2, nodejs20, asia-southeast1, ACTIVE, deployed 29 Aug 2026 05:02:10Z, HTTPS callable with
+  `enforceAppCheck`, no scheduler, no secrets, 256Mi/60s.
+- **Source IS recoverable, byte-for-byte.** The deployed archive is `df9e480` exactly:
+  `index.js` `bdf410f9a500d3f73f7f0fc4a2218f1c2182e364`, `weeklyRefresh.js`
+  `304ec5bca8bfcbbc62ba255f579ab66432a7934d`, `countrySchedule.js`
+  `c3ed9ae1b28934c9ff5a714983cdb52f71dc0128` — all identical to that commit. The local
+  implementation is not a broken approximation of production; it **is** production, and is broken
+  only against this baseline, whose `countrySchedule.js` (`f9769145…`) is a different file.
+- **Why it is still excluded.** `weeklyRefresh.js` needs `{WEEK, asMs}` from `./countrySchedule`.
+  Importing that module at `df9e480` is **not additive**: it adds `WEEK`, changes `nextDueAtMs` to
+  `now + Math.max(WEEK, dueDelayMs(…))` — a seven-day floor on every country's next due time — and
+  adds a `WEEKLY_REFRESH_CAP` eligibility rule. That module is shared with the **live 5-minute
+  worker**, so importing it would silently reintroduce weekly scheduling semantics there.
+- **Founder ruling 2026-09-05:** do not import the 29 August `countrySchedule.js` wholesale, and do
+  not clean-room the callable by adding only `WEEK` and the missing exports while omitting the floor
+  and cap — that recovers a callable which loads but not the semantics its name carried.
+- **Owner:** weekly refresh recovery packet (scoped below).
 - **Consequence, stated plainly:** a `functions:course-catalogue` codebase deploy from this baseline
   would DELETE this live function. `deploymentSurvival.test.js` records it in `NOT_COVERED` so the
-  guard cannot imply the contract holds.
+  guard cannot imply the contract holds. Scoped, named deploys only while it is unmanaged.
+
+## SCOPED, NOT STARTED — weekly refresh recovery packet
+
+Founder ruling: scope only, do not begin. No scheduling change may be merged or deployed as part of
+the catalogue re-baseline.
+
+1. What job does `enableWeeklyCourseRefresh` perform that the 5-minute worker does not?
+2. Are the weekly cap and seven-day floor still required product or operational policy?
+3. Can the weekly semantics be isolated inside the callable rather than modifying the shared
+   `countrySchedule` module the live 5-minute worker uses?
+4. What exact production state changes when the weekly callable runs?
+5. Is it still invoked or operationally necessary? Measured evidence: exactly **two** successful
+   invocations, both 29 Aug 2026 (05:25:21Z and 05:44:38Z), both HTTP 200, both from a Chrome
+   browser — a person in the Admin UI — each preceded by a 204 CORS preflight. **Nothing since**, in
+   a 30-day window. No errors. `platform/courseCountryRefresh` reads `enabled: true`,
+   `golfriend.country-refresh-policy.v1`, last updated 28 Aug 02:36:11Z — *before* both invocations,
+   so neither call changed it. Its only UI caller lives in `catalogue-contract-integration`
+   (2 source files, 1 built bundle); the canonical baseline has neither function nor caller.
+6. If necessary: an implementation preserving weekly semantics **without** altering the live worker.
+7. If unnecessary: retirement requires separate founder approval with evidence. Absence of callers
+   is not by itself sufficient — the code is unrecoverable once deleted.
 
 ## EXCLUDED — tests
 
