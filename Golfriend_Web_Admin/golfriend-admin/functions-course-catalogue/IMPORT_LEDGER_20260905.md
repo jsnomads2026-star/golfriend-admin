@@ -105,6 +105,30 @@ observed production contract; the correction concerns provenance, not the ruling
   would DELETE this live function. `deploymentSurvival.test.js` records it in `NOT_COVERED` so the
   guard cannot imply the contract holds. Scoped, named deploys only while it is unmanaged.
 
+## NOT SAFE TO REDEPLOY — `activateCourseCatalogue`
+
+**My defect, caught at release-boundary review, and it stays visible until closed.**
+
+The export (101B) and body (2064B) imported at `df773172` are byte-identical to production. Its
+dependency is not. Compared against the deployed 29 August archive:
+
+- **production** calls `listDeploymentFunctions(projectId, token)`, which **paginates** — up to ten
+  pages of 100 — before validating activation revision bindings
+- **the import** (from `ee3961b`) makes a **single unpaginated call** with `pageSize=100`
+
+**The production fleet is 138 functions.** A first-100-only scan cannot see the whole fleet, so
+`activationRevisionBindingsMatch` would be evaluated against a truncated list. Unacceptable.
+
+`listDeploymentFunctions` does not exist in this baseline at all; a commit after `ee3961b` added it
+and it was not imported.
+
+**Ruling 2026-09-05: `activateCourseCatalogue` must not be redeployed until the imported dependency
+preserves production's paginated validation across the full fleet.** The function remains live and
+correct in production — this blocks a redeploy *from this baseline*, nothing else. It is listed in
+`COVERED` in `deploymentSurvival.test.js` because it is exported and would survive a codebase
+deploy; survivability and redeployability are different properties and only the first is asserted
+there.
+
 ## SCOPED, NOT STARTED — weekly refresh recovery packet
 
 Founder ruling: scope only, do not begin. No scheduling change may be merged or deployed as part of
