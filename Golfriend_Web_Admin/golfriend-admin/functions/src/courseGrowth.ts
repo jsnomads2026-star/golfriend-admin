@@ -12,6 +12,12 @@ export type Candidate = {
   country: string | null; latitude: number | null; longitude: number | null;
 };
 
+export type ClubExpansionPlan = {
+  candidates: Candidate[];
+  expandedClubIds: string[];
+  unresolvedClubShells: Array<{clubID: string | null; clubName: string}>;
+};
+
 const text = (value: unknown, fallback = ""): string =>
   String(value ?? fallback).trim().normalize("NFC");
 const finite = (value: unknown): number | null => {
@@ -25,9 +31,20 @@ export function requireProviderConfiguration(apiKey: string): string {
   return value;
 }
 
+export function providerClubs(payload: unknown): Record<string, unknown>[] {
+  const value = payload as {clubs?: unknown[]; club?: unknown; data?: unknown};
+  const data = value?.data as {clubs?: unknown[]; club?: unknown} | undefined;
+  const rows = Array.isArray(value?.clubs) ? value.clubs :
+    Array.isArray(value?.data) ? value.data :
+      Array.isArray(data?.clubs) ? data.clubs :
+        value?.club ? [value.club] : data?.club ? [data.club] :
+          data && typeof data === "object" ? [data] :
+            value && typeof value === "object" ? [value] : [];
+  return rows.filter((row): row is Record<string, unknown> => !!row && typeof row === "object");
+}
+
 export function normalizeCourseCandidates(payload: unknown): Candidate[] {
-  const value = payload as {clubs?: unknown[]; data?: unknown[]};
-  const clubs = Array.isArray(value?.clubs) ? value.clubs : Array.isArray(value?.data) ? value.data : [];
+  const clubs = providerClubs(payload);
   const candidates: Candidate[] = [];
   for (const rawClub of clubs) {
     const club = rawClub as Record<string, unknown>;
@@ -51,6 +68,54 @@ export function normalizeCourseCandidates(payload: unknown): Candidate[] {
   const unique = new Map<string, Candidate>();
   for (const candidate of candidates) if (!unique.has(candidate.courseID)) unique.set(candidate.courseID, candidate);
   return [...unique.values()];
+}
+
+/** A list row is complete only with explicit provider evidence, never merely because it has one course. */
+export function hasCompleteEmbeddedCourses(club: Record<string, unknown>): boolean {
+  const courseIds = Array.isArray(club.courses) ? club.courses
+    .map((course) => text((course as Record<string, unknown>)?.courseID || (course as Record<string, unknown>)?.id))
+    .filter(isValidProviderId) : [];
+  if (!courseIds.length) return false;
+  if (club.coursesComplete === true || club.isComplete === true) return true;
+  const declared = finite(club.courseCount ?? club.totalCourses ?? club.course_count);
+  return declared !== null && Number.isInteger(declared) && declared > 0 && declared === new Set(courseIds).size;
+}
+
+function withShellContext(detail: Record<string, unknown>, shell: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...shell, ...detail,
+    clubID: detail.clubID ?? detail.id ?? shell.clubID ?? shell.id,
+    clubName: detail.clubName ?? detail.name ?? shell.clubName ?? shell.name,
+    courses: Array.isArray(detail.courses) ? detail.courses : [],
+  };
+}
+
+/** Resolve incomplete list rows through the existing provider club-detail endpoint before write planning. */
+export async function expandClubShells(listPayload: unknown, fetchClubDetail: (clubID: string) => Promise<unknown>): Promise<ClubExpansionPlan> {
+  const candidates: Candidate[] = [];
+  const expandedClubIds: string[] = [];
+  const unresolvedClubShells: Array<{clubID: string | null; clubName: string}> = [];
+  for (const club of providerClubs(listPayload)) {
+    if (hasCompleteEmbeddedCourses(club)) {
+      candidates.push(...normalizeCourseCandidates({clubs: [club]}));
+      continue;
+    }
+    const clubID = text(club.clubID || club.id) || null;
+    const clubName = text(club.clubName || club.name, "Unnamed club");
+    if (!clubID) { unresolvedClubShells.push({clubID, clubName}); continue; }
+    const detailClubs = providerClubs(await fetchClubDetail(clubID));
+    if (!detailClubs.length) { unresolvedClubShells.push({clubID, clubName}); continue; }
+    expandedClubIds.push(clubID);
+    for (const detail of detailClubs) candidates.push(...normalizeCourseCandidates({clubs: [withShellContext(detail, club)]}));
+  }
+  const unique = new Map<string, Candidate>();
+  for (const candidate of candidates.sort((a, b) => a.courseID.localeCompare(b.courseID))) if (!unique.has(candidate.courseID)) unique.set(candidate.courseID, candidate);
+  return {candidates: [...unique.values()], expandedClubIds, unresolvedClubShells};
+}
+
+export function previewProviderAttemptReservation(clubShellCount: number): number {
+  if (!Number.isInteger(clubShellCount) || clubShellCount < 0) throw new Error("INVALID_CLUB_SHELL_COUNT");
+  return (1 + clubShellCount) * (RETRY_DELAYS_MS.length + 1);
 }
 
 export function planCourseUpserts(candidates: readonly Candidate[], existingIds: ReadonlySet<string>): {create: Candidate[]; skippedExisting: string[]} {

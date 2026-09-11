@@ -4,7 +4,7 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {randomUUID} from "node:crypto";
 import {isActiveStaff} from "./authority.js";
-import {assertQuotaAvailable, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, normalizeCourseCandidates, planCourseUpserts, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, withDeterministicRetry} from "./courseGrowth.js";
+import {assertQuotaAvailable, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, withDeterministicRetry} from "./courseGrowth.js";
 import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
 import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
 
@@ -85,14 +85,33 @@ export const previewCourseRegionImport = onCall({
   }
 
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const previewReservation = RETRY_DELAYS_MS.length + 1;
-  const quota = await reserveQuota(previewReservation);
+  let previewReservation = RETRY_DELAYS_MS.length + 1;
+  let quota = await reserveQuota(previewReservation);
   let previewCalls = 0;
   const discovery = await golfApiGet(
     `/clubs?lat=${encodeURIComponent(latitude)}&lng=${encodeURIComponent(longitude)}&radius=${radiusKm}`,
     GOLF_API_KEY.value(), () => {previewCalls++;},
   );
-  const discovered = normalizeCourseCandidates(discovery.data);
+  const clubShellCount = providerClubs(discovery.data).filter((club) => !hasCompleteEmbeddedCourses(club)).length;
+  const detailReservation = previewProviderAttemptReservation(clubShellCount) - previewReservation;
+  try {
+    if (detailReservation) quota = await reserveQuota(detailReservation);
+    previewReservation += detailReservation;
+  } catch (error) {
+    await db.collection("platform").doc("golfApiUsage").set({estimatedCallsUsed: admin.firestore.FieldValue.increment(previewCalls - previewReservation), lastCallAt: admin.firestore.FieldValue.serverTimestamp()}, {merge: true});
+    throw error;
+  }
+  let expansion;
+  try {
+    expansion = await expandClubShells(discovery.data, async (clubID) => {
+      const detail = await golfApiGet(`/clubs/${encodeURIComponent(clubID)}`, GOLF_API_KEY.value(), () => {previewCalls++;});
+      return detail.data;
+    });
+  } catch (error) {
+    await db.collection("platform").doc("golfApiUsage").set({estimatedCallsUsed: admin.firestore.FieldValue.increment(previewCalls - previewReservation), lastCallAt: admin.firestore.FieldValue.serverTimestamp()}, {merge: true});
+    throw error;
+  }
+  const discovered = expansion.candidates;
   const refs = discovered.map((course) => db.collection("courses").doc(course.courseID));
   const existingSnapshots = refs.length ? await db.getAll(...refs) : [];
   const existingIds = new Set(existingSnapshots.filter((doc) => doc.exists).map((doc) => doc.id));
@@ -109,6 +128,9 @@ export const previewCourseRegionImport = onCall({
     candidates: missing.slice(0, MAX_COURSES_PER_COMMIT),
     truncated: missing.length > MAX_COURSES_PER_COMMIT,
     apiCallsUsed: previewCalls,
+    clubDetailCallsReserved: detailReservation,
+    clubShellsExpanded: expansion.expandedClubIds,
+    unresolvedClubShells: expansion.unresolvedClubShells,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + JOB_TTL_MS),
   });

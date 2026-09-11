@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import {assertQuotaAvailable, buildCourseGrowthRecord, deterministicReceiptId, normalizeCourseCandidates, planCourseUpserts, requireProviderConfiguration, RETRY_DELAYS_MS, withDeterministicRetry} from "./courseGrowth.js";
+import {assertQuotaAvailable, buildCourseGrowthRecord, deterministicReceiptId, expandClubShells, normalizeCourseCandidates, planCourseUpserts, previewProviderAttemptReservation, requireProviderConfiguration, RETRY_DELAYS_MS, withDeterministicRetry} from "./courseGrowth.js";
 
 let passed = 0;
 function check(name: string, run: () => void | Promise<void>) { return Promise.resolve(run()).then(() => {passed++; console.log(`  ✓ ${name}`);}); }
@@ -11,6 +11,24 @@ await check("normalization preserves Unicode and sorts deterministic unique prov
   assert.equal(rows[0].name, "Café"); assert.equal(rows[1].clubName, "สโมสรกอล์ฟ");
 });
 await check("invalid and unknown provider ids are dropped", () => assert.equal(normalizeCourseCandidates({clubs:[{courses:[{courseID:"unknown"},{courseID:"x"}]}]}).length, 0));
+await check("list shells expand to every legitimate layout before Firebase planning", async () => {
+  const fetched:string[]=[];
+  const plan=await expandClubShells({clubs:[{clubID:"siam_1",clubName:"Siam Country Club"}]},async(clubID)=>{fetched.push(clubID);return {data:{clubID,clubName:"Siam Country Club",courses:[{courseID:"siam_old",courseName:"Old Course"},{courseID:"siam_plantation",courseName:"Plantation"},{courseID:"siam_waterside",courseName:"Waterside"},{courseID:"siam_rolling",courseName:"Rolling Hills"}]}};});
+  assert.deepEqual(fetched,["siam_1"]);assert.deepEqual(plan.candidates.map((row)=>row.courseID),["siam_old","siam_plantation","siam_rolling","siam_waterside"]);assert.deepEqual(plan.expandedClubIds,["siam_1"]);
+});
+await check("shared club and coordinates never collapse distinct provider course ids", async () => {
+  const plan=await expandClubShells({clubs:[{clubID:"club_1",clubName:"Multi Club",courses:[{courseID:"layout_1"}],courseCount:2}]},async()=>({clubID:"club_1",latitude:12,longitude:100,courses:[{courseID:"layout_1"},{courseID:"layout_2"}]}));
+  assert.deepEqual(plan.candidates.map((row)=>row.courseID),["layout_1","layout_2"]);
+});
+await check("existing Firebase ids are planned out before course-detail calls", async () => {
+  const plan=await expandClubShells({clubs:[{clubID:"club_1"}]},async()=>({clubID:"club_1",courses:[{courseID:"existing_1"},{courseID:"new_1"}]}));
+  assert.deepEqual(planCourseUpserts(plan.candidates,new Set(["existing_1"])).create.map((row)=>row.courseID),["new_1"]);
+});
+await check("provider absence creates no synthetic Siam course", async () => {
+  const plan=await expandClubShells({clubs:[{clubID:"siam_1",clubName:"Siam"}]},async()=>({clubID:"siam_1",courses:[{courseID:"siam_old"},{courseID:"siam_plantation"}]}));
+  assert.deepEqual(plan.candidates.map((row)=>row.courseID),["siam_old","siam_plantation"]);assert.equal(plan.candidates.some((row)=>row.name==="Rolling Hills"),false);
+});
+await check("club-detail retry reservations include every shell", () => assert.equal(previewProviderAttemptReservation(3),16));
 await check("upsert plan skips existing ids and remains deterministic on retry", () => {
   const rows=normalizeCourseCandidates({clubs:[{courses:[{courseID:"course_2"},{courseID:"course_1"}]}]});
   const first=planCourseUpserts(rows,new Set(["course_1"]));assert.deepEqual(first.create.map(row=>row.courseID),["course_2"]);assert.deepEqual(first.skippedExisting,["course_1"]);
