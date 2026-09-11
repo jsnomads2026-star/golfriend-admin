@@ -90,6 +90,15 @@ function withShellContext(detail: Record<string, unknown>, shell: Record<string,
   };
 }
 
+/** Normalizes a club-detail response with the list row retained as fallback context. */
+export function normalizeClubDetailCandidates(shell: Record<string, unknown>, detailPayload: unknown): Candidate[] {
+  const candidates: Candidate[] = [];
+  for (const detail of providerClubs(detailPayload)) {
+    candidates.push(...normalizeCourseCandidates({clubs: [withShellContext(detail, shell)]}));
+  }
+  return candidates;
+}
+
 /** Resolve incomplete list rows through the existing provider club-detail endpoint before write planning. */
 export async function expandClubShells(listPayload: unknown, fetchClubDetail: (clubID: string) => Promise<unknown>): Promise<ClubExpansionPlan> {
   const candidates: Candidate[] = [];
@@ -103,10 +112,11 @@ export async function expandClubShells(listPayload: unknown, fetchClubDetail: (c
     const clubID = text(club.clubID || club.id) || null;
     const clubName = text(club.clubName || club.name, "Unnamed club");
     if (!clubID) { unresolvedClubShells.push({clubID, clubName}); continue; }
-    const detailClubs = providerClubs(await fetchClubDetail(clubID));
+    const detailPayload = await fetchClubDetail(clubID);
+    const detailClubs = providerClubs(detailPayload);
     if (!detailClubs.length) { unresolvedClubShells.push({clubID, clubName}); continue; }
     expandedClubIds.push(clubID);
-    for (const detail of detailClubs) candidates.push(...normalizeCourseCandidates({clubs: [withShellContext(detail, club)]}));
+    candidates.push(...normalizeClubDetailCandidates(club, detailPayload));
   }
   const unique = new Map<string, Candidate>();
   for (const candidate of candidates.sort((a, b) => a.courseID.localeCompare(b.courseID))) if (!unique.has(candidate.courseID)) unique.set(candidate.courseID, candidate);

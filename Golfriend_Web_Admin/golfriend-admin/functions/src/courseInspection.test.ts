@@ -1,0 +1,18 @@
+import assert from "node:assert";
+import {readFileSync} from "node:fs";
+import {inspectClubRegion, MAX_INSPECTED_CLUBS, MAX_INSPECTED_COURSES, normalizeClubInspectionInput} from "./courseInspection.js";
+
+let passed=0;
+async function check(name:string, run:()=>void|Promise<void>){await run();passed++;console.log(`  ✓ ${name}`);}
+const input=normalizeClubInspectionInput({latitude:12.93,longitude:100.88,radiusKm:50,searchText:"Siam"});
+
+async function main(){
+  await check("invalid coordinates and radius are refused",()=>{assert.throws(()=>normalizeClubInspectionInput({latitude:91,longitude:100,radiusKm:50}),/INVALID_COORDINATES/);assert.throws(()=>normalizeClubInspectionInput({latitude:12,longitude:100,radiusKm:201}),/INVALID_RADIUS/);});
+  await check("list shell expands multiple provider layouts without synthesis",async()=>{const paths:string[]=[];const result=await inspectClubRegion(input,async path=>{paths.push(path);return path.startsWith("/clubs?")?{clubs:[{clubID:"siam_1",clubName:"Siam Country Club"}]}:{data:{clubID:"siam_1",clubName:"Siam Country Club",courses:[{courseID:"siam_old",courseName:"Old Course"},{courseID:"siam_plantation",courseName:"Plantation"}]}};});assert.deepEqual(paths,["/clubs?lat=12.93&lng=100.88&radius=50","/clubs/siam_1"]);assert.deepEqual(result.clubs[0].detailAddedCourseIDs,["siam_old","siam_plantation"]);assert.deepEqual((result.clubs[0].courses as Array<{courseID:string}>).map(course=>course.courseID),["siam_old","siam_plantation"]);});
+  await check("provider absence creates no synthetic row",async()=>{const result=await inspectClubRegion(input,async path=>path.startsWith("/clubs?")?{clubs:[{clubID:"siam_1",clubName:"Siam Country Club"}]}:{data:{clubID:"siam_1",courses:[]}});assert.deepEqual(result.clubs[0].courses,[]);assert.deepEqual(result.clubs[0].detailAddedCourseIDs,[]);});
+  await check("result caps provider dump",async()=>{const result=await inspectClubRegion(normalizeClubInspectionInput({latitude:1,longitude:2,radiusKm:1}),async path=>path.startsWith("/clubs?")?{clubs:Array.from({length:MAX_INSPECTED_CLUBS+2},(_,i)=>({clubID:`club_${i}`,clubName:`Club ${i}`}))}:{courses:Array.from({length:MAX_INSPECTED_COURSES+2},(_,i)=>({courseID:`course_${i}`}))});assert.equal(result.clubs.length,MAX_INSPECTED_CLUBS);assert.equal(result.summary.coursesReturned,MAX_INSPECTED_COURSES);assert.equal((result.clubs[0].detailAddedCourseIDs as unknown[]).length,MAX_INSPECTED_COURSES);assert.equal((result.clubs.slice(1).flatMap(club=>(club.detailAddedCourseIDs as unknown[]))).length,0);});
+  await check("callable refuses unauthenticated and unauthorized callers, enables App Check, binds the secret, and has no Firestore write",()=>{const source=readFileSync("src/courseIngestion.ts","utf8");const start=source.indexOf("export const inspectGolfApiClubRegion");const body=source.slice(start,source.indexOf("export const commitCourseRegionImport",start));assert.match(body,/unauthenticated/);assert.match(body,/enforceAppCheck:\s*true/);assert.match(body,/secrets:\s*\[GOLF_API_KEY\]/);assert.match(body,/requireCoordinator\(request\.auth\.uid\)/);assert.doesNotMatch(body,/\.set\(|\.create\(|\.update\(|\.batch\(|runTransaction|collection\("courses"/);});
+  await check("inspection result never includes secret-like fields",async()=>{const result=await inspectClubRegion(input,async path=>path.startsWith("/clubs?")?{clubs:[{clubID:"siam_1",clubName:"Siam"}]}:{courses:[{courseID:"siam_old",courseName:"Old"}]});assert.doesNotMatch(JSON.stringify(result),/authorization|bearer|token|secret|api.?key/i);});
+  console.log(`course inspection: ${passed} checks passed.`);
+}
+void main().catch(error=>{console.error(error);process.exitCode=1;});

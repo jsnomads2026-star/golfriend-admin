@@ -7,6 +7,7 @@ import {isActiveStaff} from "./authority.js";
 import {assertQuotaAvailable, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, withDeterministicRetry} from "./courseGrowth.js";
 import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
 import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
+import {inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -148,6 +149,28 @@ export const previewCourseRegionImport = onCall({
     courses: missing.slice(0, MAX_COURSES_PER_COMMIT).map(({courseID, clubName, name, country}) =>
       ({courseID, clubName, name, country})),
   };
+});
+
+/** Credentialed inspection boundary only: Auth/App Check protected and deliberately Firestore-write-free. */
+export const inspectGolfApiClubRegion = onCall({
+  secrets: [GOLF_API_KEY],
+  enforceAppCheck: true,
+  memory: "512MiB",
+  timeoutSeconds: 120,
+}, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
+  await requireCoordinator(request.auth.uid);
+  let input;
+  try { input = normalizeClubInspectionInput(request.data); } catch (error) {
+    throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "INVALID_INSPECTION_INPUT");
+  }
+  requireProviderConfiguration(GOLF_API_KEY.value());
+  let providerCallsUsed = 0;
+  const inspection = await inspectClubRegion(input, async (path) => {
+    const response = await golfApiGet(path, GOLF_API_KEY.value(), () => {providerCallsUsed++;});
+    return response.data;
+  });
+  return {...inspection, summary: {...inspection.summary, providerCallsUsed}};
 });
 
 export const commitCourseRegionImport = onCall({
