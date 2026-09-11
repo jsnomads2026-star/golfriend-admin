@@ -8,6 +8,7 @@ export interface CourseOperationsService {
   sync(payload: { mode: 'preview'|'apply'; courseIds?: string[]; limit?: number }): Promise<unknown>;
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
   commitRegion(jobId:string): Promise<Record<string,unknown>>;
+  inspectSiamRegion(): Promise<Record<string,unknown>>;
   loadIngestionOperations():Promise<Record<string,unknown>>;
   prepareFailedRetry(jobId:string):Promise<Record<string,unknown>>;
 }
@@ -40,6 +41,12 @@ export const courseOperationsService: CourseOperationsService = {
     const callable=httpsCallable(functions,'commitCourseRegionImport');
     const response=await callable({jobId});
     if(!response.data||typeof response.data!=='object') throw new Error('COURSE_INGESTION_COMMIT_INVALID');
+    return response.data as Record<string,unknown>;
+  },
+  async inspectSiamRegion() {
+    const callable=httpsCallable(functions,'inspectGolfApiClubRegion');
+    const response=await callable({latitude:12.9236,longitude:100.8825,radiusKm:50,searchText:'Siam'});
+    if(!response.data||typeof response.data!=='object') throw new Error('SIAM_PROVIDER_INSPECTION_INVALID');
     return response.data as Record<string,unknown>;
   },
   async loadIngestionOperations(){const response=await httpsCallable(functions,'getCourseIngestionOperations')();const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.course-operations/v1')throw new Error('COURSE_OPERATIONS_INVALID');return value;},
