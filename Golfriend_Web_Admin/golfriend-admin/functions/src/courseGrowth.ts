@@ -10,10 +10,33 @@ export type Candidate = {
   courseID: string; clubID: string | null; clubName: string; name: string;
   address: string | null; city: string | null; state: string | null;
   country: string | null; latitude: number | null; longitude: number | null;
+  /** Explicit relationship only; never use a layout name as a clubhouse alias. */
+  providerCourseId?: string; providerClubId?: string | null; clubhouseId?: string | null;
 };
+
+export type ProviderCourseLayout = Readonly<{
+  providerCourseId: string; providerCourseName: string; providerClubId: string;
+  providerParentId: string | null; latitude: number | null; longitude: number | null;
+}>;
+
+/** Bounded provider authority for one member-facing golf destination. */
+export type ProviderClubhouse = Readonly<{
+  providerClubId: string; providerClubName: string; providerParentId: string | null;
+  providerPropertyId: string | null; providerPropertyType: string | null; providerBookable: boolean | null;
+  address: string | null; address2: string | null; city: string | null; state: string | null;
+  postalCode: string | null; country: string | null; countryCode: string | null;
+  latitude: number | null; longitude: number | null;
+  phone: string | null; mobile: string | null; email: string | null; website: string | null;
+  contactPhone: string | null; contactEmail: string | null;
+  bookingUrl: string | null; reservationUrl: string | null; teeTimeUrl: string | null;
+  reservationPhone: string | null; reservationEmail: string | null;
+  bookingProviderId: string | null; reservationProviderId: string | null;
+  layouts: readonly ProviderCourseLayout[];
+}>;
 
 export type ClubExpansionPlan = {
   candidates: Candidate[];
+  clubhouses: ProviderClubhouse[];
   expandedClubIds: string[];
   unresolvedClubShells: Array<{clubID: string | null; clubName: string}>;
 };
@@ -23,6 +46,17 @@ const text = (value: unknown, fallback = ""): string =>
 const finite = (value: unknown): number | null => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+const optionalText = (value: unknown, max = 512): string | null => {
+  const normalized = text(value);
+  return normalized ? normalized.slice(0, max) : null;
+};
+const field = (row: Record<string, unknown>, keys: readonly string[], max?: number): string | null => {
+  for (const key of keys) {
+    const value = optionalText(row[key], max);
+    if (value) return value;
+  }
+  return null;
 };
 
 export function requireProviderConfiguration(apiKey: string): string {
@@ -43,30 +77,53 @@ export function providerClubs(payload: unknown): Record<string, unknown>[] {
   return rows.filter((row): row is Record<string, unknown> => !!row && typeof row === "object");
 }
 
-export function normalizeCourseCandidates(payload: unknown): Candidate[] {
-  const clubs = providerClubs(payload);
-  const candidates: Candidate[] = [];
-  for (const rawClub of clubs) {
-    const club = rawClub as Record<string, unknown>;
-    const courses = Array.isArray(club.courses) ? club.courses : [];
-    for (const rawCourse of courses) {
-      const course = rawCourse as Record<string, unknown>;
-      const courseID = text(course.courseID || course.id);
-      if (!isValidProviderId(courseID)) continue;
-      candidates.push({
-        courseID,
-        clubID: text(club.clubID || club.id) || null,
-        clubName: text(club.clubName || club.name, "Unnamed club"),
-        name: text(course.courseName || course.name, "Unnamed course"),
-        address: text(club.address) || null, city: text(club.city) || null,
-        state: text(club.state) || null, country: text(club.country) || null,
-        latitude: finite(club.latitude), longitude: finite(club.longitude),
-      });
-    }
+export function normalizeClubhouses(payload: unknown): ProviderClubhouse[] {
+  const unique = new Map<string, ProviderClubhouse>();
+  for (const rawClub of providerClubs(payload)) {
+    const providerClubId = field(rawClub, ["clubID", "clubId", "id"], 160);
+    if (!providerClubId || !isValidProviderId(providerClubId) || unique.has(providerClubId)) continue;
+    const layouts = (Array.isArray(rawClub.courses) ? rawClub.courses : [])
+      .filter((course): course is Record<string, unknown> => !!course && typeof course === "object")
+      .map((course) => {
+        const providerCourseId = field(course, ["courseID", "courseId", "id"], 160);
+        if (!providerCourseId || !isValidProviderId(providerCourseId)) return null;
+        return Object.freeze({providerCourseId, providerCourseName: field(course, ["courseName", "name"]) || "Unnamed course", providerClubId: field(course, ["clubID", "clubId", "club_id"], 160) || providerClubId, providerParentId: field(course, ["parentCourseID", "parentCourseId", "parentClubID", "parentClubId", "parentID", "parentId"], 160), latitude: finite(course.latitude), longitude: finite(course.longitude)});
+      }).filter((layout): layout is ProviderCourseLayout => !!layout)
+      .sort((a, b) => a.providerCourseId.localeCompare(b.providerCourseId));
+    unique.set(providerClubId, Object.freeze({
+      providerClubId, providerClubName: field(rawClub, ["clubName", "name"]) || "Unnamed club",
+      providerParentId: field(rawClub, ["parentClubID", "parentClubId", "parentID", "parentId"], 160), providerPropertyId: field(rawClub, ["propertyID", "propertyId", "propertyIdentifier"], 160), providerPropertyType: field(rawClub, ["propertyType", "clubType", "type"], 128), providerBookable: typeof rawClub.bookable === "boolean" ? rawClub.bookable : typeof rawClub.isBookable === "boolean" ? rawClub.isBookable : null,
+      address: field(rawClub, ["address"]), address2: field(rawClub, ["address2"]), city: field(rawClub, ["city"]), state: field(rawClub, ["state", "province"]), postalCode: field(rawClub, ["postalCode", "postal_code"]), country: field(rawClub, ["country"]), countryCode: field(rawClub, ["countryCode", "country_code"], 16), latitude: finite(rawClub.latitude), longitude: finite(rawClub.longitude),
+      phone: field(rawClub, ["phone", "telephone"], 128), mobile: field(rawClub, ["mobile", "mobilePhone", "cellPhone"], 128), email: field(rawClub, ["email"], 320), website: field(rawClub, ["website", "url"], 2048), contactPhone: field(rawClub, ["contactPhone"], 128), contactEmail: field(rawClub, ["contactEmail"], 320), bookingUrl: field(rawClub, ["bookingUrl"], 2048), reservationUrl: field(rawClub, ["reservationUrl"], 2048), teeTimeUrl: field(rawClub, ["teeTimeUrl"], 2048), reservationPhone: field(rawClub, ["reservationPhone", "bookingPhone"], 128), reservationEmail: field(rawClub, ["reservationEmail", "bookingEmail"], 320), bookingProviderId: field(rawClub, ["bookingProviderID", "bookingProviderId", "bookingID", "bookingId"], 160), reservationProviderId: field(rawClub, ["reservationProviderID", "reservationProviderId", "reservationID", "reservationId"], 160), layouts: Object.freeze(layouts),
+    }));
   }
-  candidates.sort((a, b) => a.courseID.localeCompare(b.courseID) || JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return [...unique.values()].sort((a, b) => a.providerClubId.localeCompare(b.providerClubId));
+}
+
+export function courseCandidatesFromClubhouses(clubhouses: readonly ProviderClubhouse[]): Candidate[] {
   const unique = new Map<string, Candidate>();
-  for (const candidate of candidates) if (!unique.has(candidate.courseID)) unique.set(candidate.courseID, candidate);
+  for (const clubhouse of clubhouses) for (const layout of clubhouse.layouts) if (!unique.has(layout.providerCourseId)) unique.set(layout.providerCourseId, {
+    courseID: layout.providerCourseId, providerCourseId: layout.providerCourseId, clubID: clubhouse.providerClubId, providerClubId: clubhouse.providerClubId, clubhouseId: clubhouse.providerClubId, clubName: clubhouse.providerClubName, name: layout.providerCourseName, address: clubhouse.address, city: clubhouse.city, state: clubhouse.state, country: clubhouse.country, latitude: clubhouse.latitude, longitude: clubhouse.longitude,
+  });
+  return [...unique.values()].sort((a, b) => a.courseID.localeCompare(b.courseID));
+}
+
+/** Compatibility projection for course-only callers. Canonical callers use normalizeClubhouses. */
+export function normalizeCourseCandidates(payload: unknown): Candidate[] {
+  const canonical = courseCandidatesFromClubhouses(normalizeClubhouses(payload));
+  // A provider row without a club id cannot become a clubhouse. Preserve its existing
+  // course-only behavior for review/quarantine rather than fabricating a destination.
+  const legacy = providerClubs(payload).flatMap((club) => {
+    if (field(club, ["clubID", "clubId", "id"], 160)) return [];
+    return (Array.isArray(club.courses) ? club.courses : []).flatMap((rawCourse) => {
+      if (!rawCourse || typeof rawCourse !== "object") return [];
+      const course = rawCourse as Record<string, unknown>;
+      const courseID = field(course, ["courseID", "courseId", "id"], 160);
+      return courseID && isValidProviderId(courseID) ? [{courseID, providerCourseId: courseID, clubID: null, providerClubId: null, clubhouseId: null, clubName: field(club, ["clubName", "name"]) || "Unnamed club", name: field(course, ["courseName", "name"]) || "Unnamed course", address: field(club, ["address"]), city: field(club, ["city"]), state: field(club, ["state", "province"]), country: field(club, ["country"]), latitude: finite(club.latitude), longitude: finite(club.longitude)}] : [];
+    });
+  });
+  const unique = new Map<string, Candidate>();
+  for (const candidate of [...canonical, ...legacy].sort((a, b) => a.courseID.localeCompare(b.courseID))) if (!unique.has(candidate.courseID)) unique.set(candidate.courseID, candidate);
   return [...unique.values()];
 }
 
@@ -92,21 +149,19 @@ function withShellContext(detail: Record<string, unknown>, shell: Record<string,
 
 /** Normalizes a club-detail response with the list row retained as fallback context. */
 export function normalizeClubDetailCandidates(shell: Record<string, unknown>, detailPayload: unknown): Candidate[] {
-  const candidates: Candidate[] = [];
-  for (const detail of providerClubs(detailPayload)) {
-    candidates.push(...normalizeCourseCandidates({clubs: [withShellContext(detail, shell)]}));
-  }
-  return candidates;
+  return courseCandidatesFromClubhouses(normalizeClubDetailClubhouses(shell, detailPayload));
 }
+
+export function normalizeClubDetailClubhouses(shell: Record<string, unknown>, detailPayload: unknown): ProviderClubhouse[] { return normalizeClubhouses({clubs: providerClubs(detailPayload).map((detail) => withShellContext(detail, shell))}); }
 
 /** Resolve incomplete list rows through the existing provider club-detail endpoint before write planning. */
 export async function expandClubShells(listPayload: unknown, fetchClubDetail: (clubID: string) => Promise<unknown>): Promise<ClubExpansionPlan> {
-  const candidates: Candidate[] = [];
+  const clubhouses: ProviderClubhouse[] = [];
   const expandedClubIds: string[] = [];
   const unresolvedClubShells: Array<{clubID: string | null; clubName: string}> = [];
   for (const club of providerClubs(listPayload)) {
     if (hasCompleteEmbeddedCourses(club)) {
-      candidates.push(...normalizeCourseCandidates({clubs: [club]}));
+      clubhouses.push(...normalizeClubhouses({clubs: [club]}));
       continue;
     }
     const clubID = text(club.clubID || club.id) || null;
@@ -116,11 +171,12 @@ export async function expandClubShells(listPayload: unknown, fetchClubDetail: (c
     const detailClubs = providerClubs(detailPayload);
     if (!detailClubs.length) { unresolvedClubShells.push({clubID, clubName}); continue; }
     expandedClubIds.push(clubID);
-    candidates.push(...normalizeClubDetailCandidates(club, detailPayload));
+    clubhouses.push(...normalizeClubDetailClubhouses(club, detailPayload));
   }
-  const unique = new Map<string, Candidate>();
-  for (const candidate of candidates.sort((a, b) => a.courseID.localeCompare(b.courseID))) if (!unique.has(candidate.courseID)) unique.set(candidate.courseID, candidate);
-  return {candidates: [...unique.values()], expandedClubIds, unresolvedClubShells};
+  const uniqueClubhouses = new Map<string, ProviderClubhouse>();
+  for (const clubhouse of clubhouses) if (!uniqueClubhouses.has(clubhouse.providerClubId)) uniqueClubhouses.set(clubhouse.providerClubId, clubhouse);
+  const canonicalClubhouses = [...uniqueClubhouses.values()].sort((a, b) => a.providerClubId.localeCompare(b.providerClubId));
+  return {candidates: courseCandidatesFromClubhouses(canonicalClubhouses), clubhouses: canonicalClubhouses, expandedClubIds, unresolvedClubShells};
 }
 
 export function previewProviderAttemptReservation(clubShellCount: number): number {
@@ -170,7 +226,7 @@ export function buildCourseGrowthRecord(candidate: Candidate, details: Record<st
   const longitude = preserve && isValidCoordinate(existingLat, existingLng) ? existingLng : isValidCoordinate(providerLat, providerLng) ? providerLng : null;
   const requiresCoordinatorReview = !isValidCoordinate(latitude, longitude);
   return {
-    ...candidate, latitude, longitude, lat: latitude, lng: longitude,
+    ...candidate, providerCourseId: candidate.providerCourseId || candidate.courseID, providerClubId: candidate.providerClubId || candidate.clubID, clubhouseId: candidate.clubhouseId || candidate.providerClubId || candidate.clubID, latitude, longitude, lat: latitude, lng: longitude,
     holes: Array.isArray(details.holes) ? details.holes : [],
     greenCoordinates: Array.isArray(coordinates.greens) ? coordinates.greens : [],
     bunkerCoordinates: Array.isArray(coordinates.bunkers) ? coordinates.bunkers : [],
@@ -179,6 +235,12 @@ export function buildCourseGrowthRecord(candidate: Candidate, details: Record<st
     schemaVersion: COURSE_GROWTH_SCHEMA, source: "golfapi", apiImported: true,
     requiresCoordinatorReview, isActive: !requiresCoordinatorReview,
   };
+}
+
+/** Canonical member-facing destination; layouts are deliberately not copied into its display identity. */
+export function buildClubhouseRecord(clubhouse: ProviderClubhouse): Record<string, unknown> {
+  const location = {address: clubhouse.address, address2: clubhouse.address2, city: clubhouse.city, state: clubhouse.state, postalCode: clubhouse.postalCode, country: clubhouse.country, countryCode: clubhouse.countryCode, latitude: clubhouse.latitude, longitude: clubhouse.longitude};
+  return {schema: "golfriend.v2.clubhouse.v2", schemaVersion: 2, clubhouseId: clubhouse.providerClubId, providerClubId: clubhouse.providerClubId, displayName: clubhouse.providerClubName, providerParentId: clubhouse.providerParentId, providerPropertyId: clubhouse.providerPropertyId, providerPropertyType: clubhouse.providerPropertyType, providerBookable: clubhouse.providerBookable, country: clubhouse.country, countryCode: clubhouse.countryCode, location, contact: {phone: clubhouse.phone, mobile: clubhouse.mobile, email: clubhouse.email, website: clubhouse.website, contactPhone: clubhouse.contactPhone, contactEmail: clubhouse.contactEmail}, reservation: {bookingUrl: clubhouse.bookingUrl, reservationUrl: clubhouse.reservationUrl, teeTimeUrl: clubhouse.teeTimeUrl, reservationPhone: clubhouse.reservationPhone, reservationEmail: clubhouse.reservationEmail, bookingProviderId: clubhouse.bookingProviderId, reservationProviderId: clubhouse.reservationProviderId}, courseLayoutIds: clubhouse.layouts.map((layout) => layout.providerCourseId), courseLayoutCount: clubhouse.layouts.length, provider: "golf-api"};
 }
 
 export function deterministicReceiptId(jobId: string): string {

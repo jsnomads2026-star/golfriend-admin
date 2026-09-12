@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import {assertQuotaAvailable, buildCourseGrowthRecord, deterministicReceiptId, expandClubShells, normalizeCourseCandidates, planCourseUpserts, previewProviderAttemptReservation, requireProviderConfiguration, RETRY_DELAYS_MS, withDeterministicRetry} from "./courseGrowth.js";
+import {assertQuotaAvailable, buildClubhouseRecord, buildCourseGrowthRecord, deterministicReceiptId, expandClubShells, normalizeClubhouses, normalizeCourseCandidates, planCourseUpserts, previewProviderAttemptReservation, requireProviderConfiguration, RETRY_DELAYS_MS, withDeterministicRetry} from "./courseGrowth.js";
 
 let passed = 0;
 function check(name: string, run: () => void | Promise<void>) { return Promise.resolve(run()).then(() => {passed++; console.log(`  ✓ ${name}`);}); }
@@ -11,6 +11,13 @@ await check("normalization preserves Unicode and sorts deterministic unique prov
   assert.equal(rows[0].name, "Café"); assert.equal(rows[1].clubName, "สโมสรกอล์ฟ");
 });
 await check("invalid and unknown provider ids are dropped", () => assert.equal(normalizeCourseCandidates({clubs:[{courses:[{courseID:"unknown"},{courseID:"x"}]}]}).length, 0));
+await check("club-house normalization preserves bounded authority and explicit layout identity", () => {
+  const clubs=normalizeClubhouses({clubs:[{clubID:"club_1",clubName:"Provider Club",address:"1 Fairway",phone:"123",bookingUrl:"https://provider.example/book",propertyID:"property_1",courses:[{courseID:"layout_1",courseName:"Layout One",clubID:"club_1"},{courseID:"layout_2",courseName:"Layout Two",clubID:"club_1"}],token:"never"}]});
+  assert.equal(clubs.length,1);assert.equal(clubs[0].phone,"123");assert.equal(clubs[0].providerPropertyId,"property_1");assert.deepEqual(clubs[0].layouts.map(layout=>layout.providerCourseId),["layout_1","layout_2"]);assert.doesNotMatch(JSON.stringify(buildClubhouseRecord(clubs[0])),/token|secret|authorization/i);
+});
+await check("missing provider authority stays null and no course name becomes a club-house alias", () => {
+  const club=normalizeClubhouses({clubs:[{clubID:"club_1",clubName:"Provider Club",courses:[{courseID:"layout_1",courseName:"Plantation"}]}]})[0];assert.equal(club.reservationUrl,null);assert.equal(club.providerPropertyId,null);assert.equal(club.providerClubName,"Provider Club");assert.doesNotMatch(JSON.stringify(club),/Siam/i);
+});
 await check("list shells expand to every legitimate layout before Firebase planning", async () => {
   const fetched:string[]=[];
   const plan=await expandClubShells({clubs:[{clubID:"siam_1",clubName:"Siam Country Club"}]},async(clubID)=>{fetched.push(clubID);return {data:{clubID,clubName:"Siam Country Club",courses:[{courseID:"siam_old",courseName:"Old Course"},{courseID:"siam_plantation",courseName:"Plantation"},{courseID:"siam_waterside",courseName:"Waterside"},{courseID:"siam_rolling",courseName:"Rolling Hills"}]}};});

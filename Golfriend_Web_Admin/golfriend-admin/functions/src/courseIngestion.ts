@@ -4,7 +4,7 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {randomUUID} from "node:crypto";
 import {isActiveStaff} from "./authority.js";
-import {assertQuotaAvailable, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, withDeterministicRetry} from "./courseGrowth.js";
+import {assertQuotaAvailable, buildClubhouseRecord, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, type ProviderClubhouse, withDeterministicRetry} from "./courseGrowth.js";
 import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
 import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
 import {inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
@@ -127,6 +127,8 @@ export const previewCourseRegionImport = onCall({
     existingCount: existingIds.size,
     missingCount: missing.length,
     candidates: missing.slice(0, MAX_COURSES_PER_COMMIT),
+    // Bounded authoritative club-house facts for the later approved commit; layouts remain separate.
+    clubhouses: expansion.clubhouses.slice(0, MAX_COURSES_PER_COMMIT),
     truncated: missing.length > MAX_COURSES_PER_COMMIT,
     apiCallsUsed: previewCalls,
     clubDetailCallsReserved: detailReservation,
@@ -209,6 +211,8 @@ export const commitCourseRegionImport = onCall({
   if (claimed.replay) return {...claimed.job.result, receiptId, replayed: true};
 
   const candidates = (Array.isArray(claimed.job.candidates) ? claimed.job.candidates : []).slice(0, MAX_COURSES_PER_COMMIT) as Candidate[];
+  const clubhouses = (Array.isArray(claimed.job.clubhouses) ? claimed.job.clubhouses : []).slice(0, MAX_COURSES_PER_COMMIT) as ProviderClubhouse[];
+  const clubhouseByProviderId = new Map(clubhouses.map((clubhouse) => [clubhouse.providerClubId, clubhouse]));
   const reservedCalls = candidates.length * PROVIDER_CALLS_PER_COURSE * (RETRY_DELAYS_MS.length + 1);
   let quota;
   try { quota = await reserveQuota(reservedCalls); } catch (error) {
@@ -254,6 +258,8 @@ export const commitCourseRegionImport = onCall({
           throw new HttpsError("aborted", error instanceof Error ? error.message : "LEASE_OWNERSHIP_LOST");
         }
         if (latest.exists) return false;
+        const clubhouse = candidate.providerClubId ? clubhouseByProviderId.get(candidate.providerClubId) : undefined;
+        if (clubhouse) transaction.set(db.collection("clubhouses").doc(clubhouse.providerClubId), buildClubhouseRecord(clubhouse), {merge: true});
         transaction.create(courseRef, record);
         return true;
       });
