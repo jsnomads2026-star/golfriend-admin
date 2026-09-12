@@ -4,10 +4,12 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {randomUUID} from "node:crypto";
 import {isActiveStaff} from "./authority.js";
-import {assertQuotaAvailable, buildClubhouseRecord, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, type ProviderClubhouse, withDeterministicRetry} from "./courseGrowth.js";
+import {assertQuotaAvailable, buildClubhouseRecord, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, normalizeClubDetailClubhouses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, type ProviderClubhouse, withDeterministicRetry} from "./courseGrowth.js";
 import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
 import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
 import {inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
+import {MAX_RECONCILIATION_CLUBHOUSES, MAX_RECONCILIATION_WRITES, assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId, type ReconciliationPlan} from "./courseClubhouseReconciliation.js";
+import {isValidProviderId} from "./courseSync.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -41,6 +43,30 @@ async function requireCoordinator(uid: string): Promise<void> {
   if (!adminUser.exists || !isActiveStaff(adminUser.data())) {
     throw new HttpsError("permission-denied", "Course ingestion requires an authorised coordinator.");
   }
+}
+
+function reconciliationTargetIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_RECONCILIATION_CLUBHOUSES) throw new HttpsError("invalid-argument", "A bounded providerClubIds list is required.");
+  const ids = [...new Set(value.map((id) => String(id || "").trim()))].sort();
+  if (ids.length !== value.length || ids.some((id) => !isValidProviderId(id))) throw new HttpsError("invalid-argument", "providerClubIds must be distinct valid provider IDs.");
+  return ids;
+}
+
+async function reconciliationPlanFor(providerClubIds: readonly string[]): Promise<ReconciliationPlan> {
+  const [clubhouseSnapshots, courseSnapshots, providerClubhouses] = await Promise.all([
+    db.getAll(...providerClubIds.map((id) => db.collection("clubhouses").doc(id))),
+    Promise.all(providerClubIds.map((id) => db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES).get())),
+    Promise.all(providerClubIds.map(async (id) => {
+      const response = await golfApiGet(`/clubs/${encodeURIComponent(id)}`, GOLF_API_KEY.value());
+      const normalized = normalizeClubDetailClubhouses({clubID: id}, response.data);
+      const clubhouse = normalized.find((row) => row.providerClubId === id);
+      if (!clubhouse) throw new HttpsError("failed-precondition", `PROVIDER_CLUB_DETAIL_MISSING:${id}`);
+      return clubhouse;
+    })),
+  ]);
+  const existingCourses = courseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
+  const existingClubhouses = clubhouseSnapshots.filter((doc) => doc.exists).map((doc) => ({id: doc.id, ...doc.data()}));
+  return planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses);
 }
 
 async function golfApiGet(path: string, apiKey: string, onAttempt: () => void | Promise<void> = () => {}): Promise<{data: any; callsUsed: number}> {
@@ -173,6 +199,51 @@ export const inspectGolfApiClubRegion = onCall({
     return response.data;
   });
   return {...inspection, summary: {...inspection.summary, providerCallsUsed}};
+});
+
+/** Bounded read-only plan. It intentionally creates no job, quota, receipt, or catalogue record. */
+export const previewCourseClubhouseReconciliation = onCall({
+  secrets: [GOLF_API_KEY], enforceAppCheck: true, memory: "512MiB", timeoutSeconds: 120,
+}, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
+  await requireCoordinator(request.auth.uid);
+  const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
+  requireProviderConfiguration(GOLF_API_KEY.value());
+  const plan = await reconciliationPlanFor(providerClubIds);
+  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, productionWrites: 0}};
+});
+
+/** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
+export const executeCourseClubhouseReconciliation = onCall({
+  secrets: [GOLF_API_KEY], enforceAppCheck: true, memory: "512MiB", timeoutSeconds: 120,
+}, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
+  await requireCoordinator(request.auth.uid);
+  const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
+  const approvedPlanHash = String(request.data?.approvedPlanHash || "").trim();
+  const expectedSourceStateHash = String(request.data?.sourceStateHash || "").trim();
+  if (!/^[a-f0-9]{64}$/.test(approvedPlanHash) || !/^[a-f0-9]{64}$/.test(expectedSourceStateHash)) throw new HttpsError("invalid-argument", "Exact approved planHash and sourceStateHash are required.");
+  const receiptId = reconciliationReceiptId(approvedPlanHash);
+  const receiptRef = db.collection("course_clubhouse_backfill_receipts").doc(receiptId);
+  const existingReceipt = await receiptRef.get();
+  if (reconciliationExecutionDisposition(existingReceipt.exists) === "replayed") return {receiptId, replayed: true, result: existingReceipt.data()?.result || null};
+  requireProviderConfiguration(GOLF_API_KEY.value());
+  const plan = await reconciliationPlanFor(providerClubIds);
+  if (plan.sourceStateHash !== expectedSourceStateHash) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN");
+  try { assertExecutablePlan(plan, approvedPlanHash, plan); } catch (error) { throw new HttpsError("failed-precondition", error instanceof Error ? error.message : "APPROVED_PLAN_HASH_MISMATCH"); }
+  const refs = [...plan.clubhouseUpserts.map((op) => db.collection("clubhouses").doc(op.id)), ...plan.coursePatches.map((op) => db.collection("courses").doc(op.id))];
+  const result = await db.runTransaction(async (transaction) => {
+    const [latestReceipt, ...snapshots] = await Promise.all([transaction.get(receiptRef), ...refs.map((ref) => transaction.get(ref))]);
+    if (latestReceipt.exists) return {replayed: true, result: latestReceipt.data()?.result || null};
+    let writes = 0; let cursor = 0;
+    for (const operation of plan.clubhouseUpserts) { const existing = snapshots[cursor++]; if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
+    for (const operation of plan.coursePatches) { const existing = snapshots[cursor++]; if (!existing.exists) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN"); if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
+    if (writes > MAX_RECONCILIATION_WRITES) throw new HttpsError("failed-precondition", "RECONCILIATION_WRITE_LIMIT_EXCEEDED");
+    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, writes, deletes: 0, creates: 0};
+    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, result: summary, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
+    return {replayed: false, result: summary};
+  });
+  return {receiptId, ...result};
 });
 
 export const commitCourseRegionImport = onCall({

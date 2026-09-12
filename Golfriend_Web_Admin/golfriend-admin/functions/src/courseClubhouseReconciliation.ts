@@ -1,23 +1,40 @@
+import {createHash} from "node:crypto";
 import {buildClubhouseRecord, type ProviderClubhouse} from "./courseGrowth.js";
+import {isValidCoordinate} from "./courseSync.js";
 
-export const COURSE_CLUBHOUSE_RECONCILIATION_SCHEMA = "golfriend.course-clubhouse-reconciliation/v1";
+export const COURSE_CLUBHOUSE_RECONCILIATION_SCHEMA = "golfriend.course-clubhouse-reconciliation/v2";
+export const MAX_RECONCILIATION_CLUBHOUSES = 25;
+export const MAX_RECONCILIATION_WRITES = 200;
+type Row = Record<string, unknown>;
+export type ReconciliationPlan = Readonly<{schemaVersion: string; targetClubhouseIds: readonly string[]; sourceStateHash: string; planHash: string; clubhouseUpserts: readonly {id: string; patch: Row}[]; coursePatches: readonly {id: string; patch: Row}[]; unmatchedProviderLayouts: readonly {providerClubId: string; providerCourseId: string}[]}>;
 
-type ExistingCourse = Record<string, unknown>;
+function canonical(value: unknown): string { if (value === null) return "null"; if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value); if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null"; if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`; if (value && typeof value === "object") return `{${Object.keys(value as Row).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Row)[key])}`).join(",")}}`; return "null"; }
+export function reconciliationHash(value: unknown): string { return createHash("sha256").update(canonical(value)).digest("hex"); }
+const text = (value: unknown): string => String(value || "").trim();
+const finite = (value: unknown): number | null => { const number = typeof value === "number" ? value : Number(value); return Number.isFinite(number) ? number : null; };
+const locationOf = (row: Row): Row => row.location && typeof row.location === "object" && !Array.isArray(row.location) ? row.location as Row : {};
+function sourceCourse(row: Row): Row { return {id: text(row.id || row.courseID || row.providerCourseId), providerCourseId: text(row.providerCourseId || row.courseID), providerClubId: text(row.providerClubId || row.clubID), clubhouseId: text(row.clubhouseId), name: text(row.name), latitude: finite(row.latitude ?? row.lat), longitude: finite(row.longitude ?? row.lng)}; }
+function sourceClubhouse(row: Row): Row { const location = locationOf(row); return {id: text(row.id || row.providerClubId || row.clubhouseId), providerClubId: text(row.providerClubId), displayName: text(row.displayName), location: {latitude: finite(location.latitude), longitude: finite(location.longitude), address: text(location.address), city: text(location.city), state: text(location.state)}}; }
+function same(left: unknown, right: unknown): boolean { return canonical(left) === canonical(right); }
+function supplied(value: unknown): unknown { if (value === null || value === undefined) return undefined; if (Array.isArray(value)) return value.map(supplied).filter((item) => item !== undefined); if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Row).flatMap(([key, item]) => { const normalized = supplied(item); return normalized === undefined ? [] : [[key, normalized]]; })); return value; }
 
-/**
- * Pure, non-writing reconciliation plan. It is intentionally not exported as a callable:
- * an operator must separately approve the later bounded execution boundary.
- */
-export function planCourseClubhouseReconciliation(clubhouses: readonly ProviderClubhouse[], existingCourses: readonly ExistingCourse[]) {
-  const courseByProviderId = new Map(existingCourses.map((course) => [String(course.providerCourseId || course.courseID || "").trim(), course]));
-  const clubhouseUpserts = clubhouses.map((clubhouse) => ({id: clubhouse.providerClubId, record: buildClubhouseRecord(clubhouse)}));
-  const coursePatches: Array<{id: string; patch: Record<string, unknown>}> = [];
-  for (const clubhouse of clubhouses) for (const layout of clubhouse.layouts) {
-    const existing = courseByProviderId.get(layout.providerCourseId);
-    if (!existing) continue; // Never synthesize a layout from a reconciliation plan.
-    const id = String(existing.courseID || existing.providerCourseId || layout.providerCourseId);
-    coursePatches.push({id, patch: {providerCourseId: layout.providerCourseId, providerClubId: clubhouse.providerClubId, clubhouseId: clubhouse.providerClubId, clubID: clubhouse.providerClubId, clubName: clubhouse.providerClubName, name: layout.providerCourseName, providerParentId: layout.providerParentId}});
-  }
-  coursePatches.sort((a, b) => a.id.localeCompare(b.id));
-  return Object.freeze({schemaVersion: COURSE_CLUBHOUSE_RECONCILIATION_SCHEMA, clubhouseUpserts: Object.freeze(clubhouseUpserts), coursePatches: Object.freeze(coursePatches), unmatchedProviderLayouts: Object.freeze(clubhouses.flatMap((clubhouse) => clubhouse.layouts.filter((layout) => !courseByProviderId.has(layout.providerCourseId)).map((layout) => ({providerClubId: clubhouse.providerClubId, providerCourseId: layout.providerCourseId}))) )});
+/** Existing valid coordinates win. This is an authority reconciliation, never a GPS rewrite. */
+function clubhousePatch(existing: Row | undefined, provider: ProviderClubhouse): Row { const desired = buildClubhouseRecord(provider); const oldLocation = existing ? locationOf(existing) : {}; const oldLatitude = finite(oldLocation.latitude), oldLongitude = finite(oldLocation.longitude); if (isValidCoordinate(oldLatitude, oldLongitude)) desired.location = {...desired.location as Row, latitude: oldLatitude, longitude: oldLongitude}; return supplied(desired) as Row; }
+
+/** Pure preview plan. It has no Firebase dependency and cannot write, delete, or synthesize layouts. */
+export function planCourseClubhouseReconciliation(clubhouses: readonly ProviderClubhouse[], existingCourses: readonly Row[], existingClubhouses: readonly Row[] = []): ReconciliationPlan {
+  if (clubhouses.length > MAX_RECONCILIATION_CLUBHOUSES) throw new Error("RECONCILIATION_TARGET_LIMIT_EXCEEDED");
+  const uniqueClubhouses = new Map<string, ProviderClubhouse>();
+  for (const clubhouse of clubhouses) { if (!clubhouse.providerClubId || uniqueClubhouses.has(clubhouse.providerClubId)) throw new Error("INVALID_OR_DUPLICATE_PROVIDER_CLUBHOUSE"); uniqueClubhouses.set(clubhouse.providerClubId, clubhouse); }
+  const targetClubhouseIds = [...uniqueClubhouses.keys()].sort(); const courseByProviderId = new Map(existingCourses.map((course) => [text(course.providerCourseId || course.courseID), course])); const clubhouseByProviderId = new Map(existingClubhouses.map((clubhouse) => [text(clubhouse.providerClubId || clubhouse.clubhouseId || clubhouse.id), clubhouse]));
+  const sourceStateHash = reconciliationHash({courses: existingCourses.map(sourceCourse).sort((a, b) => String(a.id).localeCompare(String(b.id))), clubhouses: existingClubhouses.map(sourceClubhouse).sort((a, b) => String(a.id).localeCompare(String(b.id))), targets: targetClubhouseIds});
+  const clubhouseUpserts = targetClubhouseIds.map((id) => ({id, patch: clubhousePatch(clubhouseByProviderId.get(id), uniqueClubhouses.get(id)!)})); const coursePatches: Array<{id: string; patch: Row}> = []; const unmatchedProviderLayouts: Array<{providerClubId: string; providerCourseId: string}> = [];
+  for (const clubhouse of uniqueClubhouses.values()) for (const layout of clubhouse.layouts) { const existing = courseByProviderId.get(layout.providerCourseId); if (!existing) { unmatchedProviderLayouts.push({providerClubId: clubhouse.providerClubId, providerCourseId: layout.providerCourseId}); continue; } const id = text(existing.id || existing.courseID || existing.providerCourseId); if (!id) throw new Error("EXISTING_COURSE_ID_MISSING"); coursePatches.push({id, patch: supplied({providerCourseId: layout.providerCourseId, providerClubId: clubhouse.providerClubId, clubhouseId: clubhouse.providerClubId, clubID: clubhouse.providerClubId, clubName: clubhouse.providerClubName, name: layout.providerCourseName, providerParentId: layout.providerParentId}) as Row}); }
+  clubhouseUpserts.sort((a, b) => a.id.localeCompare(b.id)); coursePatches.sort((a, b) => a.id.localeCompare(b.id)); unmatchedProviderLayouts.sort((a, b) => a.providerCourseId.localeCompare(b.providerCourseId)); if (clubhouseUpserts.length + coursePatches.length > MAX_RECONCILIATION_WRITES) throw new Error("RECONCILIATION_WRITE_LIMIT_EXCEEDED");
+  const unsigned = {schemaVersion: COURSE_CLUBHOUSE_RECONCILIATION_SCHEMA, targetClubhouseIds, sourceStateHash, clubhouseUpserts, coursePatches, unmatchedProviderLayouts}; return Object.freeze({...unsigned, planHash: reconciliationHash(unsigned)});
 }
+
+export function assertExecutablePlan(preview: ReconciliationPlan, approvedPlanHash: unknown, current: ReconciliationPlan): void { if (text(approvedPlanHash) !== preview.planHash) throw new Error("APPROVED_PLAN_HASH_MISMATCH"); if (preview.planHash !== current.planHash || preview.sourceStateHash !== current.sourceStateHash) throw new Error("STALE_RECONCILIATION_PLAN"); if (current.clubhouseUpserts.length + current.coursePatches.length > MAX_RECONCILIATION_WRITES) throw new Error("RECONCILIATION_WRITE_LIMIT_EXCEEDED"); }
+export function hasEquivalentPatch(existing: Row | undefined, patch: Row): boolean { return !!existing && Object.entries(patch).every(([key, value]) => same(existing[key], value)); }
+export function reconciliationReceiptId(planHash: unknown): string { const hash = text(planHash); if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("INVALID_RECONCILIATION_PLAN_HASH"); return `clubhouse-reconciliation-${hash.slice(0, 32)}`; }
+export function reconciliationExecutionDisposition(receiptExists: boolean): "replayed" | "execute" { return receiptExists ? "replayed" : "execute"; }

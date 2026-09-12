@@ -1,15 +1,14 @@
 import assert from "node:assert";
+import {readFileSync} from "node:fs";
 import {normalizeClubhouses} from "./courseGrowth.js";
-import {planCourseClubhouseReconciliation} from "./courseClubhouseReconciliation.js";
+import {assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId} from "./courseClubhouseReconciliation.js";
 
 const clubhouses = normalizeClubhouses({clubs: [{clubID: "club_siam", clubName: "Siam Country Club", latitude: 12.93, longitude: 100.88, phone: "123", bookingUrl: "https://provider.example/book", courses: [{courseID: "layout_old", courseName: "Old Course", clubID: "club_siam"}, {courseID: "layout_water", courseName: "Waterside", clubID: "club_siam"}]}]});
-const plan = planCourseClubhouseReconciliation(clubhouses, [{courseID: "layout_old", providerCourseId: "layout_old", latitude: 12.93, longitude: 100.88}]);
-assert.equal(plan.clubhouseUpserts.length, 1);
-assert.equal(plan.clubhouseUpserts[0].record.displayName, "Siam Country Club");
-assert.deepEqual(plan.clubhouseUpserts[0].record.courseLayoutIds, ["layout_old", "layout_water"]);
-assert.equal(plan.coursePatches.length, 1);
-assert.equal(plan.coursePatches[0].patch.clubhouseId, "club_siam");
-assert.deepEqual(plan.unmatchedProviderLayouts, [{providerClubId: "club_siam", providerCourseId: "layout_water"}]);
-assert.deepEqual(plan, planCourseClubhouseReconciliation(clubhouses, [{courseID: "layout_old", providerCourseId: "layout_old", latitude: 12.93, longitude: 100.88}]));
-assert.doesNotMatch(JSON.stringify(plan), /secret|token|authorization/i);
-console.log("course clubhouse reconciliation: 1 check passed.");
+const courses = [{id: "layout_old", courseID: "layout_old", providerCourseId: "layout_old", latitude: 12.93, longitude: 100.88}]; const existingClubhouses = [{id: "club_siam", providerClubId: "club_siam", location: {latitude: 12.91, longitude: 101.01}}]; const plan = planCourseClubhouseReconciliation(clubhouses, courses, existingClubhouses);
+assert.equal(plan.clubhouseUpserts.length, 1); assert.equal(plan.clubhouseUpserts[0].patch.displayName, "Siam Country Club"); assert.deepEqual(plan.clubhouseUpserts[0].patch.courseLayoutIds, ["layout_old", "layout_water"]); assert.equal((plan.clubhouseUpserts[0].patch.location as any).latitude, 12.91); assert.equal((plan.clubhouseUpserts[0].patch.location as any).longitude, 101.01); assert.equal(plan.coursePatches.length, 1); assert.equal(plan.coursePatches[0].patch.clubhouseId, "club_siam"); assert.deepEqual(plan.unmatchedProviderLayouts, [{providerClubId: "club_siam", providerCourseId: "layout_water"}]);
+const repeat = planCourseClubhouseReconciliation(clubhouses, courses, existingClubhouses); assert.equal(plan.planHash, repeat.planHash); assert.equal(plan.sourceStateHash, repeat.sourceStateHash); assert.doesNotMatch(JSON.stringify(plan), /secret|token|authorization/i); assert.doesNotThrow(() => assertExecutablePlan(plan, plan.planHash, repeat)); assert.throws(() => assertExecutablePlan(plan, "wrong", repeat), /APPROVED_PLAN_HASH_MISMATCH/); assert.throws(() => assertExecutablePlan(plan, plan.planHash, planCourseClubhouseReconciliation(clubhouses, [{...courses[0], name: "changed"}], existingClubhouses)), /STALE_RECONCILIATION_PLAN/); assert.equal(hasEquivalentPatch({...plan.coursePatches[0].patch}, plan.coursePatches[0].patch), true); assert.equal(hasEquivalentPatch({courseID: "wrong"}, plan.coursePatches[0].patch), false);
+assert.equal(reconciliationExecutionDisposition(false), "execute"); assert.equal(reconciliationExecutionDisposition(true), "replayed"); assert.equal(reconciliationReceiptId(plan.planHash), reconciliationReceiptId(repeat.planHash));
+const source = readFileSync("src/courseIngestion.ts", "utf8"); const preview = source.slice(source.indexOf("export const previewCourseClubhouseReconciliation"), source.indexOf("export const executeCourseClubhouseReconciliation")); const execute = source.slice(source.indexOf("export const executeCourseClubhouseReconciliation"), source.indexOf("export const commitCourseRegionImport"));
+for (const body of [preview, execute]) { assert.match(body, /enforceAppCheck:\s*true/); assert.match(body, /requireCoordinator\(request\.auth\.uid\)/); assert.match(body, /secrets:\s*\[GOLF_API_KEY\]/); }
+assert.doesNotMatch(preview, /\.set\(|\.create\(|\.update\(|\.batch\(|runTransaction/); assert.match(preview, /productionWrites: 0/); for (const marker of ["approvedPlanHash", "sourceStateHash", "STALE_RECONCILIATION_PLAN", "course_clubhouse_backfill_receipts", "deletes: 0", "creates: 0"]) assert.match(execute, new RegExp(marker));
+console.log("course clubhouse reconciliation: deterministic/stale/idempotent boundary checks passed.");
