@@ -77,24 +77,27 @@ async function reconciliationPlanFor(providerClubIds: readonly string[], readTim
 
 type CatalogueCourseRow = Record<string, unknown>;
 function catalogueRows(snapshot: FirebaseFirestore.QuerySnapshot): CatalogueCourseRow[] { return snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})); }
-async function readCatalogueQuery(query: FirebaseFirestore.Query, readTime: FirebaseFirestore.Timestamp | null): Promise<FirebaseFirestore.QuerySnapshot> {
+export async function readCatalogueQuery(query: FirebaseFirestore.Query, readTime: FirebaseFirestore.Timestamp | null): Promise<FirebaseFirestore.QuerySnapshot> {
   if (!readTime) return query.get();
   // The bundled Admin Firestore runtime supports Query._get(readTime), preserving
   // one immutable Firestore read snapshot across independently paged invocations.
   const response = await (query as unknown as {_get: (at: FirebaseFirestore.Timestamp) => Promise<{result: FirebaseFirestore.QuerySnapshot}>})._get(readTime);
   return response.result;
 }
+export async function readCatalogueSnapshotOrStale(query: FirebaseFirestore.Query, readTime: FirebaseFirestore.Timestamp | null): Promise<FirebaseFirestore.QuerySnapshot> {
+  try { return await readCatalogueQuery(query, readTime); } catch { throw new HttpsError("aborted", "STALE_PREVIEW"); }
+}
 function cursorReadTime(cursor: CataloguePreviewCursor | null): FirebaseFirestore.Timestamp | null { return cursor ? new admin.firestore.Timestamp(cursor.readTimeSeconds, cursor.readTimeNanoseconds) : null; }
 function snapshotCursorState(snapshot: FirebaseFirestore.QuerySnapshot) { return {readTimeSeconds: Number(snapshot.readTime.seconds), readTimeNanoseconds: snapshot.readTime.nanoseconds}; }
 async function cataloguePreviewPage(afterProviderClubId: string | null, readTime: FirebaseFirestore.Timestamp | null): Promise<FirebaseFirestore.QuerySnapshot> {
   let query: FirebaseFirestore.Query = db.collection("courses").orderBy("providerClubId");
   if (afterProviderClubId) query = query.startAfter(afterProviderClubId);
-  return readCatalogueQuery(query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS), readTime);
+  return readCatalogueSnapshotOrStale(query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS), readTime);
 }
 async function catalogueInvalidProviderRows(afterCourseDocumentId: string | null, readTime: FirebaseFirestore.Timestamp): Promise<FirebaseFirestore.QuerySnapshot> {
   let query: FirebaseFirestore.Query = db.collection("courses").orderBy(admin.firestore.FieldPath.documentId());
   if (afterCourseDocumentId) query = query.startAfter(afterCourseDocumentId);
-  return readCatalogueQuery(query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS), readTime);
+  return readCatalogueSnapshotOrStale(query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS), readTime);
 }
 function previewMetrics(plan: ReconciliationPlan, courseRowsMeasured: number, providerClubhouses: readonly ProviderClubhouse[], invalidProviderClubIdRows = 0) {
   const providerContactFactsAvailable = providerClubhouses.filter((clubhouse) => Boolean(clubhouse.phone || clubhouse.mobile || clubhouse.email || clubhouse.website || clubhouse.contactPhone || clubhouse.contactEmail || clubhouse.bookingUrl || clubhouse.reservationUrl || clubhouse.teeTimeUrl || clubhouse.reservationPhone || clubhouse.reservationEmail)).length;
