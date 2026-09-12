@@ -6,7 +6,7 @@ export const DEFAULT_CATALOGUE_PREVIEW_GROUPS = 25;
 export const MAX_CATALOGUE_PREVIEW_SCAN_ROWS = 500;
 type Row = Record<string, unknown>;
 
-export type CataloguePreviewCursor = Readonly<{version: 1; afterProviderClubId: string | null; afterCourseDocumentId: string | null; sourceWindowHash: string}>;
+export type CataloguePreviewCursor = Readonly<{version: 2; afterProviderClubId: string | null; afterCourseDocumentId: string | null; readTimeSeconds: number; readTimeNanoseconds: number}>;
 export type CataloguePreviewRequest = Readonly<{mode: "explicit"; providerClubIds: string[]} | {mode: "catalogue"; batchSize: number; cursor: CataloguePreviewCursor | null}>;
 
 const text = (value: unknown): string => String(value || "").trim();
@@ -27,11 +27,11 @@ export function decodeCataloguePreviewCursor(value: unknown, secret: string): Ca
   let parsed: unknown;
   try { parsed = JSON.parse(fromBase64url(payload)); } catch { throw new Error("INVALID_CATALOGUE_PREVIEW_CURSOR"); }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_CATALOGUE_PREVIEW_CURSOR");
-  const row = parsed as Row; const afterProviderClubId = row.afterProviderClubId === null ? null : text(row.afterProviderClubId); const afterCourseDocumentId = row.afterCourseDocumentId === null ? null : text(row.afterCourseDocumentId); const sourceWindowHash = text(row.sourceWindowHash);
+  const row = parsed as Row; const afterProviderClubId = row.afterProviderClubId === null ? null : text(row.afterProviderClubId); const afterCourseDocumentId = row.afterCourseDocumentId === null ? null : text(row.afterCourseDocumentId); const readTimeSeconds = Number(row.readTimeSeconds); const readTimeNanoseconds = Number(row.readTimeNanoseconds);
   // The signed cursor may carry an invalid legacy value solely to advance past it;
   // it is never promoted into a reconciliation target.
-  if (row.version !== 1 || (afterProviderClubId !== null && (!afterProviderClubId || afterProviderClubId.length > 256)) || (afterCourseDocumentId !== null && (!afterCourseDocumentId || afterCourseDocumentId.length > 1500)) || !/^[a-f0-9]{64}$/.test(sourceWindowHash)) throw new Error("INVALID_CATALOGUE_PREVIEW_CURSOR");
-  return {version: 1, afterProviderClubId, afterCourseDocumentId, sourceWindowHash};
+  if (row.version !== 2 || (afterProviderClubId !== null && (!afterProviderClubId || afterProviderClubId.length > 256)) || (afterCourseDocumentId !== null && (!afterCourseDocumentId || afterCourseDocumentId.length > 1500)) || !Number.isSafeInteger(readTimeSeconds) || !Number.isInteger(readTimeNanoseconds) || readTimeNanoseconds < 0 || readTimeNanoseconds > 999999999) throw new Error("INVALID_CATALOGUE_PREVIEW_CURSOR");
+  return {version: 2, afterProviderClubId, afterCourseDocumentId, readTimeSeconds, readTimeNanoseconds};
 }
 
 export function parseCataloguePreviewRequest(value: unknown, secret: string): CataloguePreviewRequest {
@@ -61,6 +61,6 @@ export function catalogueProviderBatch(rows: readonly Row[], afterProviderClubId
   return {providerClubIds, invalidProviderClubIdRows, lastScannedProviderClubId, sourceWindowHash};
 }
 
-export function assertCataloguePreviewFresh(cursor: CataloguePreviewCursor | null, sourceWindowHash: string): void {
-  if (cursor && cursor.sourceWindowHash !== sourceWindowHash) throw new Error("STALE_PREVIEW");
+export function assertProviderGroupWithinLimit(rowCount: number, limit: number): void {
+  if (!Number.isInteger(rowCount) || !Number.isInteger(limit) || rowCount < 0 || limit < 1 || rowCount > limit) throw new Error("PROVIDER_GROUP_TOO_LARGE");
 }

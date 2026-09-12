@@ -9,7 +9,7 @@ import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecover
 import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
 import {distanceKm, inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
 import {MAX_RECONCILIATION_CLUBHOUSES, MAX_RECONCILIATION_WRITES, assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId, type ReconciliationPlan} from "./courseClubhouseReconciliation.js";
-import {assertCataloguePreviewFresh, catalogueProviderBatch, encodeCataloguePreviewCursor, MAX_CATALOGUE_PREVIEW_SCAN_ROWS, parseCataloguePreviewRequest} from "./courseCataloguePreview.js";
+import {assertProviderGroupWithinLimit, catalogueProviderBatch, encodeCataloguePreviewCursor, MAX_CATALOGUE_PREVIEW_SCAN_ROWS, parseCataloguePreviewRequest, type CataloguePreviewCursor} from "./courseCataloguePreview.js";
 import {isValidProviderId} from "./courseSync.js";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -53,11 +53,15 @@ function reconciliationTargetIds(value: unknown): string[] {
   return ids;
 }
 
-async function reconciliationPlanFor(providerClubIds: readonly string[]): Promise<{plan: ReconciliationPlan; courseRowsMeasured: number; providerClubhouses: ProviderClubhouse[]}> {
+async function reconciliationPlanFor(providerClubIds: readonly string[], readTime: FirebaseFirestore.Timestamp | null = null): Promise<{plan: ReconciliationPlan; courseRowsMeasured: number; providerClubhouses: ProviderClubhouse[]}> {
   if (!providerClubIds.length) return {plan: planCourseClubhouseReconciliation([], [], []), courseRowsMeasured: 0, providerClubhouses: []};
   const [clubhouseSnapshots, courseSnapshots, providerClubhouses] = await Promise.all([
-    db.getAll(...providerClubIds.map((id) => db.collection("clubhouses").doc(id))),
-    Promise.all(providerClubIds.map((id) => db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES).get())),
+    Promise.all(providerClubIds.map((id) => readCatalogueQuery(db.collection("clubhouses").where(admin.firestore.FieldPath.documentId(), "==", id).limit(1), readTime))),
+    Promise.all(providerClubIds.map(async (id) => {
+      const snapshot = await readCatalogueQuery(db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES + 1), readTime);
+      try { assertProviderGroupWithinLimit(snapshot.size, MAX_RECONCILIATION_WRITES); } catch { throw new HttpsError("failed-precondition", `PROVIDER_GROUP_TOO_LARGE:${id}`); }
+      return snapshot;
+    })),
     Promise.all(providerClubIds.map(async (id) => {
       const response = await golfApiGet(`/clubs/${encodeURIComponent(id)}`, GOLF_API_KEY.value());
       const normalized = normalizeClubDetailClubhouses({clubID: id}, response.data);
@@ -67,27 +71,30 @@ async function reconciliationPlanFor(providerClubIds: readonly string[]): Promis
     })),
   ]);
   const existingCourses = courseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
-  const existingClubhouses = clubhouseSnapshots.filter((doc) => doc.exists).map((doc) => ({id: doc.id, ...doc.data()}));
+  const existingClubhouses = clubhouseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
   return {plan: planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses), courseRowsMeasured: existingCourses.length, providerClubhouses};
 }
 
 type CatalogueCourseRow = Record<string, unknown>;
 function catalogueRows(snapshot: FirebaseFirestore.QuerySnapshot): CatalogueCourseRow[] { return snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})); }
-function catalogueWindowHash(rows: readonly CatalogueCourseRow[]): string { return catalogueProviderBatch(rows, null, MAX_CATALOGUE_PREVIEW_SCAN_ROWS).sourceWindowHash; }
-async function cataloguePreviewSourceWindow(): Promise<CatalogueCourseRow[]> {
-  // This fixed, bounded first window is re-read before every continuation.  A changed
-  // window invalidates the signed continuation rather than allowing mixed previews.
-  return catalogueRows(await db.collection("courses").orderBy("providerClubId").limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS).get());
+async function readCatalogueQuery(query: FirebaseFirestore.Query, readTime: FirebaseFirestore.Timestamp | null): Promise<FirebaseFirestore.QuerySnapshot> {
+  if (!readTime) return query.get();
+  // The bundled Admin Firestore runtime supports Query._get(readTime), preserving
+  // one immutable Firestore read snapshot across independently paged invocations.
+  const response = await (query as unknown as {_get: (at: FirebaseFirestore.Timestamp) => Promise<{result: FirebaseFirestore.QuerySnapshot}>})._get(readTime);
+  return response.result;
 }
-async function cataloguePreviewPage(afterProviderClubId: string | null): Promise<CatalogueCourseRow[]> {
+function cursorReadTime(cursor: CataloguePreviewCursor | null): FirebaseFirestore.Timestamp | null { return cursor ? new admin.firestore.Timestamp(cursor.readTimeSeconds, cursor.readTimeNanoseconds) : null; }
+function snapshotCursorState(snapshot: FirebaseFirestore.QuerySnapshot) { return {readTimeSeconds: Number(snapshot.readTime.seconds), readTimeNanoseconds: snapshot.readTime.nanoseconds}; }
+async function cataloguePreviewPage(afterProviderClubId: string | null, readTime: FirebaseFirestore.Timestamp | null): Promise<FirebaseFirestore.QuerySnapshot> {
   let query: FirebaseFirestore.Query = db.collection("courses").orderBy("providerClubId");
   if (afterProviderClubId) query = query.startAfter(afterProviderClubId);
-  return catalogueRows(await query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS).get());
+  return readCatalogueQuery(query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS), readTime);
 }
-async function catalogueInvalidProviderRows(afterCourseDocumentId: string | null): Promise<FirebaseFirestore.QuerySnapshot> {
+async function catalogueInvalidProviderRows(afterCourseDocumentId: string | null, readTime: FirebaseFirestore.Timestamp): Promise<FirebaseFirestore.QuerySnapshot> {
   let query: FirebaseFirestore.Query = db.collection("courses").orderBy(admin.firestore.FieldPath.documentId());
   if (afterCourseDocumentId) query = query.startAfter(afterCourseDocumentId);
-  return query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS).get();
+  return readCatalogueQuery(query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS), readTime);
 }
 function previewMetrics(plan: ReconciliationPlan, courseRowsMeasured: number, providerClubhouses: readonly ProviderClubhouse[], invalidProviderClubIdRows = 0) {
   const providerContactFactsAvailable = providerClubhouses.filter((clubhouse) => Boolean(clubhouse.phone || clubhouse.mobile || clubhouse.email || clubhouse.website || clubhouse.contactPhone || clubhouse.contactEmail || clubhouse.bookingUrl || clubhouse.reservationUrl || clubhouse.teeTimeUrl || clubhouse.reservationPhone || clubhouse.reservationEmail)).length;
@@ -251,18 +258,23 @@ export const previewCourseClubhouseReconciliation = onCall({
     const result = await reconciliationPlanFor(previewRequest.providerClubIds);
     return {...result.plan, mode: "explicit", summary: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses), productionWrites: 0, providerClubGroups: previewRequest.providerClubIds.length, provenClubhouses: result.plan.clubhouseUpserts.length, coursesSafelyLinkable: result.plan.coursePatches.length, unchangedCourseLinks: result.plan.unchangedCourseLinks.length, unmatchedProviderLayouts: result.plan.unmatchedProviderLayouts.length}};
   }
-  const sourceWindow = await cataloguePreviewSourceWindow();
-  const sourceWindowHash = catalogueWindowHash(sourceWindow);
-  try { assertCataloguePreviewFresh(previewRequest.cursor, sourceWindowHash); } catch (error) { throw new HttpsError("aborted", error instanceof Error ? error.message : "STALE_PREVIEW"); }
-  const rows = await cataloguePreviewPage(previewRequest.cursor?.afterProviderClubId || null);
-  const inventorySnapshot = await catalogueInvalidProviderRows(previewRequest.cursor?.afterCourseDocumentId || null);
+  let providerSnapshot: FirebaseFirestore.QuerySnapshot;
+  try { providerSnapshot = await cataloguePreviewPage(previewRequest.cursor?.afterProviderClubId || null, cursorReadTime(previewRequest.cursor)); } catch (error) { throw new HttpsError("aborted", "STALE_PREVIEW"); }
+  const readTime = cursorReadTime(previewRequest.cursor) || providerSnapshot.readTime;
+  let inventorySnapshot: FirebaseFirestore.QuerySnapshot;
+  try { inventorySnapshot = await catalogueInvalidProviderRows(previewRequest.cursor?.afterCourseDocumentId || null, readTime); } catch (error) { throw new HttpsError("aborted", "STALE_PREVIEW"); }
+  const rows = catalogueRows(providerSnapshot);
   const page = catalogueProviderBatch(rows, previewRequest.cursor?.afterProviderClubId || null, previewRequest.batchSize);
   const inventory = catalogueProviderBatch(catalogueRows(inventorySnapshot), null, MAX_CATALOGUE_PREVIEW_SCAN_ROWS);
-  const result = await reconciliationPlanFor(page.providerClubIds);
+  let result;
+  try { result = await reconciliationPlanFor(page.providerClubIds, readTime); } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("aborted", "STALE_PREVIEW");
+  }
   const lastProviderClubId = page.lastScannedProviderClubId;
   const lastCourseDocumentId = inventorySnapshot.empty ? null : inventorySnapshot.docs[inventorySnapshot.docs.length - 1].id;
   const complete = rows.length < MAX_CATALOGUE_PREVIEW_SCAN_ROWS && inventorySnapshot.size < MAX_CATALOGUE_PREVIEW_SCAN_ROWS;
-  const nextCursor = complete || (!lastProviderClubId && !lastCourseDocumentId) ? null : encodeCataloguePreviewCursor({version: 1, afterProviderClubId: lastProviderClubId, afterCourseDocumentId: lastCourseDocumentId, sourceWindowHash}, GOLF_API_KEY.value());
+  const nextCursor = complete || (!lastProviderClubId && !lastCourseDocumentId) ? null : encodeCataloguePreviewCursor({version: 2, afterProviderClubId: lastProviderClubId, afterCourseDocumentId: lastCourseDocumentId, ...snapshotCursorState(providerSnapshot)}, GOLF_API_KEY.value());
   return {...result.plan, mode: "catalogue", batch: {providerClubIds: page.providerClubIds, count: page.providerClubIds.length}, nextCursor, complete, metrics: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses, inventory.invalidProviderClubIdRows), productionWrites: 0}, ambiguousGroups: result.plan.ambiguousGroups, invalidGeography: result.plan.invalidGeography, ...previewEvidence(result.providerClubhouses), planHash: result.plan.planHash, sourceStateHash: result.plan.sourceStateHash};
 });
 
