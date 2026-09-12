@@ -4,11 +4,12 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import {randomUUID} from "node:crypto";
 import {isActiveStaff} from "./authority.js";
-import {assertQuotaAvailable, buildClubhouseRecord, buildCourseGrowthRecord, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, normalizeClubDetailClubhouses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, type ProviderClubhouse, withDeterministicRetry} from "./courseGrowth.js";
+import {assertQuotaAvailable, buildClubhouseRecord, buildCourseGrowthRecord, classifyClubhouse, COURSE_SYNC_RECEIPT_SCHEMA, deterministicReceiptId, expandClubShells, hasCompleteEmbeddedCourses, normalizeClubDetailClubhouses, planCourseUpserts, previewProviderAttemptReservation, providerClubs, PROVIDER_CALLS_PER_COURSE, requireProviderConfiguration, RETRY_DELAYS_MS, type Candidate, type ProviderClubhouse, withDeterministicRetry} from "./courseGrowth.js";
 import {assertLeaseOwner, COURSE_INGESTION_RECOVERY_SCHEMA, deterministicRecoveryReceiptId, recoveryReconciliation, requireRecoveryConfiguration, shouldRecoverLease} from "./courseIngestionRecovery.js";
 import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministicRetryJobId, projectCountryGrowth, projectQuota, retryableStatus, retryCandidates} from "./courseOperationsProjection.js";
-import {inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
+import {distanceKm, inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
 import {MAX_RECONCILIATION_CLUBHOUSES, MAX_RECONCILIATION_WRITES, assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId, type ReconciliationPlan} from "./courseClubhouseReconciliation.js";
+import {assertCataloguePreviewFresh, catalogueProviderBatch, encodeCataloguePreviewCursor, MAX_CATALOGUE_PREVIEW_SCAN_ROWS, parseCataloguePreviewRequest} from "./courseCataloguePreview.js";
 import {isValidProviderId} from "./courseSync.js";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -52,7 +53,8 @@ function reconciliationTargetIds(value: unknown): string[] {
   return ids;
 }
 
-async function reconciliationPlanFor(providerClubIds: readonly string[]): Promise<ReconciliationPlan> {
+async function reconciliationPlanFor(providerClubIds: readonly string[]): Promise<{plan: ReconciliationPlan; courseRowsMeasured: number; providerClubhouses: ProviderClubhouse[]}> {
+  if (!providerClubIds.length) return {plan: planCourseClubhouseReconciliation([], [], []), courseRowsMeasured: 0, providerClubhouses: []};
   const [clubhouseSnapshots, courseSnapshots, providerClubhouses] = await Promise.all([
     db.getAll(...providerClubIds.map((id) => db.collection("clubhouses").doc(id))),
     Promise.all(providerClubIds.map((id) => db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES).get())),
@@ -66,7 +68,39 @@ async function reconciliationPlanFor(providerClubIds: readonly string[]): Promis
   ]);
   const existingCourses = courseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
   const existingClubhouses = clubhouseSnapshots.filter((doc) => doc.exists).map((doc) => ({id: doc.id, ...doc.data()}));
-  return planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses);
+  return {plan: planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses), courseRowsMeasured: existingCourses.length, providerClubhouses};
+}
+
+type CatalogueCourseRow = Record<string, unknown>;
+function catalogueRows(snapshot: FirebaseFirestore.QuerySnapshot): CatalogueCourseRow[] { return snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})); }
+function catalogueWindowHash(rows: readonly CatalogueCourseRow[]): string { return catalogueProviderBatch(rows, null, MAX_CATALOGUE_PREVIEW_SCAN_ROWS).sourceWindowHash; }
+async function cataloguePreviewSourceWindow(): Promise<CatalogueCourseRow[]> {
+  // This fixed, bounded first window is re-read before every continuation.  A changed
+  // window invalidates the signed continuation rather than allowing mixed previews.
+  return catalogueRows(await db.collection("courses").orderBy("providerClubId").limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS).get());
+}
+async function cataloguePreviewPage(afterProviderClubId: string | null): Promise<CatalogueCourseRow[]> {
+  let query: FirebaseFirestore.Query = db.collection("courses").orderBy("providerClubId");
+  if (afterProviderClubId) query = query.startAfter(afterProviderClubId);
+  return catalogueRows(await query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS).get());
+}
+async function catalogueInvalidProviderRows(afterCourseDocumentId: string | null): Promise<FirebaseFirestore.QuerySnapshot> {
+  let query: FirebaseFirestore.Query = db.collection("courses").orderBy(admin.firestore.FieldPath.documentId());
+  if (afterCourseDocumentId) query = query.startAfter(afterCourseDocumentId);
+  return query.limit(MAX_CATALOGUE_PREVIEW_SCAN_ROWS).get();
+}
+function previewMetrics(plan: ReconciliationPlan, courseRowsMeasured: number, providerClubhouses: readonly ProviderClubhouse[], invalidProviderClubIdRows = 0) {
+  const providerContactFactsAvailable = providerClubhouses.filter((clubhouse) => Boolean(clubhouse.phone || clubhouse.mobile || clubhouse.email || clubhouse.website || clubhouse.contactPhone || clubhouse.contactEmail || clubhouse.bookingUrl || clubhouse.reservationUrl || clubhouse.teeTimeUrl || clubhouse.reservationPhone || clubhouse.reservationEmail)).length;
+  const proposedWrites = plan.clubhouseUpserts.length + plan.coursePatches.length;
+  return {courseRowsMeasured, providerGroupsInspected: plan.targetProviderClubIds.length, provenClubHouses: plan.clubhouseUpserts.length, safelyLinkableCourses: plan.coursePatches.length, unchangedTrustedLinks: plan.unchangedCourseLinks.length, ambiguousGroups: plan.ambiguousGroups.length, invalidGeography: plan.invalidGeography.length, invalidProviderClubIdRows, providerContactFactsAvailable, bookingAuthorityUnavailable: plan.bookingAuthorityUnavailable, enrichmentRequired: plan.ambiguousGroups.length + plan.invalidGeography.length + plan.unmatchedProviderLayouts.length + invalidProviderClubIdRows, proposedWrites, productionWrites: 0};
+}
+function previewEvidence(providerClubhouses: readonly ProviderClubhouse[]) {
+  const evidence = providerClubhouses.map((clubhouse) => {
+    const classification = classifyClubhouse(clubhouse);
+    const distanceFromPattayaKm = distanceKm({latitude: 12.9236, longitude: 100.8825}, clubhouse.latitude, clubhouse.longitude);
+    return {providerClubId: clubhouse.providerClubId, providerPropertyId: clubhouse.providerPropertyId, providerBookable: clubhouse.providerBookable, providerClubName: clubhouse.providerClubName, providerCourseIds: clubhouse.layouts.map((layout) => layout.providerCourseId).sort(), coordinates: {latitude: clubhouse.latitude, longitude: clubhouse.longitude}, status: classification.status === "proven" ? "PROVEN" : "AMBIGUOUS", evidence: classification.reason, providerContactFactsAvailable: Boolean(clubhouse.phone || clubhouse.mobile || clubhouse.email || clubhouse.website || clubhouse.contactPhone || clubhouse.contactEmail || clubhouse.bookingUrl || clubhouse.reservationUrl || clubhouse.teeTimeUrl || clubhouse.reservationPhone || clubhouse.reservationEmail), bookingAuthorityStatus: "unavailable" as const, distanceFromPattayaKm, within50Km: distanceFromPattayaKm !== null && distanceFromPattayaKm <= 50};
+  });
+  return {siamEvidence: evidence.filter((row) => row.providerClubName.toLocaleLowerCase().includes("siam country club")), seoulEvidence: evidence.filter((row) => row.providerClubName.toLocaleLowerCase().includes("seoul") && row.providerClubName.toLocaleLowerCase().includes("siam"))};
 }
 
 async function golfApiGet(path: string, apiKey: string, onAttempt: () => void | Promise<void> = () => {}): Promise<{data: any; callsUsed: number}> {
@@ -207,10 +241,29 @@ export const previewCourseClubhouseReconciliation = onCall({
 }, async (request) => {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
   await requireCoordinator(request.auth.uid);
-  const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
+  let previewRequest;
+  try { previewRequest = parseCataloguePreviewRequest(request.data, GOLF_API_KEY.value()); } catch (error) {
+    const message = error instanceof Error ? error.message : "INVALID_CATALOGUE_PREVIEW_REQUEST";
+    throw new HttpsError("invalid-argument", message);
+  }
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const plan = await reconciliationPlanFor(providerClubIds);
-  return {...plan, summary: {providerClubGroups: providerClubIds.length, provenClubhouses: plan.clubhouseUpserts.length, coursesSafelyLinkable: plan.coursePatches.length, ambiguousGroups: plan.ambiguousGroups.length, invalidGeography: plan.invalidGeography.length, unchangedCourseLinks: plan.unchangedCourseLinks.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, bookingAuthorityUnavailable: plan.bookingAuthorityUnavailable, productionWrites: 0}};
+  if (previewRequest.mode === "explicit") {
+    const result = await reconciliationPlanFor(previewRequest.providerClubIds);
+    return {...result.plan, mode: "explicit", summary: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses), productionWrites: 0, providerClubGroups: previewRequest.providerClubIds.length, provenClubhouses: result.plan.clubhouseUpserts.length, coursesSafelyLinkable: result.plan.coursePatches.length, unchangedCourseLinks: result.plan.unchangedCourseLinks.length, unmatchedProviderLayouts: result.plan.unmatchedProviderLayouts.length}};
+  }
+  const sourceWindow = await cataloguePreviewSourceWindow();
+  const sourceWindowHash = catalogueWindowHash(sourceWindow);
+  try { assertCataloguePreviewFresh(previewRequest.cursor, sourceWindowHash); } catch (error) { throw new HttpsError("aborted", error instanceof Error ? error.message : "STALE_PREVIEW"); }
+  const rows = await cataloguePreviewPage(previewRequest.cursor?.afterProviderClubId || null);
+  const inventorySnapshot = await catalogueInvalidProviderRows(previewRequest.cursor?.afterCourseDocumentId || null);
+  const page = catalogueProviderBatch(rows, previewRequest.cursor?.afterProviderClubId || null, previewRequest.batchSize);
+  const inventory = catalogueProviderBatch(catalogueRows(inventorySnapshot), null, MAX_CATALOGUE_PREVIEW_SCAN_ROWS);
+  const result = await reconciliationPlanFor(page.providerClubIds);
+  const lastProviderClubId = page.lastScannedProviderClubId;
+  const lastCourseDocumentId = inventorySnapshot.empty ? null : inventorySnapshot.docs[inventorySnapshot.docs.length - 1].id;
+  const complete = rows.length < MAX_CATALOGUE_PREVIEW_SCAN_ROWS && inventorySnapshot.size < MAX_CATALOGUE_PREVIEW_SCAN_ROWS;
+  const nextCursor = complete || (!lastProviderClubId && !lastCourseDocumentId) ? null : encodeCataloguePreviewCursor({version: 1, afterProviderClubId: lastProviderClubId, afterCourseDocumentId: lastCourseDocumentId, sourceWindowHash}, GOLF_API_KEY.value());
+  return {...result.plan, mode: "catalogue", batch: {providerClubIds: page.providerClubIds, count: page.providerClubIds.length}, nextCursor, complete, metrics: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses, inventory.invalidProviderClubIdRows), productionWrites: 0}, ambiguousGroups: result.plan.ambiguousGroups, invalidGeography: result.plan.invalidGeography, ...previewEvidence(result.providerClubhouses), planHash: result.plan.planHash, sourceStateHash: result.plan.sourceStateHash};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
@@ -228,7 +281,7 @@ export const executeCourseClubhouseReconciliation = onCall({
   const existingReceipt = await receiptRef.get();
   if (reconciliationExecutionDisposition(existingReceipt.exists) === "replayed") return {receiptId, replayed: true, result: existingReceipt.data()?.result || null};
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const plan = await reconciliationPlanFor(providerClubIds);
+  const {plan} = await reconciliationPlanFor(providerClubIds);
   if (plan.sourceStateHash !== expectedSourceStateHash) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN");
   if (plan.ambiguousGroups.length) throw new HttpsError("failed-precondition", "AMBIGUOUS_CLUBHOUSE_HIERARCHY");
   try { assertExecutablePlan(plan, approvedPlanHash, plan); } catch (error) { throw new HttpsError("failed-precondition", error instanceof Error ? error.message : "APPROVED_PLAN_HASH_MISMATCH"); }
