@@ -18,6 +18,6 @@ assert.deepEqual(hosting.hosting.predeploy,['npm run build:admin:v2-production']
 assert.deepEqual(targets.projects,{v2:'golfriend-v2-production-2ee34'});
 assert.deepEqual(targets.targets['golfriend-v2-production-2ee34'].hosting.admin,['golfriend-v2-admin']);
 for(const marker of ['apps:sdkconfig','recaptchaEnterpriseConfig','VITE_FIREBASE_PROJECT','VITE_FIREBASE_APPCHECK_SITE_KEY','V2_APP_CHECK_SITE_KEY_MISSING'])assert.match(build,new RegExp(marker));
-for(const marker of ['golfriend-v2-production-2ee34','inspectGolfApiClubRegion','exchangeRecaptchaEnterpriseToken','V2_APP_CHECK_SITE_KEY_MISSING'])assert.match(bundleVerify,new RegExp(marker));
+for(const marker of ['golfriend-v2-production-2ee34','inspectGolfApiClubRegion','previewCourseClubhouseReconciliation','exchangeRecaptchaEnterpriseToken','V2_APP_CHECK_SITE_KEY_MISSING'])assert.match(bundleVerify,new RegExp(marker));
 assert.doesNotMatch(config+build,/GOLF_API_KEY|golfapi\.io|Authorization:\s*Bearer/i);
 console.log('Admin V2 production boundary PASS: explicit V2 Hosting target, canonical SDK/App Check build injection, reCAPTCHA Enterprise initialization, and Siam-inspector bundle proof.');

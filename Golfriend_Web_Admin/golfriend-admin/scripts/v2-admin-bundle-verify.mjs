@@ -11,5 +11,5 @@ const html=readFileSync('dist/index.html','utf8');
 const asset=html.match(/src="\/(assets\/index-[^"]+\.js)"/)?.[1];
 assert.ok(asset,'ADMIN_BUNDLE_ASSET_MISSING');
 const bundle=readFileSync(`dist/${asset}`,'utf8');
-for(const marker of ['golfriend-v2-production-2ee34','1:533338463502:web:8a45afed98abc0cdc38b5f','inspectGolfApiClubRegion','exchangeRecaptchaEnterpriseToken',process.env.VITE_FIREBASE_APPCHECK_SITE_KEY])assert.ok(bundle.includes(marker),`ADMIN_BUNDLE_MARKER_MISSING:${marker}`);
+for(const marker of ['golfriend-v2-production-2ee34','1:533338463502:web:8a45afed98abc0cdc38b5f','inspectGolfApiClubRegion','previewCourseClubhouseReconciliation','exchangeRecaptchaEnterpriseToken',process.env.VITE_FIREBASE_APPCHECK_SITE_KEY])assert.ok(bundle.includes(marker),`ADMIN_BUNDLE_MARKER_MISSING:${marker}`);
 console.log(`V2 Admin bundle PASS: ${asset} contains the verified V2 app identity, Siam inspector, and reCAPTCHA Enterprise App Check.`);
