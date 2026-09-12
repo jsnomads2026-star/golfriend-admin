@@ -107,8 +107,10 @@ export default function CourseDiscovery() {
     );
   }, []);
 
-  const destinations = useMemo(() => normalizeClubhouseDestinations(clubhouses, courses, origin, origin ? 50 : null), [clubhouses, courses, origin]);
-  const nearbyDestinations = useMemo(() => destinations.filter((destination) => destination.withinRequestedRadius !== false), [destinations]);
+  // Discovery is deliberately unavailable until the device supplies a valid
+  // coordinate; the projection itself owns the exact, independent 50 km cut.
+  const destinations = useMemo(() => normalizeClubhouseDestinations(clubhouses, courses, origin), [clubhouses, courses, origin]);
+  const nearbyDestinations = destinations;
 
   // Bookable slots grouped by courseId.
   const bookableByCourse = useMemo(() => {

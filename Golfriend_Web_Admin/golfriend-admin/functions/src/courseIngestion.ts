@@ -210,7 +210,7 @@ export const previewCourseClubhouseReconciliation = onCall({
   const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
   requireProviderConfiguration(GOLF_API_KEY.value());
   const plan = await reconciliationPlanFor(providerClubIds);
-  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, productionWrites: 0}};
+  return {...plan, summary: {providerClubGroups: providerClubIds.length, provenClubhouses: plan.clubhouseUpserts.length, coursesSafelyLinkable: plan.coursePatches.length, ambiguousGroups: plan.ambiguousGroups.length, invalidGeography: plan.invalidGeography.length, unchangedCourseLinks: plan.unchangedCourseLinks.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, bookingAuthorityUnavailable: plan.bookingAuthorityUnavailable, productionWrites: 0}};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
@@ -230,6 +230,7 @@ export const executeCourseClubhouseReconciliation = onCall({
   requireProviderConfiguration(GOLF_API_KEY.value());
   const plan = await reconciliationPlanFor(providerClubIds);
   if (plan.sourceStateHash !== expectedSourceStateHash) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN");
+  if (plan.ambiguousGroups.length) throw new HttpsError("failed-precondition", "AMBIGUOUS_CLUBHOUSE_HIERARCHY");
   try { assertExecutablePlan(plan, approvedPlanHash, plan); } catch (error) { throw new HttpsError("failed-precondition", error instanceof Error ? error.message : "APPROVED_PLAN_HASH_MISMATCH"); }
   const refs = [...plan.clubhouseUpserts.map((op) => db.collection("clubhouses").doc(op.id)), ...plan.coursePatches.map((op) => db.collection("courses").doc(op.id))];
   const result = await db.runTransaction(async (transaction) => {
@@ -239,8 +240,8 @@ export const executeCourseClubhouseReconciliation = onCall({
     for (const operation of plan.clubhouseUpserts) { const existing = snapshots[cursor++]; if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     for (const operation of plan.coursePatches) { const existing = snapshots[cursor++]; if (!existing.exists) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN"); if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     if (writes > MAX_RECONCILIATION_WRITES) throw new HttpsError("failed-precondition", "RECONCILIATION_WRITE_LIMIT_EXCEEDED");
-    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, writes, deletes: 0, creates: 0};
-    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, result: summary, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
+    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, ambiguousGroups: plan.ambiguousGroups.length, invalidGeography: plan.invalidGeography.length, unchangedCourseLinks: plan.unchangedCourseLinks.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, bookingAuthorityUnavailable: plan.bookingAuthorityUnavailable, writes, deletes: 0, creates: 0};
+    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetProviderClubIds: plan.targetProviderClubIds, result: summary, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
     return {replayed: false, result: summary};
   });
   return {receiptId, ...result};
