@@ -63,24 +63,49 @@ export function normalizeClubInspectionInput(value: unknown): ClubInspectionInpu
 function explicitAuthority(row: ProviderRow) {
   return Object.freeze({
     address: firstText(row, ["address", "address1", "streetAddress"]),
+    address2: firstText(row, ["address2", "addressLine2", "suite"]),
     city: firstText(row, ["city", "town"]),
     state: firstText(row, ["state", "province", "region"]),
+    postalCode: firstText(row, ["postalCode", "postal_code", "zip", "zipCode"], 32),
     country: firstText(row, ["country", "countryName"]),
     countryCode: firstText(row, ["countryCode", "country_code", "isoCountryCode"], 16),
     phone: firstText(row, ["phone", "phoneNumber", "telephone"], 128),
+    mobile: firstText(row, ["mobile", "mobilePhone", "cellPhone"], 128),
     email: firstText(row, ["email", "contactEmail"], 320),
     website: firstText(row, ["website", "websiteUrl", "url"], 2048),
     bookingUrl: firstText(row, ["bookingUrl", "bookingURL"], 2048),
     reservationUrl: firstText(row, ["reservationUrl", "reservationURL"], 2048),
+    teeTimeUrl: firstText(row, ["teeTimeUrl", "teeTimeURL", "teetimeUrl", "teetimeURL"], 2048),
     reservationPhone: firstText(row, ["reservationPhone", "bookingPhone"], 128),
     reservationEmail: firstText(row, ["reservationEmail", "bookingEmail"], 320),
     contactPhone: firstText(row, ["contactPhone"], 128),
     contactEmail: firstText(row, ["contactEmail"], 320),
+    bookingProviderId: firstText(row, ["bookingProviderID", "bookingProviderId", "bookingID", "bookingId"], 160),
+    reservationProviderId: firstText(row, ["reservationProviderID", "reservationProviderId", "reservationID", "reservationId"], 160),
     providerParentId: firstText(row, ["parentClubID", "parentClubId", "parentID", "parentId"], 160),
     providerPropertyId: firstText(row, ["propertyID", "propertyId", "propertyIdentifier"], 160),
     providerPropertyType: firstText(row, ["propertyType", "clubType", "type"], 128),
     providerBookable: typeof row.bookable === "boolean" ? row.bookable : typeof row.isBookable === "boolean" ? row.isBookable : null,
   });
+}
+
+/** Return only explicitly whitelisted leaves from known provider contact structures. */
+function bookingStructures(row: ProviderRow) {
+  const structures: Record<string, Record<string, string | null>> = {};
+  for (const key of ["booking", "reservation", "teeTime", "contact"] as const) {
+    const source = row[key];
+    if (!source || typeof source !== "object" || Array.isArray(source)) continue;
+    const value = source as ProviderRow;
+    structures[key] = Object.freeze({
+      name: firstText(value, ["name", "contactName"]),
+      url: firstText(value, ["url", "bookingUrl", "reservationUrl", "teeTimeUrl"], 2048),
+      email: firstText(value, ["email", "bookingEmail", "reservationEmail", "contactEmail"], 320),
+      phone: firstText(value, ["phone", "telephone", "bookingPhone", "reservationPhone", "contactPhone"], 128),
+      mobile: firstText(value, ["mobile", "mobilePhone", "cellPhone"], 128),
+      providerId: firstText(value, ["providerID", "providerId", "bookingID", "bookingId", "reservationID", "reservationId", "propertyID", "propertyId"], 160),
+    });
+  }
+  return Object.freeze(structures);
 }
 
 function rawCourses(row: ProviderRow): ProviderRow[] {
@@ -128,8 +153,10 @@ function clubFact(input: ClubInspectionInput, shell: ProviderRow, detail: Provid
     providerClubId,
     providerClubName: firstText(raw, ["clubName", "name"]),
     ...explicitAuthority(raw),
+    providerBookingStructures: bookingStructures(raw),
     distanceKm: localDistanceKm,
     withinRequestedRadius: localDistanceKm !== null && localDistanceKm <= input.radiusKm,
+    within50Km: localDistanceKm !== null && localDistanceKm <= 50,
   });
 }
 
