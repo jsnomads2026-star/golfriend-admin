@@ -11,7 +11,7 @@ export type Candidate = {
   address: string | null; city: string | null; state: string | null;
   country: string | null; latitude: number | null; longitude: number | null;
   /** Explicit relationship only; never use a layout name as a clubhouse alias. */
-  providerCourseId?: string; providerClubId?: string | null; clubhouseId?: string | null;
+  providerCourseId?: string; providerClubId?: string | null; clubHouseId?: string | null;
 };
 
 export type ProviderCourseLayout = Readonly<{
@@ -125,7 +125,7 @@ export function courseCandidatesFromClubhouses(clubhouses: readonly ProviderClub
   for (const clubhouse of clubhouses) for (const layout of clubhouse.layouts) if (!unique.has(layout.providerCourseId)) {
     const classification = classifyClubhouse(clubhouse);
     unique.set(layout.providerCourseId, {
-    courseID: layout.providerCourseId, providerCourseId: layout.providerCourseId, clubID: clubhouse.providerClubId, providerClubId: clubhouse.providerClubId, clubhouseId: classification.canonicalClubhouseId, clubName: clubhouse.providerClubName, name: layout.providerCourseName, address: clubhouse.address, city: clubhouse.city, state: clubhouse.state, country: clubhouse.country, latitude: clubhouse.latitude, longitude: clubhouse.longitude,
+    courseID: layout.providerCourseId, providerCourseId: layout.providerCourseId, clubID: clubhouse.providerClubId, providerClubId: clubhouse.providerClubId, clubHouseId: classification.canonicalClubhouseId, clubName: clubhouse.providerClubName, name: layout.providerCourseName, address: clubhouse.address, city: clubhouse.city, state: clubhouse.state, country: clubhouse.country, latitude: clubhouse.latitude, longitude: clubhouse.longitude,
   });
   }
   return [...unique.values()].sort((a, b) => a.courseID.localeCompare(b.courseID));
@@ -142,7 +142,7 @@ export function normalizeCourseCandidates(payload: unknown): Candidate[] {
       if (!rawCourse || typeof rawCourse !== "object") return [];
       const course = rawCourse as Record<string, unknown>;
       const courseID = field(course, ["courseID", "courseId", "id"], 160);
-      return courseID && isValidProviderId(courseID) ? [{courseID, providerCourseId: courseID, clubID: null, providerClubId: null, clubhouseId: null, clubName: field(club, ["clubName", "name"]) || "Unnamed club", name: field(course, ["courseName", "name"]) || "Unnamed course", address: field(club, ["address"]), city: field(club, ["city"]), state: field(club, ["state", "province"]), country: field(club, ["country"]), latitude: finite(club.latitude), longitude: finite(club.longitude)}] : [];
+      return courseID && isValidProviderId(courseID) ? [{courseID, providerCourseId: courseID, clubID: null, providerClubId: null, clubHouseId: null, clubName: field(club, ["clubName", "name"]) || "Unnamed club", name: field(course, ["courseName", "name"]) || "Unnamed course", address: field(club, ["address"]), city: field(club, ["city"]), state: field(club, ["state", "province"]), country: field(club, ["country"]), latitude: finite(club.latitude), longitude: finite(club.longitude)}] : [];
     });
   });
   const unique = new Map<string, Candidate>();
@@ -249,7 +249,7 @@ export function buildCourseGrowthRecord(candidate: Candidate, details: Record<st
   const longitude = preserve && isValidCoordinate(existingLat, existingLng) ? existingLng : isValidCoordinate(providerLat, providerLng) ? providerLng : null;
   const requiresCoordinatorReview = !isValidCoordinate(latitude, longitude);
   return {
-    ...candidate, providerCourseId: candidate.providerCourseId || candidate.courseID, providerClubId: candidate.providerClubId || candidate.clubID, clubhouseId: candidate.clubhouseId || null, latitude, longitude, lat: latitude, lng: longitude,
+    ...candidate, providerCourseId: candidate.providerCourseId || candidate.courseID, providerClubId: candidate.providerClubId || candidate.clubID, clubHouseId: candidate.clubHouseId || null, latitude, longitude, lat: latitude, lng: longitude,
     holes: Array.isArray(details.holes) ? details.holes : [],
     greenCoordinates: Array.isArray(coordinates.greens) ? coordinates.greens : [],
     bunkerCoordinates: Array.isArray(coordinates.bunkers) ? coordinates.bunkers : [],
@@ -266,7 +266,7 @@ export function buildClubhouseRecord(clubhouse: ProviderClubhouse): Record<strin
   if (classification.status !== "proven" || !classification.canonicalClubhouseId) throw new Error("AMBIGUOUS_CLUBHOUSE_HIERARCHY");
   const coordinatesValid = isValidCoordinate(clubhouse.latitude, clubhouse.longitude);
   const location = {address: clubhouse.address, address2: clubhouse.address2, city: clubhouse.city, state: clubhouse.state, postalCode: clubhouse.postalCode, country: clubhouse.country, countryCode: clubhouse.countryCode, latitude: coordinatesValid ? clubhouse.latitude : null, longitude: coordinatesValid ? clubhouse.longitude : null, coordinateValidity: coordinatesValid ? "valid" : "invalid_or_missing"};
-  return {schema: "golfriend.v2.clubhouse.v3", schemaVersion: 3, clubhouseId: classification.canonicalClubhouseId, provider: "golf-api", providerClubId: clubhouse.providerClubId, providerPropertyId: clubhouse.providerPropertyId, providerParentId: clubhouse.providerParentId, providerPropertyType: clubhouse.providerPropertyType, displayName: clubhouse.providerClubName, country: clubhouse.country, countryCode: clubhouse.countryCode, location, classification, contactFacts: {phone: clubhouse.phone, mobile: clubhouse.mobile, email: clubhouse.email, website: clubhouse.website, contactPhone: clubhouse.contactPhone, contactEmail: clubhouse.contactEmail}, reservationFacts: {bookingUrl: clubhouse.bookingUrl, reservationUrl: clubhouse.reservationUrl, teeTimeUrl: clubhouse.teeTimeUrl, reservationPhone: clubhouse.reservationPhone, reservationEmail: clubhouse.reservationEmail, bookingProviderId: clubhouse.bookingProviderId, reservationProviderId: clubhouse.reservationProviderId}, bookingAuthority: {status: "unavailable", channelType: null, authorityId: null, verificationSource: null, verifiedAt: null}, sourceProvenance: {identity: classification.reason, contactReservationFacts: "golf_api_provider_fact", bookingAuthority: "not_verified"}, childCourseIds: clubhouse.layouts.map((layout) => layout.providerCourseId), childCourseCount: clubhouse.layouts.length};
+  return {schema: "golfriend.v2.clubhouse.v3", schemaVersion: 3, clubHouseId: classification.canonicalClubhouseId, provider: "golf-api", providerClubId: clubhouse.providerClubId, providerPropertyId: clubhouse.providerPropertyId, providerParentId: clubhouse.providerParentId, providerPropertyType: clubhouse.providerPropertyType, displayName: clubhouse.providerClubName, country: clubhouse.country, countryCode: clubhouse.countryCode, location, classification, contactFacts: {phone: clubhouse.phone, mobile: clubhouse.mobile, email: clubhouse.email, website: clubhouse.website, contactPhone: clubhouse.contactPhone, contactEmail: clubhouse.contactEmail}, reservationFacts: {bookingUrl: clubhouse.bookingUrl, reservationUrl: clubhouse.reservationUrl, teeTimeUrl: clubhouse.teeTimeUrl, reservationPhone: clubhouse.reservationPhone, reservationEmail: clubhouse.reservationEmail, bookingProviderId: clubhouse.bookingProviderId, reservationProviderId: clubhouse.reservationProviderId}, bookingAuthority: {status: "unavailable", channelType: null, authorityId: null, verificationSource: null, verifiedAt: null}, sourceProvenance: {identity: classification.reason, contactReservationFacts: "golf_api_provider_fact", bookingAuthority: "not_verified"}, childCourseIds: clubhouse.layouts.map((layout) => layout.providerCourseId), childCourseCount: clubhouse.layouts.length};
 }
 
 export function deterministicReceiptId(jobId: string): string {

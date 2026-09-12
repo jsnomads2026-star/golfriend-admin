@@ -3,7 +3,7 @@
 ## Contract
 
 `clubhouses/{clubHouseId}` is the canonical member-facing destination. A
-course/layout remains in `courses/{courseId}` and may carry `clubhouseId` only
+course/layout remains in `courses/{courseId}` and may carry `clubHouseId` only
 when the link has explicit provider-property or provider-bookable-club evidence.
 The canonical document stores the provider identifiers, display name, bounded
 address and coordinate facts, `childCourseIds`, provider contact/reservation
@@ -38,7 +38,7 @@ booking authority.
 
 `executeCourseClubhouseReconciliation` is deliberately not run by this lane.
 It needs the exact reviewed plan/source hashes, fails on ambiguity, preserves a
-different existing `clubhouseId`, uses deterministic IDs, and writes one
+different existing `clubHouseId`, uses deterministic IDs, and writes one
 immutable receipt. It never deletes or creates courses.
 
 ## Siam acceptance rule

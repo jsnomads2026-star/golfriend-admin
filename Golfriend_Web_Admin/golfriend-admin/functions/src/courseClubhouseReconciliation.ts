@@ -14,8 +14,9 @@ export function reconciliationHash(value: unknown): string { return createHash("
 const text = (value: unknown): string => String(value || "").trim();
 const finite = (value: unknown): number | null => { const number = typeof value === "number" ? value : Number(value); return Number.isFinite(number) ? number : null; };
 const locationOf = (row: Row): Row => row.location && typeof row.location === "object" && !Array.isArray(row.location) ? row.location as Row : {};
-function sourceCourse(row: Row): Row { return {id: text(row.id || row.courseID || row.providerCourseId), providerCourseId: text(row.providerCourseId || row.courseID), providerClubId: text(row.providerClubId || row.clubID), clubhouseId: text(row.clubhouseId), latitude: finite(row.latitude ?? row.lat), longitude: finite(row.longitude ?? row.lng)}; }
-function sourceClubhouse(row: Row): Row { const location = locationOf(row); return {id: text(row.id || row.clubhouseId), providerClubId: text(row.providerClubId), providerPropertyId: text(row.providerPropertyId), displayName: text(row.displayName), location: {latitude: finite(location.latitude), longitude: finite(location.longitude)}}; }
+/** `clubhouseId` is a legacy persisted input only; all plan/output fields use `clubHouseId`. */
+function sourceCourse(row: Row): Row { return {id: text(row.id || row.courseID || row.providerCourseId), providerCourseId: text(row.providerCourseId || row.courseID), providerClubId: text(row.providerClubId || row.clubID), clubHouseId: text(row.clubHouseId ?? row.clubhouseId), latitude: finite(row.latitude ?? row.lat), longitude: finite(row.longitude ?? row.lng)}; }
+function sourceClubhouse(row: Row): Row { const location = locationOf(row); return {id: text(row.id || row.clubHouseId || row.clubhouseId), providerClubId: text(row.providerClubId), providerPropertyId: text(row.providerPropertyId), displayName: text(row.displayName), location: {latitude: finite(location.latitude), longitude: finite(location.longitude)}}; }
 function same(left: unknown, right: unknown): boolean { return canonical(left) === canonical(right); }
 function supplied(value: unknown): unknown { if (value === null || value === undefined) return undefined; if (Array.isArray(value)) return value.map(supplied).filter((item) => item !== undefined); if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Row).flatMap(([key, item]) => { const normalized = supplied(item); return normalized === undefined ? [] : [[key, normalized]]; })); return value; }
 
@@ -32,7 +33,7 @@ export function planCourseClubhouseReconciliation(providerRows: readonly Provide
   const targetProviderClubIds = [...new Set(providerRows.map((row) => row.providerClubId))].sort();
   const sourceStateHash = reconciliationHash({courses: existingCourses.map(sourceCourse).sort((a, b) => String(a.id).localeCompare(String(b.id))), clubhouses: existingClubhouses.map(sourceClubhouse).sort((a, b) => String(a.id).localeCompare(String(b.id))), targets: targetProviderClubIds});
   const courseByProviderId = new Map(existingCourses.map((course) => [text(course.providerCourseId || course.courseID), course]));
-  const clubhouseById = new Map(existingClubhouses.map((clubhouse) => [text(clubhouse.clubhouseId || clubhouse.id), clubhouse]));
+  const clubhouseById = new Map(existingClubhouses.map((clubhouse) => [text(clubhouse.clubHouseId || clubhouse.clubhouseId || clubhouse.id), clubhouse]));
   const clubhouseUpserts: Array<{id: string; patch: Row}> = [], coursePatches: Array<{id: string; patch: Row}> = [], unmatchedProviderLayouts: Array<{providerClubId: string; providerCourseId: string}> = [], ambiguousGroups: AmbiguousGroup[] = [], invalidGeography: string[] = [], unchangedCourseLinks: string[] = []; const seenCanonicalIds = new Set<string>();
   for (const provider of [...providerRows].sort((a, b) => a.providerClubId.localeCompare(b.providerClubId))) {
     const classification = classifyClubhouse(provider);
@@ -46,8 +47,8 @@ export function planCourseClubhouseReconciliation(providerRows: readonly Provide
       const existing = courseByProviderId.get(layout.providerCourseId);
       if (!existing) { unmatchedProviderLayouts.push({providerClubId: provider.providerClubId, providerCourseId: layout.providerCourseId}); continue; }
       const courseId = text(existing.id || existing.courseID || existing.providerCourseId); if (!courseId) throw new Error("EXISTING_COURSE_ID_MISSING");
-      const previous = text(existing.clubhouseId); if ((previous && previous !== id) || existing.manualLock === true || existing.trusted === true) { unchangedCourseLinks.push(courseId); continue; }
-      coursePatches.push({id: courseId, patch: {providerCourseId: layout.providerCourseId, providerClubId: provider.providerClubId, clubhouseId: id, clubhouseLinkProvenance: classification.reason}});
+      const previous = text(existing.clubHouseId ?? existing.clubhouseId); if ((previous && previous !== id) || existing.manualLock === true || existing.trusted === true) { unchangedCourseLinks.push(courseId); continue; }
+      coursePatches.push({id: courseId, patch: {providerCourseId: layout.providerCourseId, providerClubId: provider.providerClubId, clubHouseId: id, clubHouseLinkProvenance: classification.reason}});
     }
   }
   clubhouseUpserts.sort((a, b) => a.id.localeCompare(b.id)); coursePatches.sort((a, b) => a.id.localeCompare(b.id)); unmatchedProviderLayouts.sort((a, b) => a.providerCourseId.localeCompare(b.providerCourseId)); ambiguousGroups.sort((a, b) => a.providerClubId.localeCompare(b.providerClubId)); invalidGeography.sort(); unchangedCourseLinks.sort();

@@ -1,12 +1,12 @@
 import assert from "node:assert";
 import {readFileSync} from "node:fs";
-import {buildClubhouseRecord, classifyClubhouse, normalizeClubhouses} from "./courseGrowth.js";
+import {buildClubhouseRecord, buildCourseGrowthRecord, classifyClubhouse, courseCandidatesFromClubhouses, normalizeClubhouses} from "./courseGrowth.js";
 import {assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId} from "./courseClubhouseReconciliation.js";
 
 const proven = normalizeClubhouses({clubs: [{clubID: "brand_siam", propertyID: "old-course-property", clubName: "Siam Country Club Old Course", latitude: 12.93, longitude: 100.88, phone: "123", bookingUrl: "https://provider.example/book", courses: [{courseID: "layout_old", courseName: "Old Course"}, {courseID: "layout_water", courseName: "Waterside"}]}]});
 const courses = [{id: "layout_old", courseID: "layout_old", providerCourseId: "layout_old", latitude: 12.93, longitude: 100.88}];
 const plan = planCourseClubhouseReconciliation(proven, courses);
-assert.equal(plan.clubhouseUpserts.length, 1); assert.equal(plan.clubhouseUpserts[0].id, "golfapi-property-old-course-property"); assert.equal(plan.clubhouseUpserts[0].patch.displayName, "Siam Country Club Old Course"); assert.equal(plan.clubhouseUpserts[0].patch.bookingAuthority && (plan.clubhouseUpserts[0].patch.bookingAuthority as any).status, "unavailable"); assert.equal(plan.coursePatches[0].patch.clubhouseId, "golfapi-property-old-course-property"); assert.deepEqual(plan.unmatchedProviderLayouts, [{providerClubId: "brand_siam", providerCourseId: "layout_water"}]);
+assert.equal(plan.clubhouseUpserts.length, 1); assert.equal(plan.clubhouseUpserts[0].id, "golfapi-property-old-course-property"); assert.equal(plan.clubhouseUpserts[0].patch.displayName, "Siam Country Club Old Course"); assert.equal(plan.clubhouseUpserts[0].patch.bookingAuthority && (plan.clubhouseUpserts[0].patch.bookingAuthority as any).status, "unavailable"); assert.equal(plan.coursePatches[0].patch.clubHouseId, "golfapi-property-old-course-property"); assert.deepEqual(plan.unmatchedProviderLayouts, [{providerClubId: "brand_siam", providerCourseId: "layout_water"}]);
 assert.equal((plan.clubhouseUpserts[0].patch as any).childCourseIds.includes("layout_old"), true); assert.doesNotMatch(JSON.stringify(plan), /secret|token|authorization/i);
 const repeat = planCourseClubhouseReconciliation(proven, courses); assert.equal(plan.planHash, repeat.planHash); assert.doesNotThrow(() => assertExecutablePlan(plan, plan.planHash, repeat)); assert.throws(() => assertExecutablePlan(plan, "wrong", repeat), /APPROVED_PLAN_HASH_MISMATCH/); assert.equal(reconciliationReceiptId(plan.planHash), reconciliationReceiptId(repeat.planHash)); assert.equal(reconciliationExecutionDisposition(false), "execute"); assert.equal(reconciliationExecutionDisposition(true), "replayed"); assert.equal(hasEquivalentPatch({...plan.coursePatches[0].patch}, plan.coursePatches[0].patch), true);
 
@@ -16,11 +16,17 @@ const ambiguousPlan = planCourseClubhouseReconciliation(ambiguous, [{id: "sugar"
 assert.equal(classifyClubhouse(ambiguous[0]).status, "ambiguous"); assert.equal(ambiguousPlan.clubhouseUpserts.length, 0); assert.equal(ambiguousPlan.coursePatches.length, 0); assert.equal(ambiguousPlan.ambiguousGroups.length, 1); assert.throws(() => assertExecutablePlan(ambiguousPlan, ambiguousPlan.planHash, ambiguousPlan), /AMBIGUOUS_CLUBHOUSE_HIERARCHY/);
 
 const separateProperties = normalizeClubhouses({clubs: [{clubID: "brand_siam", propertyID: "plantation", clubName: "Siam Country Club Plantation", latitude: 12.9, longitude: 101, courses: [{courseID: "sugar", courseName: "Sugar Cane"}]}, {clubID: "brand_siam", propertyID: "waterside", clubName: "Siam Country Club Waterside", latitude: 12.91, longitude: 101.01, courses: [{courseID: "water", courseName: "Waterside"}]}]});
-const separatePlan = planCourseClubhouseReconciliation(separateProperties, [{id: "sugar", providerCourseId: "sugar"}, {id: "water", providerCourseId: "water"}]); assert.equal(separatePlan.clubhouseUpserts.length, 2); assert.notEqual(separatePlan.coursePatches[0].patch.clubhouseId, separatePlan.coursePatches[1].patch.clubhouseId);
+const separatePlan = planCourseClubhouseReconciliation(separateProperties, [{id: "sugar", providerCourseId: "sugar"}, {id: "water", providerCourseId: "water"}]); assert.equal(separatePlan.clubhouseUpserts.length, 2); assert.notEqual(separatePlan.coursePatches[0].patch.clubHouseId, separatePlan.coursePatches[1].patch.clubHouseId);
 
 // A previous canonical/trusted link is never silently repointed.
-const protectedPlan = planCourseClubhouseReconciliation(proven, [{id: "layout_old", providerCourseId: "layout_old", clubhouseId: "verified-other-property"}]);
+const protectedPlan = planCourseClubhouseReconciliation(proven, [{id: "layout_old", providerCourseId: "layout_old", clubhouseId: "verified-other-property"}]); // legacy persisted input remains readable
 assert.equal(protectedPlan.coursePatches.length, 0); assert.deepEqual(protectedPlan.unchangedCourseLinks, ["layout_old"]);
+
+const bookableBrand = normalizeClubhouses({clubs: [{clubID: "brand_siam", clubName: "Siam Country Club", bookable: true, latitude: 12.93, longitude: 100.88, courses: [{courseID: "sugar", courseName: "Sugar Cane"}, {courseID: "tapioca", courseName: "Tapioca"}]}]});
+const bookablePlan = planCourseClubhouseReconciliation(bookableBrand, [{id: "sugar", providerCourseId: "sugar"}, {id: "tapioca", providerCourseId: "tapioca"}]); assert.equal(bookablePlan.clubhouseUpserts.length, 1); assert.equal(bookablePlan.clubhouseUpserts[0].patch.displayName, "Siam Country Club"); assert.doesNotMatch(JSON.stringify(bookablePlan), /Old Course|Plantation|Waterside|Rolling Hills/);
+for (const operation of [...plan.coursePatches, ...separatePlan.coursePatches, ...bookablePlan.coursePatches]) { assert.equal(Object.prototype.hasOwnProperty.call(operation.patch, "clubhouseId"), false); assert.ok(Object.prototype.hasOwnProperty.call(operation.patch, "clubHouseId")); }
+const growthRecord = buildCourseGrowthRecord(courseCandidatesFromClubhouses(proven)[0], {}, {}); const clubhouseRecord = buildClubhouseRecord(proven[0]);
+for (const writer of [growthRecord, clubhouseRecord]) { assert.equal(Object.prototype.hasOwnProperty.call(writer, "clubhouseId"), false); assert.ok(Object.prototype.hasOwnProperty.call(writer, "clubHouseId")); }
 
 const invalid = normalizeClubhouses({clubs: [{clubID: "invalid", propertyID: "invalid-property", clubName: "Invalid", latitude: 0, longitude: 0, courses: []}]});
 const record = buildClubhouseRecord(invalid[0]); assert.equal((record.location as any).coordinateValidity, "invalid_or_missing");
