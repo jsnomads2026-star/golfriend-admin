@@ -10,13 +10,18 @@ import {COURSE_OPERATIONS_SCHEMA, COURSE_RETRY_SCHEMA, countryCode, deterministi
 import {inspectClubRegion, normalizeClubInspectionInput} from "./courseInspection.js";
 import {MAX_RECONCILIATION_CLUBHOUSES, MAX_RECONCILIATION_WRITES, assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId, type ReconciliationPlan} from "./courseClubhouseReconciliation.js";
 import {isValidProviderId} from "./courseSync.js";
+import {assertFreshProviderFactForCanonicalWrite, isProviderFactFresh, providerFactFetchedAtMs} from "./providerFactFreshness.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
 const db = admin.firestore();
 const API_BASE = "https://www.golfapi.io/api/v2.3";
-const JOB_TTL_MS = 24 * 60 * 60 * 1000;
+/** Ingestion-job expiry is intentionally independent of provider fact freshness. */
+export const COURSE_INGESTION_JOB_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const MAX_COURSES_PER_COMMIT = 50;
+const PROVIDER_FACT_CACHE_COLLECTION = "provider_clubhouse_facts";
+
+type ReconciliationProviderFacts = Readonly<{plan: ReconciliationPlan; facts: readonly {providerClubId: string; clubhouse: ProviderClubhouse; fetchedAtMs: number; cacheHit: boolean}[]; providerCallsUsed: number; providerCallsSavedByTtl: number; sourceReadAtMs: number}>;
 
 async function requireActiveLease(jobRef: FirebaseFirestore.DocumentReference, ownerUid: string, leaseToken: string): Promise<void> {
   const snapshot = await jobRef.get();
@@ -52,21 +57,34 @@ function reconciliationTargetIds(value: unknown): string[] {
   return ids;
 }
 
-async function reconciliationPlanFor(providerClubIds: readonly string[]): Promise<ReconciliationPlan> {
-  const [clubhouseSnapshots, courseSnapshots, providerClubhouses] = await Promise.all([
+function cachedClubhouseFact(id: string, data: FirebaseFirestore.DocumentData | undefined, nowMs: number): {providerClubId: string; clubhouse: ProviderClubhouse; fetchedAtMs: number; cacheHit: boolean} | null {
+  const fetchedAtMs = providerFactFetchedAtMs(data?.fetchedAt);
+  const clubhouse = data?.clubhouse as ProviderClubhouse | undefined;
+  if (!fetchedAtMs || !isProviderFactFresh(fetchedAtMs, nowMs) || !clubhouse || clubhouse.providerClubId !== id) return null;
+  return {providerClubId: id, clubhouse, fetchedAtMs, cacheHit: true};
+}
+
+async function reconciliationPlanFor(providerClubIds: readonly string[], sourceReadAtMs = Date.now()): Promise<ReconciliationProviderFacts> {
+  const [clubhouseSnapshots, courseSnapshots, cacheSnapshots] = await Promise.all([
     db.getAll(...providerClubIds.map((id) => db.collection("clubhouses").doc(id))),
     Promise.all(providerClubIds.map((id) => db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES).get())),
-    Promise.all(providerClubIds.map(async (id) => {
+    db.getAll(...providerClubIds.map((id) => db.collection(PROVIDER_FACT_CACHE_COLLECTION).doc(id))),
+  ]);
+  const cachedFacts = new Map(cacheSnapshots.map((snapshot) => [snapshot.id, cachedClubhouseFact(snapshot.id, snapshot.data(), sourceReadAtMs)]).filter((entry): entry is [string, {providerClubId: string; clubhouse: ProviderClubhouse; fetchedAtMs: number; cacheHit: boolean}] => !!entry[1]));
+  let providerCallsUsed = 0;
+  const facts = await Promise.all(providerClubIds.map(async (id) => {
+    const cached = cachedFacts.get(id);
+    if (cached) return cached;
       const response = await golfApiGet(`/clubs/${encodeURIComponent(id)}`, GOLF_API_KEY.value());
+      providerCallsUsed += response.callsUsed;
       const normalized = normalizeClubDetailClubhouses({clubID: id}, response.data);
       const clubhouse = normalized.find((row) => row.providerClubId === id);
       if (!clubhouse) throw new HttpsError("failed-precondition", `PROVIDER_CLUB_DETAIL_MISSING:${id}`);
-      return clubhouse;
-    })),
-  ]);
+      return {providerClubId: id, clubhouse, fetchedAtMs: Date.now(), cacheHit: false};
+    }));
   const existingCourses = courseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
   const existingClubhouses = clubhouseSnapshots.filter((doc) => doc.exists).map((doc) => ({id: doc.id, ...doc.data()}));
-  return planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses);
+  return {plan: planCourseClubhouseReconciliation(facts.map((fact) => fact.clubhouse), existingCourses, existingClubhouses), facts, providerCallsUsed, providerCallsSavedByTtl: facts.filter((fact) => fact.cacheHit).length, sourceReadAtMs};
 }
 
 async function golfApiGet(path: string, apiKey: string, onAttempt: () => void | Promise<void> = () => {}): Promise<{data: any; callsUsed: number}> {
@@ -161,7 +179,7 @@ export const previewCourseRegionImport = onCall({
     clubShellsExpanded: expansion.expandedClubIds,
     unresolvedClubShells: expansion.unresolvedClubShells,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + JOB_TTL_MS),
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + COURSE_INGESTION_JOB_EXPIRY_MS),
   });
 
   await db.collection("platform").doc("golfApiUsage").set({estimatedCallsUsed: admin.firestore.FieldValue.increment(previewCalls - previewReservation), lastCallAt: admin.firestore.FieldValue.serverTimestamp(), lastPreviewJobId: jobRef.id}, {merge: true});
@@ -209,8 +227,9 @@ export const previewCourseClubhouseReconciliation = onCall({
   await requireCoordinator(request.auth.uid);
   const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const plan = await reconciliationPlanFor(providerClubIds);
-  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, productionWrites: 0}};
+  const reconciliation = await reconciliationPlanFor(providerClubIds);
+  const plan = reconciliation.plan;
+  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
@@ -228,7 +247,11 @@ export const executeCourseClubhouseReconciliation = onCall({
   const existingReceipt = await receiptRef.get();
   if (reconciliationExecutionDisposition(existingReceipt.exists) === "replayed") return {receiptId, replayed: true, result: existingReceipt.data()?.result || null};
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const plan = await reconciliationPlanFor(providerClubIds);
+  const reconciliation = await reconciliationPlanFor(providerClubIds);
+  const plan = reconciliation.plan;
+  for (const fact of reconciliation.facts) {
+    try { assertFreshProviderFactForCanonicalWrite(fact.fetchedAtMs, Date.now()); } catch { throw new HttpsError("aborted", "STALE_PROVIDER_FACT"); }
+  }
   if (plan.sourceStateHash !== expectedSourceStateHash) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN");
   try { assertExecutablePlan(plan, approvedPlanHash, plan); } catch (error) { throw new HttpsError("failed-precondition", error instanceof Error ? error.message : "APPROVED_PLAN_HASH_MISMATCH"); }
   const refs = [...plan.clubhouseUpserts.map((op) => db.collection("clubhouses").doc(op.id)), ...plan.coursePatches.map((op) => db.collection("courses").doc(op.id))];
@@ -239,7 +262,8 @@ export const executeCourseClubhouseReconciliation = onCall({
     for (const operation of plan.clubhouseUpserts) { const existing = snapshots[cursor++]; if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     for (const operation of plan.coursePatches) { const existing = snapshots[cursor++]; if (!existing.exists) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN"); if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     if (writes > MAX_RECONCILIATION_WRITES) throw new HttpsError("failed-precondition", "RECONCILIATION_WRITE_LIMIT_EXCEEDED");
-    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, writes, deletes: 0, creates: 0};
+    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, writes, deletes: 0, creates: 0};
+    for (const fact of reconciliation.facts.filter((fact) => !fact.cacheHit)) transaction.set(db.collection(PROVIDER_FACT_CACHE_COLLECTION).doc(fact.providerClubId), {providerClubId: fact.providerClubId, clubhouse: fact.clubhouse, fetchedAt: admin.firestore.Timestamp.fromMillis(fact.fetchedAtMs), providerUpdatedAt: fact.clubhouse.providerUpdatedAt ?? null, provider: "golf-api"}, {merge: true});
     transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, result: summary, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
     return {replayed: false, result: summary};
   });
@@ -424,7 +448,7 @@ export const prepareCourseIngestionRetry = onCall({enforceAppCheck:true},async(r
   const pending=retryCandidates(candidates,new Set(existing.filter(doc=>doc.exists).map(doc=>doc.id)));if(!pending.length)throw new HttpsError("failed-precondition","No unresolved courses remain.");
   const retryJobId=deterministicRetryJobId(sourceJobId),retryRef=db.collection("course_ingestion_jobs").doc(retryJobId);
   const result=await db.runTransaction(async transaction=>{const [latest,retry]=await Promise.all([transaction.get(sourceRef),transaction.get(retryRef)]);const value=latest.data();if(!value||!retryableStatus(value.status))throw new HttpsError("failed-precondition","Job is no longer retryable.");if(retry.exists)return {jobId:retryJobId,replayed:true,count:Number(retry.data()?.missingCount)||pending.length};
-    transaction.create(retryRef,{status:"previewed",requestedBy:request.auth!.uid,retryOf:sourceJobId,retrySchemaVersion:COURSE_RETRY_SCHEMA,candidates:pending,missingCount:pending.length,createdAt:admin.firestore.FieldValue.serverTimestamp(),expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+JOB_TTL_MS)});transaction.update(sourceRef,{retryJobId,retryPreparedAt:admin.firestore.FieldValue.serverTimestamp()});return {jobId:retryJobId,replayed:false,count:pending.length};});
+    transaction.create(retryRef,{status:"previewed",requestedBy:request.auth!.uid,retryOf:sourceJobId,retrySchemaVersion:COURSE_RETRY_SCHEMA,candidates:pending,missingCount:pending.length,createdAt:admin.firestore.FieldValue.serverTimestamp(),expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+COURSE_INGESTION_JOB_EXPIRY_MS)});transaction.update(sourceRef,{retryJobId,retryPreparedAt:admin.firestore.FieldValue.serverTimestamp()});return {jobId:retryJobId,replayed:false,count:pending.length};});
   return {schemaVersion:COURSE_RETRY_SCHEMA,...result};
 });
 
