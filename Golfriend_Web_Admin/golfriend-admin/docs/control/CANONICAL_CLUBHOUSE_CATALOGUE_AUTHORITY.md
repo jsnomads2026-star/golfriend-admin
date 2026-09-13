@@ -14,6 +14,24 @@ writes `bookingAuthority.status: unavailable`; no provider fact becomes
 verified booking authority. Future Partner, official-source, and verified Admin
 corrections must identify their source in `bookingAuthority.verificationSource`.
 
+## Provider-fact cache and freshness
+
+`provider_club_facts/{providerClubId}` is a server-owned provider observation,
+not a canonical club-house record. It contains only bounded Golf API detail
+facts, including the provider identity, layouts, geography, contact/reservation
+facts, `fetchedAt`, and provider-native `providerUpdatedAt` when supplied. It
+never contains `clubHouseId` or a verified `bookingAuthority` claim.
+
+`PROVIDER_CLUB_FACT_CACHE_TTL_MS` is exactly 24 hours from `fetchedAt` and is
+separate from ingestion-job expiry. `providerUpdatedAt` is provenance only; it
+never makes a fact permanently fresh. Preview and execution may reuse a fact
+only within this TTL; an expired or absent fact must be refetched before any
+canonical reconciliation write. Preview itself remains zero-write.
+
+Provider club-detail fetching is deterministic and sequential: at most one
+`/clubs/{providerClubId}` request is in flight. A 429 is fail-closed, records
+only bounded rate headers when supplied, and is not retried automatically.
+
 ## Identity and geography gates
 
 The deterministic identifier is `golfapi-property-{providerPropertyId}` when
@@ -34,7 +52,8 @@ missing geography is excluded.
 bounded to 25 provider club groups / 200 writes, and returns zero writes. It
 reports proven destinations, safely linkable courses, ambiguous groups, invalid
 geography, retained existing links, provider contact facts, and unavailable
-booking authority.
+booking authority. It also reports provider-fact cache hits, live refetches,
+and bounded non-secret rate evidence.
 
 `executeCourseClubhouseReconciliation` is deliberately not run by this lane.
 It needs the exact reviewed plan/source hashes, fails on ambiguity, preserves a

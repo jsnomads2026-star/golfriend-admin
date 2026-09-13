@@ -1,4 +1,4 @@
-import {createHash, createHmac, timingSafeEqual} from "node:crypto";
+import {createHmac, timingSafeEqual} from "node:crypto";
 import {isValidProviderId} from "./courseSync.js";
 
 export const MAX_CATALOGUE_PREVIEW_GROUPS = 25;
@@ -47,7 +47,7 @@ export function parseCataloguePreviewRequest(value: unknown, secret: string): Ca
   return {mode: "explicit", providerClubIds: [...providerClubIds].sort()};
 }
 
-export function catalogueProviderBatch(rows: readonly Row[], afterProviderClubId: string | null, batchSize: number): Readonly<{providerClubIds: string[]; invalidProviderClubIdRows: number; lastScannedProviderClubId: string | null; sourceWindowHash: string}> {
+export function catalogueProviderBatch(rows: readonly Row[], afterProviderClubId: string | null, batchSize: number): Readonly<{providerClubIds: string[]; invalidProviderClubIdRows: number; lastScannedProviderClubId: string | null}> {
   const seen = new Set<string>(); let invalidProviderClubIdRows = 0;
   for (const row of [...rows].sort((left, right) => text(left.providerClubId ?? left.clubID).localeCompare(text(right.providerClubId ?? right.clubID)) || text(left.id).localeCompare(text(right.id)))) {
     const providerClubId = text(row.providerClubId ?? row.clubID);
@@ -57,8 +57,7 @@ export function catalogueProviderBatch(rows: readonly Row[], afterProviderClubId
   const orderedRows = [...rows].sort((left, right) => text(left.providerClubId ?? left.clubID).localeCompare(text(right.providerClubId ?? right.clubID)) || text(left.id).localeCompare(text(right.id)));
   const providerClubIds = [...seen].sort();
   const lastScannedProviderClubId = providerClubIds.length ? providerClubIds[providerClubIds.length - 1] : (orderedRows.length ? text(orderedRows[orderedRows.length - 1].providerClubId ?? orderedRows[orderedRows.length - 1].clubID) || null : null);
-  const sourceWindowHash = createHash("sha256").update(JSON.stringify(orderedRows.map((row) => ({id: text(row.id), providerClubId: text(row.providerClubId ?? row.clubID), providerCourseId: text(row.providerCourseId ?? row.courseID)})))).digest("hex");
-  return {providerClubIds, invalidProviderClubIdRows, lastScannedProviderClubId, sourceWindowHash};
+  return {providerClubIds, invalidProviderClubIdRows, lastScannedProviderClubId};
 }
 
 export function assertProviderGroupWithinLimit(rowCount: number, limit: number): void {

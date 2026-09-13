@@ -72,7 +72,7 @@ async function fetchProviderClubDetail(providerClubId: string, apiKey: string): 
 async function reconciliationPlanFor(providerClubIds: readonly string[], readTime: FirebaseFirestore.Timestamp | null = null): Promise<{plan: ReconciliationPlan; courseRowsMeasured: number; providerClubhouses: ProviderClubhouse[]; cacheHits: number; providerRefetches: number; rateEvidence: ProviderRateEvidence[]}> {
   if (!providerClubIds.length) return {plan: planCourseClubhouseReconciliation([], [], []), courseRowsMeasured: 0, providerClubhouses: [], cacheHits: 0, providerRefetches: 0, rateEvidence: []};
   const [clubhouseSnapshots, courseSnapshots, providerFactSnapshots] = await Promise.all([
-    Promise.all(providerClubIds.map((id) => readCatalogueQuery(db.collection("clubhouses").where(admin.firestore.FieldPath.documentId(), "==", id).limit(1), readTime))),
+    Promise.all(providerClubIds.map((id) => readCatalogueQuery(db.collection("clubhouses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_CLUBHOUSES + 1), readTime))),
     Promise.all(providerClubIds.map(async (id) => {
       const snapshot = await readCatalogueQuery(db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES + 1), readTime);
       try { assertProviderGroupWithinLimit(snapshot.size, MAX_RECONCILIATION_WRITES); } catch { throw new HttpsError("failed-precondition", `PROVIDER_GROUP_TOO_LARGE:${id}`); }
@@ -371,7 +371,8 @@ export const commitCourseRegionImport = onCall({
 
   const candidates = (Array.isArray(claimed.job.candidates) ? claimed.job.candidates : []).slice(0, MAX_COURSES_PER_COMMIT) as Candidate[];
   const clubhouses = (Array.isArray(claimed.job.clubhouses) ? claimed.job.clubhouses : []).slice(0, MAX_COURSES_PER_COMMIT) as ProviderClubhouse[];
-  const clubhouseByProviderId = new Map(clubhouses.map((clubhouse) => [clubhouse.providerClubId, clubhouse]));
+  const clubhousesByProviderId = new Map<string, ProviderClubhouse[]>();
+  for (const clubhouse of clubhouses) (clubhousesByProviderId.get(clubhouse.providerClubId) || clubhousesByProviderId.set(clubhouse.providerClubId, []).get(clubhouse.providerClubId)!).push(clubhouse);
   const reservedCalls = candidates.length * PROVIDER_CALLS_PER_COURSE * (RETRY_DELAYS_MS.length + 1);
   let quota;
   try { quota = await reserveQuota(reservedCalls); } catch (error) {
@@ -417,8 +418,14 @@ export const commitCourseRegionImport = onCall({
           throw new HttpsError("aborted", error instanceof Error ? error.message : "LEASE_OWNERSHIP_LOST");
         }
         if (latest.exists) return false;
-        const clubhouse = candidate.providerClubId ? clubhouseByProviderId.get(candidate.providerClubId) : undefined;
-        if (clubhouse) transaction.set(db.collection("clubhouses").doc(clubhouse.providerClubId), buildClubhouseRecord(clubhouse), {merge: true});
+        const providerClubhouses = candidate.providerClubId ? clubhousesByProviderId.get(candidate.providerClubId) || [] : [];
+        // A legacy ingestion candidate knows only a provider club ID. It may write
+        // a canonical destination only when that ID resolves to one proven property.
+        const clubhouse = providerClubhouses.length === 1 ? providerClubhouses[0] : undefined;
+        if (clubhouse && classifyClubhouse(clubhouse).status === "proven") {
+          const canonicalClubhouse = buildClubhouseRecord(clubhouse);
+          transaction.set(db.collection("clubhouses").doc(String(canonicalClubhouse.clubHouseId)), canonicalClubhouse, {merge: true});
+        }
         transaction.create(courseRef, record);
         return true;
       });
