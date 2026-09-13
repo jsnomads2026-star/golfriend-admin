@@ -11,6 +11,7 @@ import {inspectClubRegion, normalizeClubInspectionInput} from "./courseInspectio
 import {MAX_RECONCILIATION_CLUBHOUSES, MAX_RECONCILIATION_WRITES, assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId, type ReconciliationPlan} from "./courseClubhouseReconciliation.js";
 import {isValidProviderId} from "./courseSync.js";
 import {assertFreshProviderFactForCanonicalWrite, isProviderFactFresh, providerFactFetchedAtMs} from "./providerFactFreshness.js";
+import {normalizeCuratedClubhouseAuthorities, type CuratedClubhouseAuthority} from "./clubhouseAuthority.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -50,11 +51,17 @@ async function requireCoordinator(uid: string): Promise<void> {
   }
 }
 
-function reconciliationTargetIds(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_RECONCILIATION_CLUBHOUSES) throw new HttpsError("invalid-argument", "A bounded providerClubIds list is required.");
-  const ids = [...new Set(value.map((id) => String(id || "").trim()))].sort();
-  if (ids.length !== value.length || ids.some((id) => !isValidProviderId(id))) throw new HttpsError("invalid-argument", "providerClubIds must be distinct valid provider IDs.");
-  return ids;
+function reconciliationInput(value: unknown): {providerClubIds: readonly string[]; curatedAuthorities: readonly CuratedClubhouseAuthority[]} {
+  const row = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  let curatedAuthorities: readonly CuratedClubhouseAuthority[];
+  try { curatedAuthorities = normalizeCuratedClubhouseAuthorities(row.curatedAuthorities, MAX_RECONCILIATION_CLUBHOUSES); } catch (error) { throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "INVALID_CURATED_CLUBHOUSE_SET"); }
+  const suppliedIds = row.providerClubIds === undefined ? [] : row.providerClubIds;
+  if (!Array.isArray(suppliedIds) || suppliedIds.length > MAX_RECONCILIATION_CLUBHOUSES) throw new HttpsError("invalid-argument", "providerClubIds must be a bounded list.");
+  const normalizedSuppliedIds = suppliedIds.map((id) => String(id || "").trim());
+  if (new Set(normalizedSuppliedIds).size !== normalizedSuppliedIds.length) throw new HttpsError("invalid-argument", "providerClubIds must be distinct.");
+  const providerClubIds = [...new Set([...normalizedSuppliedIds, ...curatedAuthorities.map((authority) => authority.providerClubId).filter((id): id is string => !!id)])].sort();
+  if ((providerClubIds.length < 1 && curatedAuthorities.length < 1) || providerClubIds.length > MAX_RECONCILIATION_CLUBHOUSES || providerClubIds.some((id) => !isValidProviderId(id))) throw new HttpsError("invalid-argument", "A bounded providerClubIds list or curatedAuthorities set is required.");
+  return {providerClubIds, curatedAuthorities};
 }
 
 function cachedClubhouseFact(id: string, data: FirebaseFirestore.DocumentData | undefined, nowMs: number): {providerClubId: string; clubhouse: ProviderClubhouse; fetchedAtMs: number; cacheHit: boolean} | null {
@@ -64,9 +71,10 @@ function cachedClubhouseFact(id: string, data: FirebaseFirestore.DocumentData | 
   return {providerClubId: id, clubhouse, fetchedAtMs, cacheHit: true};
 }
 
-async function reconciliationPlanFor(providerClubIds: readonly string[], sourceReadAtMs = Date.now()): Promise<ReconciliationProviderFacts> {
+async function reconciliationPlanFor(providerClubIds: readonly string[], curatedAuthorities: readonly CuratedClubhouseAuthority[] = [], sourceReadAtMs = Date.now()): Promise<ReconciliationProviderFacts> {
+  const clubhouseIds = [...new Set([...providerClubIds, ...curatedAuthorities.map((authority) => authority.clubHouseId)])];
   const [clubhouseSnapshots, courseSnapshots, cacheSnapshots] = await Promise.all([
-    db.getAll(...providerClubIds.map((id) => db.collection("clubhouses").doc(id))),
+    clubhouseIds.length ? db.getAll(...clubhouseIds.map((id) => db.collection("clubhouses").doc(id))) : [],
     Promise.all(providerClubIds.map((id) => db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES).get())),
     db.getAll(...providerClubIds.map((id) => db.collection(PROVIDER_FACT_CACHE_COLLECTION).doc(id))),
   ]);
@@ -84,7 +92,7 @@ async function reconciliationPlanFor(providerClubIds: readonly string[], sourceR
     }));
   const existingCourses = courseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
   const existingClubhouses = clubhouseSnapshots.filter((doc) => doc.exists).map((doc) => ({id: doc.id, ...doc.data()}));
-  return {plan: planCourseClubhouseReconciliation(facts.map((fact) => fact.clubhouse), existingCourses, existingClubhouses), facts, providerCallsUsed, providerCallsSavedByTtl: facts.filter((fact) => fact.cacheHit).length, sourceReadAtMs};
+  return {plan: planCourseClubhouseReconciliation(facts.map((fact) => fact.clubhouse), existingCourses, existingClubhouses, curatedAuthorities), facts, providerCallsUsed, providerCallsSavedByTtl: facts.filter((fact) => fact.cacheHit).length, sourceReadAtMs};
 }
 
 async function golfApiGet(path: string, apiKey: string, onAttempt: () => void | Promise<void> = () => {}): Promise<{data: any; callsUsed: number}> {
@@ -225,11 +233,11 @@ export const previewCourseClubhouseReconciliation = onCall({
 }, async (request) => {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
   await requireCoordinator(request.auth.uid);
-  const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
+  const {providerClubIds, curatedAuthorities} = reconciliationInput(request.data);
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const reconciliation = await reconciliationPlanFor(providerClubIds);
+  const reconciliation = await reconciliationPlanFor(providerClubIds, curatedAuthorities);
   const plan = reconciliation.plan;
-  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
+  return {...plan, summary: {providerClubhouses: providerClubIds.length, curatedAuthorities: curatedAuthorities.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
@@ -238,7 +246,7 @@ export const executeCourseClubhouseReconciliation = onCall({
 }, async (request) => {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
   await requireCoordinator(request.auth.uid);
-  const providerClubIds = reconciliationTargetIds(request.data?.providerClubIds);
+  const {providerClubIds, curatedAuthorities} = reconciliationInput(request.data);
   const approvedPlanHash = String(request.data?.approvedPlanHash || "").trim();
   const expectedSourceStateHash = String(request.data?.sourceStateHash || "").trim();
   if (!/^[a-f0-9]{64}$/.test(approvedPlanHash) || !/^[a-f0-9]{64}$/.test(expectedSourceStateHash)) throw new HttpsError("invalid-argument", "Exact approved planHash and sourceStateHash are required.");
@@ -247,7 +255,7 @@ export const executeCourseClubhouseReconciliation = onCall({
   const existingReceipt = await receiptRef.get();
   if (reconciliationExecutionDisposition(existingReceipt.exists) === "replayed") return {receiptId, replayed: true, result: existingReceipt.data()?.result || null};
   requireProviderConfiguration(GOLF_API_KEY.value());
-  const reconciliation = await reconciliationPlanFor(providerClubIds);
+  const reconciliation = await reconciliationPlanFor(providerClubIds, curatedAuthorities);
   const plan = reconciliation.plan;
   for (const fact of reconciliation.facts) {
     try { assertFreshProviderFactForCanonicalWrite(fact.fetchedAtMs, Date.now()); } catch { throw new HttpsError("aborted", "STALE_PROVIDER_FACT"); }
@@ -264,7 +272,7 @@ export const executeCourseClubhouseReconciliation = onCall({
     if (writes > MAX_RECONCILIATION_WRITES) throw new HttpsError("failed-precondition", "RECONCILIATION_WRITE_LIMIT_EXCEEDED");
     const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, writes, deletes: 0, creates: 0};
     for (const fact of reconciliation.facts.filter((fact) => !fact.cacheHit)) transaction.set(db.collection(PROVIDER_FACT_CACHE_COLLECTION).doc(fact.providerClubId), {providerClubId: fact.providerClubId, clubhouse: fact.clubhouse, fetchedAt: admin.firestore.Timestamp.fromMillis(fact.fetchedAtMs), providerUpdatedAt: fact.clubhouse.providerUpdatedAt ?? null, provider: "golf-api"}, {merge: true});
-    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, result: summary, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
+    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, curatedAuthorities, result: summary, approvedBy: request.auth!.uid, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
     return {replayed: false, result: summary};
   });
   return {receiptId, ...result};
