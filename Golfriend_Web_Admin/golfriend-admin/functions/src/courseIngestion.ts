@@ -11,6 +11,7 @@ import {distanceKm, inspectClubRegion, normalizeClubInspectionInput} from "./cou
 import {MAX_RECONCILIATION_CLUBHOUSES, MAX_RECONCILIATION_WRITES, assertExecutablePlan, hasEquivalentPatch, planCourseClubhouseReconciliation, reconciliationExecutionDisposition, reconciliationReceiptId, type ReconciliationPlan} from "./courseClubhouseReconciliation.js";
 import {assertProviderGroupWithinLimit, catalogueProviderBatch, encodeCataloguePreviewCursor, MAX_CATALOGUE_PREVIEW_SCAN_ROWS, parseCataloguePreviewRequest, type CataloguePreviewCursor} from "./courseCataloguePreview.js";
 import {isValidProviderId} from "./courseSync.js";
+import {providerClubhouseFromFreshFact, providerRateEvidence} from "./providerClubFactCache.js";
 
 if (!admin.apps.length) admin.initializeApp();
 const GOLF_API_KEY = defineSecret("GOLF_API_KEY");
@@ -53,26 +54,44 @@ function reconciliationTargetIds(value: unknown): string[] {
   return ids;
 }
 
-async function reconciliationPlanFor(providerClubIds: readonly string[], readTime: FirebaseFirestore.Timestamp | null = null): Promise<{plan: ReconciliationPlan; courseRowsMeasured: number; providerClubhouses: ProviderClubhouse[]}> {
-  if (!providerClubIds.length) return {plan: planCourseClubhouseReconciliation([], [], []), courseRowsMeasured: 0, providerClubhouses: []};
-  const [clubhouseSnapshots, courseSnapshots, providerClubhouses] = await Promise.all([
+type ProviderRateEvidence = Readonly<{retryAfterSeconds: number | null; limit: string | null; remaining: string | null; reset: string | null}>;
+class ProviderRateLimitedError extends Error { constructor(readonly evidence: ProviderRateEvidence) { super("PROVIDER_RATE_LIMITED"); } }
+
+async function fetchProviderClubDetail(providerClubId: string, apiKey: string): Promise<{clubhouse: ProviderClubhouse; rateEvidence: ProviderRateEvidence}> {
+  const response = await fetch(`${API_BASE}/clubs/${encodeURIComponent(providerClubId)}`, {headers: {Authorization: `Bearer ${requireProviderConfiguration(apiKey)}`}});
+  const evidence = providerRateEvidence(response.headers);
+  if (response.status === 429) throw new ProviderRateLimitedError(evidence);
+  if (response.status === 403) throw new HttpsError("resource-exhausted", "Golf API quota rejected the request (403).");
+  if (!response.ok) throw new HttpsError("unavailable", `Golf API request failed (${response.status}).`);
+  const normalized = normalizeClubDetailClubhouses({clubID: providerClubId}, await response.json());
+  const clubhouse = normalized.find((row) => row.providerClubId === providerClubId);
+  if (!clubhouse) throw new HttpsError("failed-precondition", `PROVIDER_CLUB_DETAIL_MISSING:${providerClubId}`);
+  return {clubhouse, rateEvidence: evidence};
+}
+
+async function reconciliationPlanFor(providerClubIds: readonly string[], readTime: FirebaseFirestore.Timestamp | null = null): Promise<{plan: ReconciliationPlan; courseRowsMeasured: number; providerClubhouses: ProviderClubhouse[]; cacheHits: number; providerRefetches: number; rateEvidence: ProviderRateEvidence[]}> {
+  if (!providerClubIds.length) return {plan: planCourseClubhouseReconciliation([], [], []), courseRowsMeasured: 0, providerClubhouses: [], cacheHits: 0, providerRefetches: 0, rateEvidence: []};
+  const [clubhouseSnapshots, courseSnapshots, providerFactSnapshots] = await Promise.all([
     Promise.all(providerClubIds.map((id) => readCatalogueQuery(db.collection("clubhouses").where(admin.firestore.FieldPath.documentId(), "==", id).limit(1), readTime))),
     Promise.all(providerClubIds.map(async (id) => {
       const snapshot = await readCatalogueQuery(db.collection("courses").where("providerClubId", "==", id).limit(MAX_RECONCILIATION_WRITES + 1), readTime);
       try { assertProviderGroupWithinLimit(snapshot.size, MAX_RECONCILIATION_WRITES); } catch { throw new HttpsError("failed-precondition", `PROVIDER_GROUP_TOO_LARGE:${id}`); }
       return snapshot;
     })),
-    Promise.all(providerClubIds.map(async (id) => {
-      const response = await golfApiGet(`/clubs/${encodeURIComponent(id)}`, GOLF_API_KEY.value());
-      const normalized = normalizeClubDetailClubhouses({clubID: id}, response.data);
-      const clubhouse = normalized.find((row) => row.providerClubId === id);
-      if (!clubhouse) throw new HttpsError("failed-precondition", `PROVIDER_CLUB_DETAIL_MISSING:${id}`);
-      return clubhouse;
-    })),
+    Promise.all(providerClubIds.map((id) => readCatalogueQuery(db.collection("provider_club_facts").where(admin.firestore.FieldPath.documentId(), "==", id).limit(1), readTime))),
   ]);
+  const providerClubhouses: ProviderClubhouse[] = []; const rateEvidence: ProviderRateEvidence[] = []; let cacheHits = 0; let providerRefetches = 0;
+  /** Deliberately sequential: one provider detail request can be in flight at any time. */
+  for (const [index, id] of providerClubIds.entries()) {
+    const cached = providerFactSnapshots[index].empty ? null : providerClubhouseFromFreshFact(providerFactSnapshots[index].docs[0].data(), id, Date.now());
+    if (cached) { providerClubhouses.push(cached); cacheHits++; continue; }
+    providerRefetches++;
+    const detail = await fetchProviderClubDetail(id, GOLF_API_KEY.value());
+    providerClubhouses.push(detail.clubhouse); rateEvidence.push(detail.rateEvidence);
+  }
   const existingCourses = courseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
   const existingClubhouses = clubhouseSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})));
-  return {plan: planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses), courseRowsMeasured: existingCourses.length, providerClubhouses};
+  return {plan: planCourseClubhouseReconciliation(providerClubhouses, existingCourses, existingClubhouses), courseRowsMeasured: existingCourses.length, providerClubhouses, cacheHits, providerRefetches, rateEvidence};
 }
 
 type CatalogueCourseRow = Record<string, unknown>;
@@ -258,8 +277,7 @@ export const previewCourseClubhouseReconciliation = onCall({
   }
   requireProviderConfiguration(GOLF_API_KEY.value());
   if (previewRequest.mode === "explicit") {
-    const result = await reconciliationPlanFor(previewRequest.providerClubIds);
-    return {...result.plan, mode: "explicit", summary: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses), productionWrites: 0, providerClubGroups: previewRequest.providerClubIds.length, provenClubhouses: result.plan.clubhouseUpserts.length, coursesSafelyLinkable: result.plan.coursePatches.length, unchangedCourseLinks: result.plan.unchangedCourseLinks.length, unmatchedProviderLayouts: result.plan.unmatchedProviderLayouts.length}};
+    try { const result = await reconciliationPlanFor(previewRequest.providerClubIds); return {...result.plan, mode: "explicit", summary: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses), productionWrites: 0, providerClubGroups: previewRequest.providerClubIds.length, provenClubhouses: result.plan.clubhouseUpserts.length, coursesSafelyLinkable: result.plan.coursePatches.length, unchangedCourseLinks: result.plan.unchangedCourseLinks.length, unmatchedProviderLayouts: result.plan.unmatchedProviderLayouts.length}, providerFacts: {cacheHits: result.cacheHits, providerRefetches: result.providerRefetches, rateEvidence: result.rateEvidence}}; } catch (error) { if (error instanceof ProviderRateLimitedError) throw new HttpsError("resource-exhausted", "PROVIDER_RATE_LIMITED", {providerRateLimited: true, retryAfterSeconds: error.evidence.retryAfterSeconds}); throw error; }
   }
   let providerSnapshot: FirebaseFirestore.QuerySnapshot;
   try { providerSnapshot = await cataloguePreviewPage(previewRequest.cursor?.afterProviderClubId || null, cursorReadTime(previewRequest.cursor)); } catch (error) { throw new HttpsError("aborted", "STALE_PREVIEW"); }
@@ -271,6 +289,7 @@ export const previewCourseClubhouseReconciliation = onCall({
   const inventory = catalogueProviderBatch(catalogueRows(inventorySnapshot), null, MAX_CATALOGUE_PREVIEW_SCAN_ROWS);
   let result;
   try { result = await reconciliationPlanFor(page.providerClubIds, readTime); } catch (error) {
+    if (error instanceof ProviderRateLimitedError) throw new HttpsError("resource-exhausted", "PROVIDER_RATE_LIMITED", {providerRateLimited: true, retryAfterSeconds: error.evidence.retryAfterSeconds});
     if (error instanceof HttpsError) throw error;
     throw new HttpsError("aborted", "STALE_PREVIEW");
   }
@@ -278,7 +297,7 @@ export const previewCourseClubhouseReconciliation = onCall({
   const lastCourseDocumentId = inventorySnapshot.empty ? null : inventorySnapshot.docs[inventorySnapshot.docs.length - 1].id;
   const complete = rows.length < MAX_CATALOGUE_PREVIEW_SCAN_ROWS && inventorySnapshot.size < MAX_CATALOGUE_PREVIEW_SCAN_ROWS;
   const nextCursor = complete || (!lastProviderClubId && !lastCourseDocumentId) ? null : encodeCataloguePreviewCursor({version: 2, afterProviderClubId: lastProviderClubId, afterCourseDocumentId: lastCourseDocumentId, ...snapshotCursorState(providerSnapshot)}, GOLF_API_KEY.value());
-  return {...result.plan, mode: "catalogue", batch: {providerClubIds: page.providerClubIds, count: page.providerClubIds.length}, nextCursor, complete, metrics: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses, inventory.invalidProviderClubIdRows), productionWrites: 0}, ambiguousGroups: result.plan.ambiguousGroups, invalidGeography: result.plan.invalidGeography, ...previewEvidence(result.providerClubhouses), planHash: result.plan.planHash, sourceStateHash: result.plan.sourceStateHash};
+  return {...result.plan, mode: "catalogue", batch: {providerClubIds: page.providerClubIds, count: page.providerClubIds.length}, nextCursor, complete, metrics: {...previewMetrics(result.plan, result.courseRowsMeasured, result.providerClubhouses, inventory.invalidProviderClubIdRows), productionWrites: 0}, providerFacts: {cacheHits: result.cacheHits, providerRefetches: result.providerRefetches, rateEvidence: result.rateEvidence}, ambiguousGroups: result.plan.ambiguousGroups, invalidGeography: result.plan.invalidGeography, ...previewEvidence(result.providerClubhouses), planHash: result.plan.planHash, sourceStateHash: result.plan.sourceStateHash};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */

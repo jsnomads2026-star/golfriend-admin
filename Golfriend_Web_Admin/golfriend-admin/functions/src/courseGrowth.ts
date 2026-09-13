@@ -31,6 +31,8 @@ export type ProviderClubhouse = Readonly<{
   bookingUrl: string | null; reservationUrl: string | null; teeTimeUrl: string | null;
   reservationPhone: string | null; reservationEmail: string | null;
   bookingProviderId: string | null; reservationProviderId: string | null;
+  /** Provider provenance only; never a permanent cache-freshness assertion. */
+  providerUpdatedAt: string | null;
   layouts: readonly ProviderCourseLayout[];
 }>;
 
@@ -114,7 +116,7 @@ export function normalizeClubhouses(payload: unknown): ProviderClubhouse[] {
       providerClubId, providerClubName: field(rawClub, ["clubName", "name"]) || "Unnamed club",
       providerParentId: field(rawClub, ["parentClubID", "parentClubId", "parentID", "parentId"], 160), providerPropertyId, providerPropertyType: field(rawClub, ["propertyType", "clubType", "type"], 128), providerBookable: typeof rawClub.bookable === "boolean" ? rawClub.bookable : typeof rawClub.isBookable === "boolean" ? rawClub.isBookable : null,
       address: field(rawClub, ["address"]), address2: field(rawClub, ["address2"]), city: field(rawClub, ["city"]), state: field(rawClub, ["state", "province"]), postalCode: field(rawClub, ["postalCode", "postal_code"]), country: field(rawClub, ["country"]), countryCode: field(rawClub, ["countryCode", "country_code"], 16), latitude: finite(rawClub.latitude), longitude: finite(rawClub.longitude),
-      phone: field(rawClub, ["phone", "telephone"], 128), mobile: field(rawClub, ["mobile", "mobilePhone", "cellPhone"], 128), email: field(rawClub, ["email"], 320), website: field(rawClub, ["website", "url"], 2048), contactPhone: field(rawClub, ["contactPhone"], 128), contactEmail: field(rawClub, ["contactEmail"], 320), bookingUrl: field(rawClub, ["bookingUrl"], 2048), reservationUrl: field(rawClub, ["reservationUrl"], 2048), teeTimeUrl: field(rawClub, ["teeTimeUrl"], 2048), reservationPhone: field(rawClub, ["reservationPhone", "bookingPhone"], 128), reservationEmail: field(rawClub, ["reservationEmail", "bookingEmail"], 320), bookingProviderId: field(rawClub, ["bookingProviderID", "bookingProviderId", "bookingID", "bookingId"], 160), reservationProviderId: field(rawClub, ["reservationProviderID", "reservationProviderId", "reservationID", "reservationId"], 160), layouts: Object.freeze(layouts),
+      phone: field(rawClub, ["phone", "telephone"], 128), mobile: field(rawClub, ["mobile", "mobilePhone", "cellPhone"], 128), email: field(rawClub, ["email"], 320), website: field(rawClub, ["website", "url"], 2048), contactPhone: field(rawClub, ["contactPhone"], 128), contactEmail: field(rawClub, ["contactEmail"], 320), bookingUrl: field(rawClub, ["bookingUrl"], 2048), reservationUrl: field(rawClub, ["reservationUrl"], 2048), teeTimeUrl: field(rawClub, ["teeTimeUrl"], 2048), reservationPhone: field(rawClub, ["reservationPhone", "bookingPhone"], 128), reservationEmail: field(rawClub, ["reservationEmail", "bookingEmail"], 320), bookingProviderId: field(rawClub, ["bookingProviderID", "bookingProviderId", "bookingID", "bookingId"], 160), reservationProviderId: field(rawClub, ["reservationProviderID", "reservationProviderId", "reservationID", "reservationId"], 160), providerUpdatedAt: field(rawClub, ["providerUpdatedAt", "updatedAt", "updated_at", "lastUpdated", "modifiedAt"], 64), layouts: Object.freeze(layouts),
     }));
   }
   return [...unique.values()].sort((a, b) => a.providerClubId.localeCompare(b.providerClubId) || String(a.providerPropertyId || "").localeCompare(String(b.providerPropertyId || "")));
