@@ -5,6 +5,7 @@ import CourseInfo from './CourseInfo';
 import type { PublicCourse, Lang } from './CourseInfo';
 import BookingHandoff from './BookingHandoff';
 import type { PublicSlot } from './BookingHandoff';
+import { normalizeClubhouseDestinations } from './clubhouseDiscoveryModel.mjs';
 
 // ─────────────────────────────────────────────────────────────
 // CourseDiscovery — public browse of courses + their open tee-times.
@@ -52,10 +53,12 @@ const theme = {
 export default function CourseDiscovery() {
   const [lang, setLang] = useState<Lang>('en');
   const [courses, setCourses] = useState<PublicCourse[]>([]);
+  const [clubhouses, setClubhouses] = useState<Record<string, unknown>[]>([]);
+  const [origin, setOrigin] = useState<{latitude: number; longitude: number} | null>(null);
   const [slots, setSlots] = useState<PublicSlot[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedClubhouseId, setSelectedClubhouseId] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<PublicSlot | null>(null);
 
   const t = (k: string) => DICT[lang][k] ?? k;
@@ -65,7 +68,7 @@ export default function CourseDiscovery() {
     (async () => {
       try {
         // Courses
-        const courseSnap = await getDocs(collection(db, 'courses'));
+        const [courseSnap, clubhouseSnap] = await Promise.all([getDocs(collection(db, 'courses')), getDocs(collection(db, 'clubhouses'))]);
         const courseList: PublicCourse[] = courseSnap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as Omit<PublicCourse, 'id'>),
@@ -82,6 +85,7 @@ export default function CourseDiscovery() {
 
         if (!cancelled) {
           setCourses(courseList);
+          setClubhouses(clubhouseSnap.docs.map((d) => ({id: d.id, ...(d.data() as Record<string, unknown>)})));
           setSlots(slotList);
           setStatus('ready');
         }
@@ -93,6 +97,20 @@ export default function CourseDiscovery() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => setOrigin({latitude: position.coords.latitude, longitude: position.coords.longitude}),
+      () => {},
+      {maximumAge: 5 * 60 * 1000, timeout: 10_000},
+    );
+  }, []);
+
+  // Discovery is deliberately unavailable until the device supplies a valid
+  // coordinate; the projection itself owns the exact, independent 50 km cut.
+  const destinations = useMemo(() => normalizeClubhouseDestinations(clubhouses, courses, origin), [clubhouses, courses, origin]);
+  const nearbyDestinations = destinations;
 
   // Bookable slots grouped by courseId.
   const bookableByCourse = useMemo(() => {
@@ -111,7 +129,7 @@ export default function CourseDiscovery() {
     return map;
   }, [slots]);
 
-  const selectedCourse = courses.find((c) => c.id === selectedCourseId) || null;
+  const selectedDestination = nearbyDestinations.find((destination) => destination.id === selectedClubhouseId) || null;
 
   // ── Booking sub-view ──
   if (selectedSlot) {
@@ -128,19 +146,18 @@ export default function CourseDiscovery() {
     );
   }
 
-  // ── Course detail sub-view ──
-  if (selectedCourse) {
-    const courseKey = selectedCourse.courseID || selectedCourse.id;
-    const courseSlots =
-      bookableByCourse[selectedCourse.id] || bookableByCourse[courseKey] || [];
+  // ── Clubhouse destination sub-view; slots retain their explicit layout courseId. ──
+  if (selectedDestination) {
+    const courseSlots = selectedDestination.layoutIds.flatMap((layoutId) => bookableByCourse[layoutId] || []);
+    const destinationCourse: PublicCourse = {id: selectedDestination.id, courseID: selectedDestination.id, clubName: selectedDestination.displayName, name: selectedDestination.displayName, address: selectedDestination.address, city: selectedDestination.city, state: selectedDestination.state, country: selectedDestination.country, latitude: selectedDestination.latitude ?? undefined, longitude: selectedDestination.longitude ?? undefined};
     return (
       <div style={styles.page}>
         <div style={styles.inner}>
-          <button style={styles.backLink} onClick={() => setSelectedCourseId(null)}>
+          <button style={styles.backLink} onClick={() => setSelectedClubhouseId(null)}>
             {t('back')}
           </button>
 
-          <CourseInfo course={selectedCourse} lang={lang} onChangeLang={setLang} />
+          <CourseInfo course={destinationCourse} lang={lang} onChangeLang={setLang} />
 
           <h3 style={styles.slotsHeading}>{t('openTeeTimes')}</h3>
           {courseSlots.length === 0 ? (
@@ -194,27 +211,22 @@ export default function CourseDiscovery() {
 
         {status === 'loading' && <p style={styles.muted}>{t('loading')}</p>}
         {status === 'error' && <p style={styles.muted}>{t('error')}</p>}
-        {status === 'ready' && courses.length === 0 && (
+        {status === 'ready' && nearbyDestinations.length === 0 && (
           <p style={styles.muted}>{t('empty')}</p>
         )}
 
-        {status === 'ready' && courses.length > 0 && (
+        {status === 'ready' && nearbyDestinations.length > 0 && (
           <div style={styles.courseGrid}>
-            {courses.map((c) => {
-              const key = c.courseID || c.id;
-              const openCount =
-                (bookableByCourse[c.id]?.length || 0) +
-                (c.courseID && c.courseID !== c.id
-                  ? bookableByCourse[c.courseID]?.length || 0
-                  : 0);
-              const loc = [c.city, c.country].filter(Boolean).join(', ');
+            {nearbyDestinations.map((destination) => {
+              const openCount = destination.layoutIds.reduce((count, layoutId) => count + (bookableByCourse[layoutId]?.length || 0), 0);
+              const loc = [destination.city, destination.country].filter(Boolean).join(', ');
               return (
                 <button
-                  key={c.id}
+                  key={destination.id}
                   style={styles.courseCard}
-                  onClick={() => setSelectedCourseId(c.id)}
+                  onClick={() => setSelectedClubhouseId(destination.id)}
                 >
-                  <h3 style={styles.courseName}>{c.name || c.clubName || key}</h3>
+                  <h3 style={styles.courseName}>{destination.displayName}</h3>
                   {loc && <p style={styles.courseLoc}>{loc}</p>}
                   <span style={styles.openPill}>
                     {openCount} {t('openTeeTimes').toLowerCase()}

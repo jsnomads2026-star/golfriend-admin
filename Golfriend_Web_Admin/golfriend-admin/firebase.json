@@ -18,6 +18,10 @@
     }
   ],
   "hosting": {
+    "target": "admin",
+    "predeploy": [
+      "npm run build:admin:v2-production"
+    ],
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -30,5 +34,10 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8181
+    }
   }
 }

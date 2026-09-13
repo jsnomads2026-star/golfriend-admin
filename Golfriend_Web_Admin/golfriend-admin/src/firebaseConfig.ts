@@ -3,6 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import { ReCaptchaEnterpriseProvider, initializeAppCheck } from 'firebase/app-check';
 import { resolveFirebaseTarget, resolveEmulatorEndpoints } from './firebaseTarget.js';
 
 // ==========================================
@@ -32,6 +33,19 @@ export const USING_EMULATORS = ACTIVE_PROJECT === 'precommission';
 const firebaseConfig = resolveFirebaseTarget(ACTIVE_PROJECT, env);
 
 const app = initializeApp(firebaseConfig);
+const APP_CHECK_SITE_KEY = (env.VITE_FIREBASE_APPCHECK_SITE_KEY || '').trim();
+
+// Production V2 Admin uses the existing reCAPTCHA Enterprise App Check app.
+// The hosting predeploy fetches this public site key from that exact Firebase app;
+// a V2 build without it stops before any protected callable can be used.
+if (ACTIVE_PROJECT === 'v2-preview') {
+  if (!APP_CHECK_SITE_KEY) throw new Error('V2 Admin requires VITE_FIREBASE_APPCHECK_SITE_KEY.');
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
+export const APP_CHECK_ACTIVE = ACTIVE_PROJECT === 'v2-preview';
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
