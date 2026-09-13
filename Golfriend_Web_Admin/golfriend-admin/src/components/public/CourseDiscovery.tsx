@@ -5,7 +5,7 @@ import CourseInfo from './CourseInfo';
 import type { PublicCourse, Lang } from './CourseInfo';
 import BookingHandoff from './BookingHandoff';
 import type { PublicSlot } from './BookingHandoff';
-import { normalizeClubhouseDestinations } from './clubhouseDiscoveryModel.mjs';
+import { nearbyClubHouses } from './clubhouseDiscoveryModel.mjs';
 
 // ─────────────────────────────────────────────────────────────
 // CourseDiscovery — public browse of courses + their open tee-times.
@@ -107,8 +107,19 @@ export default function CourseDiscovery() {
     );
   }, []);
 
-  const destinations = useMemo(() => normalizeClubhouseDestinations(clubhouses, courses, origin, origin ? 50 : null), [clubhouses, courses, origin]);
-  const nearbyDestinations = useMemo(() => destinations.filter((destination) => destination.withinRequestedRadius !== false), [destinations]);
+  const nearbyDestinations = useMemo(() => origin ? nearbyClubHouses(clubhouses, origin, 50) : [], [clubhouses, origin]);
+  // Layout identity remains internal to the Play Golf slot lookup, never the destination DTO.
+  const layoutIdsByClubhouse = useMemo(() => {
+    const ids: Record<string, string[]> = {};
+    for (const course of courses) {
+      const row = course as unknown as Record<string, unknown>;
+      const clubhouseId = String(row.clubhouseId || '').trim();
+      const layoutId = String(row.providerCourseId || course.courseID || course.id || '').trim();
+      if (clubhouseId && layoutId) (ids[clubhouseId] ||= []).push(layoutId);
+    }
+    for (const layoutIds of Object.values(ids)) layoutIds.sort();
+    return ids;
+  }, [courses]);
 
   // Bookable slots grouped by courseId.
   const bookableByCourse = useMemo(() => {
@@ -127,7 +138,7 @@ export default function CourseDiscovery() {
     return map;
   }, [slots]);
 
-  const selectedDestination = nearbyDestinations.find((destination) => destination.id === selectedClubhouseId) || null;
+  const selectedDestination = nearbyDestinations.find((destination) => destination.clubHouseId === selectedClubhouseId) || null;
 
   // ── Booking sub-view ──
   if (selectedSlot) {
@@ -146,8 +157,10 @@ export default function CourseDiscovery() {
 
   // ── Clubhouse destination sub-view; slots retain their explicit layout courseId. ──
   if (selectedDestination) {
-    const courseSlots = selectedDestination.layoutIds.flatMap((layoutId) => bookableByCourse[layoutId] || []);
-    const destinationCourse: PublicCourse = {id: selectedDestination.id, courseID: selectedDestination.id, clubName: selectedDestination.displayName, name: selectedDestination.displayName, address: selectedDestination.address, city: selectedDestination.city, state: selectedDestination.state, country: selectedDestination.country, latitude: selectedDestination.latitude ?? undefined, longitude: selectedDestination.longitude ?? undefined};
+    const courseSlots = (layoutIdsByClubhouse[selectedDestination.clubHouseId] || []).flatMap((layoutId) => bookableByCourse[layoutId] || []);
+    const sourceClubhouse = clubhouses.find((row) => String(row.clubhouseId || row.id || '').trim() === selectedDestination.clubHouseId) || {};
+    const sourceLocation = sourceClubhouse.location && typeof sourceClubhouse.location === 'object' ? sourceClubhouse.location as Record<string, unknown> : {};
+    const destinationCourse: PublicCourse = {id: selectedDestination.clubHouseId, courseID: selectedDestination.clubHouseId, clubName: selectedDestination.clubHouseName, name: selectedDestination.clubHouseName, address: String(sourceLocation.address || ''), city: String(sourceLocation.city || sourceClubhouse.city || ''), state: String(sourceLocation.state || sourceClubhouse.state || ''), country: String(sourceLocation.country || sourceClubhouse.country || ''), latitude: typeof sourceLocation.latitude === 'number' ? sourceLocation.latitude : undefined, longitude: typeof sourceLocation.longitude === 'number' ? sourceLocation.longitude : undefined};
     return (
       <div style={styles.page}>
         <div style={styles.inner}>
@@ -216,16 +229,15 @@ export default function CourseDiscovery() {
         {status === 'ready' && nearbyDestinations.length > 0 && (
           <div style={styles.courseGrid}>
             {nearbyDestinations.map((destination) => {
-              const openCount = destination.layoutIds.reduce((count, layoutId) => count + (bookableByCourse[layoutId]?.length || 0), 0);
-              const loc = [destination.city, destination.country].filter(Boolean).join(', ');
+              const openCount = (layoutIdsByClubhouse[destination.clubHouseId] || []).reduce((count, layoutId) => count + (bookableByCourse[layoutId]?.length || 0), 0);
               return (
                 <button
-                  key={destination.id}
+                  key={destination.clubHouseId}
                   style={styles.courseCard}
-                  onClick={() => setSelectedClubhouseId(destination.id)}
+                  onClick={() => setSelectedClubhouseId(destination.clubHouseId)}
                 >
-                  <h3 style={styles.courseName}>{destination.displayName}</h3>
-                  {loc && <p style={styles.courseLoc}>{loc}</p>}
+                  <h3 style={styles.courseName}>{destination.clubHouseName}</h3>
+                  {destination.area && <p style={styles.courseLoc}>{destination.area}</p>}
                   <span style={styles.openPill}>
                     {openCount} {t('openTeeTimes').toLowerCase()}
                   </span>

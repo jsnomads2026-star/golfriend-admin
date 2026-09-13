@@ -229,7 +229,7 @@ export const previewCourseClubhouseReconciliation = onCall({
   requireProviderConfiguration(GOLF_API_KEY.value());
   const reconciliation = await reconciliationPlanFor(providerClubIds);
   const plan = reconciliation.plan;
-  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
+  return {...plan, summary: {providerClubhouses: providerClubIds.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
@@ -262,7 +262,7 @@ export const executeCourseClubhouseReconciliation = onCall({
     for (const operation of plan.clubhouseUpserts) { const existing = snapshots[cursor++]; if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     for (const operation of plan.coursePatches) { const existing = snapshots[cursor++]; if (!existing.exists) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN"); if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     if (writes > MAX_RECONCILIATION_WRITES) throw new HttpsError("failed-precondition", "RECONCILIATION_WRITE_LIMIT_EXCEEDED");
-    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, writes, deletes: 0, creates: 0};
+    const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, writes, deletes: 0, creates: 0};
     for (const fact of reconciliation.facts.filter((fact) => !fact.cacheHit)) transaction.set(db.collection(PROVIDER_FACT_CACHE_COLLECTION).doc(fact.providerClubId), {providerClubId: fact.providerClubId, clubhouse: fact.clubhouse, fetchedAt: admin.firestore.Timestamp.fromMillis(fact.fetchedAtMs), providerUpdatedAt: fact.clubhouse.providerUpdatedAt ?? null, provider: "golf-api"}, {merge: true});
     transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, result: summary, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
     return {replayed: false, result: summary};
