@@ -23,6 +23,7 @@ const MAX_COURSES_PER_COMMIT = 50;
 const PROVIDER_FACT_CACHE_COLLECTION = "provider_clubhouse_facts";
 
 type ReconciliationProviderFacts = Readonly<{plan: ReconciliationPlan; facts: readonly {providerClubId: string; clubhouse: ProviderClubhouse; fetchedAtMs: number; cacheHit: boolean}[]; providerCallsUsed: number; providerCallsSavedByTtl: number; sourceReadAtMs: number}>;
+function providerFactEvidence(facts: ReconciliationProviderFacts["facts"], sourceReadAtMs: number): readonly {providerClubId: string; fetchedAtMs: number; cacheHit: boolean; freshAtPreview: boolean}[] { return facts.map((fact) => ({providerClubId: fact.providerClubId, fetchedAtMs: fact.fetchedAtMs, cacheHit: fact.cacheHit, freshAtPreview: isProviderFactFresh(fact.fetchedAtMs, sourceReadAtMs)})); }
 
 async function requireActiveLease(jobRef: FirebaseFirestore.DocumentReference, ownerUid: string, leaseToken: string): Promise<void> {
   const snapshot = await jobRef.get();
@@ -51,7 +52,7 @@ async function requireCoordinator(uid: string): Promise<void> {
   }
 }
 
-function reconciliationInput(value: unknown): {providerClubIds: readonly string[]; curatedAuthorities: readonly CuratedClubhouseAuthority[]} {
+function reconciliationInput(value: unknown): {providerClubIds: readonly string[]; curatedAuthorities: readonly CuratedClubhouseAuthority[]; ambiguityRulings: Readonly<Record<string, string>>} {
   const row = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   let curatedAuthorities: readonly CuratedClubhouseAuthority[];
   try { curatedAuthorities = normalizeCuratedClubhouseAuthorities(row.curatedAuthorities, MAX_RECONCILIATION_CLUBHOUSES); } catch (error) { throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "INVALID_CURATED_CLUBHOUSE_SET"); }
@@ -61,7 +62,12 @@ function reconciliationInput(value: unknown): {providerClubIds: readonly string[
   if (new Set(normalizedSuppliedIds).size !== normalizedSuppliedIds.length) throw new HttpsError("invalid-argument", "providerClubIds must be distinct.");
   const providerClubIds = [...new Set([...normalizedSuppliedIds, ...curatedAuthorities.map((authority) => authority.providerClubId).filter((id): id is string => !!id)])].sort();
   if ((providerClubIds.length < 1 && curatedAuthorities.length < 1) || providerClubIds.length > MAX_RECONCILIATION_CLUBHOUSES || providerClubIds.some((id) => !isValidProviderId(id))) throw new HttpsError("invalid-argument", "A bounded providerClubIds list or curatedAuthorities set is required.");
-  return {providerClubIds, curatedAuthorities};
+  const rawRulings = row.ambiguityRulings;
+  if (rawRulings !== undefined && (!rawRulings || typeof rawRulings !== "object" || Array.isArray(rawRulings))) throw new HttpsError("invalid-argument", "ambiguityRulings must be an object.");
+  const rulingEntries = Object.entries(rawRulings || {});
+  if (rulingEntries.length > MAX_RECONCILIATION_CLUBHOUSES) throw new HttpsError("invalid-argument", "ambiguityRulings exceeds the bounded target set.");
+  const ambiguityRulings = Object.fromEntries(rulingEntries.flatMap(([providerClubId, ruling]) => { const id = String(providerClubId || "").trim(); const text = typeof ruling === "string" ? ruling.trim() : ""; return isValidProviderId(id) && text && text.length <= 2000 ? [[id, text]] : []; }));
+  return {providerClubIds, curatedAuthorities, ambiguityRulings};
 }
 
 function cachedClubhouseFact(id: string, data: FirebaseFirestore.DocumentData | undefined, nowMs: number): {providerClubId: string; clubhouse: ProviderClubhouse; fetchedAtMs: number; cacheHit: boolean} | null {
@@ -237,7 +243,7 @@ export const previewCourseClubhouseReconciliation = onCall({
   requireProviderConfiguration(GOLF_API_KEY.value());
   const reconciliation = await reconciliationPlanFor(providerClubIds, curatedAuthorities);
   const plan = reconciliation.plan;
-  return {...plan, summary: {providerClubhouses: providerClubIds.length, curatedAuthorities: curatedAuthorities.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
+  return {...plan, providerFacts: providerFactEvidence(reconciliation.facts, reconciliation.sourceReadAtMs), summary: {providerClubhouses: providerClubIds.length, curatedAuthorities: curatedAuthorities.length, clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, sourceReadAtMs: reconciliation.sourceReadAtMs, productionWrites: 0}};
 });
 
 /** Explicit hash-bound executor. Deployment alone does nothing; caller must provide a reviewed plan and source hash. */
@@ -246,7 +252,7 @@ export const executeCourseClubhouseReconciliation = onCall({
 }, async (request) => {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to Admin first.");
   await requireCoordinator(request.auth.uid);
-  const {providerClubIds, curatedAuthorities} = reconciliationInput(request.data);
+  const {providerClubIds, curatedAuthorities, ambiguityRulings} = reconciliationInput(request.data);
   const approvedPlanHash = String(request.data?.approvedPlanHash || "").trim();
   const expectedSourceStateHash = String(request.data?.sourceStateHash || "").trim();
   if (!/^[a-f0-9]{64}$/.test(approvedPlanHash) || !/^[a-f0-9]{64}$/.test(expectedSourceStateHash)) throw new HttpsError("invalid-argument", "Exact approved planHash and sourceStateHash are required.");
@@ -257,23 +263,26 @@ export const executeCourseClubhouseReconciliation = onCall({
   requireProviderConfiguration(GOLF_API_KEY.value());
   const reconciliation = await reconciliationPlanFor(providerClubIds, curatedAuthorities);
   const plan = reconciliation.plan;
+  if (plan.unresolvedProviderClubhouses.some((item) => !ambiguityRulings[item.providerClubId])) throw new HttpsError("failed-precondition", "AMBIGUITY_RULING_REQUIRED");
+  const reviewedAmbiguityRulings = Object.fromEntries(plan.unresolvedProviderClubhouses.map((item) => [item.providerClubId, ambiguityRulings[item.providerClubId]]));
   for (const fact of reconciliation.facts) {
     try { assertFreshProviderFactForCanonicalWrite(fact.fetchedAtMs, Date.now()); } catch { throw new HttpsError("aborted", "STALE_PROVIDER_FACT"); }
   }
   if (plan.sourceStateHash !== expectedSourceStateHash) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN");
   try { assertExecutablePlan(plan, approvedPlanHash, plan); } catch (error) { throw new HttpsError("failed-precondition", error instanceof Error ? error.message : "APPROVED_PLAN_HASH_MISMATCH"); }
   const refs = [...plan.clubhouseUpserts.map((op) => db.collection("clubhouses").doc(op.id)), ...plan.coursePatches.map((op) => db.collection("courses").doc(op.id))];
+  const receiptCreatedAtMs = Date.now();
   const result = await db.runTransaction(async (transaction) => {
     const [latestReceipt, ...snapshots] = await Promise.all([transaction.get(receiptRef), ...refs.map((ref) => transaction.get(ref))]);
-    if (latestReceipt.exists) return {replayed: true, result: latestReceipt.data()?.result || null};
+    if (latestReceipt.exists) return {replayed: true, result: latestReceipt.data()?.result || null, receipt: {receiptId, approvedBy: latestReceipt.data()?.approvedBy || null, createdBy: latestReceipt.data()?.createdBy || null, createdAtMs: latestReceipt.data()?.createdAtMs || null}};
     let writes = 0; let cursor = 0;
     for (const operation of plan.clubhouseUpserts) { const existing = snapshots[cursor++]; if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     for (const operation of plan.coursePatches) { const existing = snapshots[cursor++]; if (!existing.exists) throw new HttpsError("aborted", "STALE_RECONCILIATION_PLAN"); if (!hasEquivalentPatch(existing.data(), operation.patch)) { transaction.set(existing.ref, operation.patch, {merge: true}); writes++; } }
     if (writes > MAX_RECONCILIATION_WRITES) throw new HttpsError("failed-precondition", "RECONCILIATION_WRITE_LIMIT_EXCEEDED");
     const summary = {clubhouseUpserts: plan.clubhouseUpserts.length, coursePatches: plan.coursePatches.length, unmatchedProviderLayouts: plan.unmatchedProviderLayouts.length, unresolvedProviderClubhouses: plan.unresolvedProviderClubhouses.length, providerCallsUsed: reconciliation.providerCallsUsed, providerCallsSavedByTtl: reconciliation.providerCallsSavedByTtl, writes, deletes: 0, creates: 0};
     for (const fact of reconciliation.facts.filter((fact) => !fact.cacheHit)) transaction.set(db.collection(PROVIDER_FACT_CACHE_COLLECTION).doc(fact.providerClubId), {providerClubId: fact.providerClubId, clubhouse: fact.clubhouse, fetchedAt: admin.firestore.Timestamp.fromMillis(fact.fetchedAtMs), providerUpdatedAt: fact.clubhouse.providerUpdatedAt ?? null, provider: "golf-api"}, {merge: true});
-    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, curatedAuthorities, result: summary, approvedBy: request.auth!.uid, createdBy: request.auth!.uid, createdAt: admin.firestore.FieldValue.serverTimestamp()});
-    return {replayed: false, result: summary};
+    transaction.create(receiptRef, {schemaVersion: plan.schemaVersion, receiptId, immutable: true, action: "course_clubhouse_reconciliation", approvedPlanHash, sourceStateHash: plan.sourceStateHash, targetClubhouseIds: plan.targetClubhouseIds, curatedAuthorities, ambiguityRulings: reviewedAmbiguityRulings, result: summary, approvedBy: request.auth!.uid, createdBy: request.auth!.uid, createdAtMs: receiptCreatedAtMs, createdAt: admin.firestore.FieldValue.serverTimestamp()});
+    return {replayed: false, result: summary, receipt: {receiptId, approvedBy: request.auth!.uid, createdBy: request.auth!.uid, createdAtMs: receiptCreatedAtMs}};
   });
   return {receiptId, ...result};
 });

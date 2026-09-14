@@ -9,6 +9,8 @@ export interface CourseOperationsService {
   previewRegion(payload: {latitude:number;longitude:number;radiusKm:number}): Promise<Record<string,unknown>>;
   commitRegion(jobId:string): Promise<Record<string,unknown>>;
   inspectSiamRegion(): Promise<Record<string,unknown>>;
+  previewClubhouseReconciliation(payload: {providerClubIds:string[];curatedAuthorities:Record<string,unknown>[]}):Promise<Record<string,unknown>>;
+  executeClubhouseReconciliation(payload: {providerClubIds:string[];curatedAuthorities:Record<string,unknown>[];ambiguityRulings:Record<string,string>;approvedPlanHash:string;sourceStateHash:string}):Promise<Record<string,unknown>>;
   loadIngestionOperations():Promise<Record<string,unknown>>;
   prepareFailedRetry(jobId:string):Promise<Record<string,unknown>>;
 }
@@ -47,6 +49,19 @@ export const courseOperationsService: CourseOperationsService = {
     const callable=httpsCallable(functions,'inspectGolfApiClubRegion');
     const response=await callable({latitude:12.9236,longitude:100.8825,radiusKm:50,searchText:'Siam'});
     if(!response.data||typeof response.data!=='object') throw new Error('SIAM_PROVIDER_INSPECTION_INVALID');
+    return response.data as Record<string,unknown>;
+  },
+  async previewClubhouseReconciliation(payload) {
+    const callable=httpsCallable(functions,'previewCourseClubhouseReconciliation');
+    const response=await callable(payload);
+    if(!response.data||typeof response.data!=='object'||typeof (response.data as Record<string,unknown>).planHash!=='string'||typeof (response.data as Record<string,unknown>).sourceStateHash!=='string') throw new Error('CLUBHOUSE_RECONCILIATION_PREVIEW_INVALID');
+    return response.data as Record<string,unknown>;
+  },
+  async executeClubhouseReconciliation(payload) {
+    if(!/^[a-f0-9]{64}$/.test(payload.approvedPlanHash)||!/^[a-f0-9]{64}$/.test(payload.sourceStateHash)) throw new Error('CLUBHOUSE_RECONCILIATION_HASH_REQUIRED');
+    const callable=httpsCallable(functions,'executeCourseClubhouseReconciliation');
+    const response=await callable(payload);
+    if(!response.data||typeof response.data!=='object'||typeof (response.data as Record<string,unknown>).receiptId!=='string') throw new Error('CLUBHOUSE_RECONCILIATION_EXECUTION_INVALID');
     return response.data as Record<string,unknown>;
   },
   async loadIngestionOperations(){const response=await httpsCallable(functions,'getCourseIngestionOperations')();const value=response.data as Record<string,unknown>;if(value?.schemaVersion!=='golfriend.course-operations/v1')throw new Error('COURSE_OPERATIONS_INVALID');return value;},
