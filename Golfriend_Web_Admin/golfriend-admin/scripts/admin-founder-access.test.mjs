@@ -27,6 +27,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const appSource = read('src/App.tsx');
 const calibrationSource = read('src/components/admin/v2/V2CalibrationControls.tsx');
+const courseOperationsSource = read('src/components/admin/v2/V2CourseOperations.tsx');
 const founderCopy = read('src/i18n/admin/founderAccess.ts');
 
 const user = { uid: 'founder-uid' };
@@ -84,7 +85,7 @@ test('every founder-access string exists in all eight canonical locales', () => 
     assert.match(founderCopy, new RegExp(`\\n  ${locale}: {`), `missing locale ${locale}`);
   }
   for (const key of ['accessPendingTitle', 'accessPendingDetail', 'forgotPassword',
-    'recoverySent', 'calibrationDirectorRequired', 'calibrationAttestationRequired']) {
+    'recoverySent', 'calibrationDirectorRequired', 'calibrationAttestationRequired', 'calibrationSixScope', 'calibrationArm', 'calibrationRun']) {
     assert.equal((founderCopy.match(new RegExp(`${key}:`, 'g')) || []).length, 8, `key ${key}`);
   }
 });
@@ -163,14 +164,20 @@ test('blocked reason is honest and specific', () => {
 });
 
 test('the calibration surface adds no calibration logic and no privilege fallback', () => {
-  // It may only invoke the two server callables; it must not reimplement measurement,
-  // arming state, or provider access.
-  assert.match(calibrationSource, /armGolfApiCalibrationCanary/);
-  assert.match(calibrationSource, /runGolfApiCalibrationCanary/);
+  // It may only invoke the locked server arm/run callables; it must not reimplement
+  // provider access or let an operator provide a target.
+  assert.match(calibrationSource, /armGolfApiSixCourseCalibration/);
+  assert.match(calibrationSource, /runGolfApiSixCourseCalibration/);
+  assert.doesNotMatch(calibrationSource, /providerClubId|providerCourseId|searchQuery/);
   assert.doesNotMatch(calibrationSource, /golfapi\.io|GOLF_API_KEY|measuredProviderCost|providerRemaining/);
   // No default-allow: the gate must be evaluated before any control renders.
   assert.match(calibrationSource, /if \(blocked\) {/);
   assert.doesNotMatch(calibrationSource, /appCheck !== false/);
+});
+
+test('Courses mounts the one approved calibration surface', () => {
+  assert.match(courseOperationsSource, /import V2CalibrationControls from '\.\/V2CalibrationControls';/);
+  assert.match(courseOperationsSource, /<V2CalibrationControls \/>/);
 });
 
 test('the shell reports real attestation state rather than claiming one', () => {
