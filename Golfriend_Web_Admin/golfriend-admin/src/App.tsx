@@ -286,7 +286,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
         }
       } catch (error: any) {
         // Never surface raw provider errors — set the honest 'error' state.
-        setResolveError(`ADMIN_PROFILE_${String(error?.code || 'UNKNOWN').replace(/[^A-Z0-9_-]/gi, '_').toUpperCase()}`);
+        setResolveError('ADMIN_PROFILE_UNAVAILABLE');
       } finally {
         setRoleLoading(false);
       }
