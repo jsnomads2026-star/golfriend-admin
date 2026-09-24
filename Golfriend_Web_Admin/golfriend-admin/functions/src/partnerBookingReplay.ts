@@ -8,7 +8,7 @@ export const BOOKING_OPERATION_STATES = [
   "ambiguous",
 ] as const;
 
-export type BookingOperationAction = "confirm" | "alternative" | "cancel";
+export type BookingOperationAction = "confirm" | "alternative" | "cancel" | "decline";
 export type BookingOperationRequest = Readonly<{
   actorUid: string;
   organizationId: string;
@@ -69,6 +69,7 @@ const TRANSITIONS: Record<BookingOperationAction, Record<string, string>> = {
   confirm: { pending: "confirmed", alternative_proposed: "confirmed" },
   alternative: { pending: "alternative_proposed" },
   cancel: { pending: "cancelled", alternative_proposed: "cancelled", confirmed: "cancelled" },
+  decline: { pending: "declined", alternative_proposed: "declined" },
 };
 
 export function bookingOperationId(input: Pick<BookingOperationRequest,
@@ -94,13 +95,13 @@ export function validateBookingOperationRequest(
   authority: { actorUid: string; organizationId: string },
 ): BookingOperationRequest {
   const action = String(raw.action || "") as BookingOperationAction;
-  if (!["confirm", "alternative", "cancel"].includes(action))
+  if (!["confirm", "alternative", "cancel", "decline"].includes(action))
     throw new Error("COMMAND_ACTION_INVALID");
   const allowed = new Set([
     "action", "bookingId", "commandId", "expectedVersion",
     ...(action === "alternative"
       ? ["alternativeSlotId", "message", "confirmationToken"]
-      : action === "cancel" ? ["confirmationToken"] : []),
+      : ["confirmationToken"]),
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key)))
     throw new Error("COMMAND_FIELDS_INVALID");

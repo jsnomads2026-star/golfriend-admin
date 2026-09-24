@@ -5,6 +5,7 @@ export const BOOKING_SCHEMA = "golfriend.play-booking.v2",
     "alternative_proposed",
     "confirmed",
     "cancelled",
+    "declined",
     "completed",
   ] as const,
   FINANCIAL_FIELDS = [
@@ -33,6 +34,7 @@ export function permissions(role: string) {
     confirm: ["organization_owner", "organization_admin", "course_manager", "booking_staff"].includes(role),
     alternative: ["organization_owner", "organization_admin", "course_manager", "booking_staff"].includes(role),
     cancel: ["organization_owner", "organization_admin"].includes(role),
+    decline: ["organization_owner", "organization_admin", "course_manager", "booking_staff"].includes(role),
     complete: ["organization_owner", "organization_admin"].includes(role),
   };
 }
@@ -41,6 +43,7 @@ export function transition(from: string, action: string): string {
     confirm: ["pending", "alternative_proposed"],
     alternative: ["pending"],
     cancel: ["pending", "alternative_proposed", "confirmed"],
+    decline: ["pending", "alternative_proposed"],
     complete: ["confirmed"],
   };
   if (!map[action]?.includes(from)) throw new Error("TRANSITION_DENIED");
@@ -48,6 +51,7 @@ export function transition(from: string, action: string): string {
     confirm: "confirmed",
     alternative: "alternative_proposed",
     cancel: "cancelled",
+    decline: "declined",
     complete: "completed",
   } as Record<string, string>)[action];
 }

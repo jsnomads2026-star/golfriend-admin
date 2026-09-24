@@ -254,7 +254,7 @@ export const managePlayBookingV2 = onCall(
   { enforceAppCheck: true },
   async (r) => {
     const requestedAction=String(r.data?.action||"");
-    exact(r.data,["commandId","bookingId","action","expectedVersion"],requestedAction==="alternative"?["alternativeSlotId","message"]:[]);
+    exact(r.data,["commandId","bookingId","action","expectedVersion","confirmationToken"],requestedAction==="alternative"?["alternativeSlotId","message"]:[]);
     const caller = uid(r),
       scope = await bookingScope(caller);
     try {
@@ -467,6 +467,7 @@ export const managePlayBookingV2 = onCall(
         alternative: request.alternative,
         updatedAt: now(),
         [`operationLocks.${action}`]: admin.firestore.FieldValue.delete(),
+        transitionHistory: admin.firestore.FieldValue.arrayUnion({action,previousStatus,status,version:next,receiptId}),
       });
       const operation = buildCompletedBookingOperation({
         request,

@@ -1,12 +1,12 @@
 import {createHash,randomBytes,timingSafeEqual} from "node:crypto";
 
 export const BOOKING_CONFIRMATION_SCHEMA="golfriend.partner-booking-confirmation.v1" as const;
-export type BookingConfirmationAction="confirm"|"cancel"|"alternative";
+export type BookingConfirmationAction="confirm"|"cancel"|"alternative"|"decline";
 export type BookingConfirmationBinding=Readonly<{actorUid:string;membershipId:string;organizationId:string;propertyId:string;courseId:string;bookingId:string;action:BookingConfirmationAction;revision:number;payloadDigest:string;authorityVersion:string}>;
 export type BookingConfirmationRecord=BookingConfirmationBinding&Readonly<{schema:typeof BOOKING_CONFIRMATION_SCHEMA;tokenDigest:string;issuedAtMs:number;expiresAtMs:number;used:boolean}>;
 const ID=/^[A-Za-z0-9_-]{1,200}$/,SHA=/^[a-f0-9]{64}$/;
 const digest=(value:string)=>createHash("sha256").update(value).digest("hex");
-const valid=(input:BookingConfirmationBinding)=>ID.test(input.actorUid)&&ID.test(input.membershipId)&&ID.test(input.organizationId)&&ID.test(input.propertyId)&&ID.test(input.courseId)&&ID.test(input.bookingId)&&["confirm","cancel","alternative"].includes(input.action)&&Number.isInteger(input.revision)&&input.revision>=1&&SHA.test(input.payloadDigest)&&ID.test(input.authorityVersion);
+const valid=(input:BookingConfirmationBinding)=>ID.test(input.actorUid)&&ID.test(input.membershipId)&&ID.test(input.organizationId)&&ID.test(input.propertyId)&&ID.test(input.courseId)&&ID.test(input.bookingId)&&["confirm","cancel","alternative","decline"].includes(input.action)&&Number.isInteger(input.revision)&&input.revision>=1&&SHA.test(input.payloadDigest)&&ID.test(input.authorityVersion);
 export const bookingConfirmationTokenDigest=(token:string)=>digest(token);
 export const bookingConfirmationPayloadDigest=(value:unknown)=>digest(JSON.stringify(value));
 const same=(left:BookingConfirmationBinding,right:BookingConfirmationBinding)=>Object.keys(right).every(key=>(left as unknown as Record<string,unknown>)[key]===(right as unknown as Record<string,unknown>)[key]);
