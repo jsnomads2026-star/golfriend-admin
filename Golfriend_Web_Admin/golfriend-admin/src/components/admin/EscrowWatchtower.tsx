@@ -1,8 +1,9 @@
+import { functions } from '../../firebaseConfig';
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
 import ManualOverride from './ManualOverride'; // 🔥 Injecting the God-Mode HUD
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 export default function EscrowWatchtower() {
   const [lockedEscrows, setLockedEscrows] = useState<any[]>([]);
@@ -33,7 +34,6 @@ export default function EscrowWatchtower() {
     // Director-gated, derives the amount/owner from the ledger, and resolves
     // atomically & once. The client only names the hold and the resolution.
     try {
-      const functions = getFunctions();
       const resolveEscrowFn = httpsCallable(functions, 'resolveEscrow');
       const response: any = await resolveEscrowFn({ txId, resolution });
       if (!response?.data?.success) throw new Error('Resolution was not accepted.');

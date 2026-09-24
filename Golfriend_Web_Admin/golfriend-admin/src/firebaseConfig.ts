@@ -39,7 +39,7 @@ export const auth = getAuth(app);
 // unchanged, but never let a v2-preview Admin build silently use us-central1.
 const FUNCTIONS_REGION = ACTIVE_PROJECT === 'v2-preview' ? 'asia-southeast1' : 'us-central1';
 export const ACTIVE_FUNCTIONS_REGION = FUNCTIONS_REGION;
-export const functions = getFunctions(app, FUNCTIONS_REGION);
+export const functions = getFunctions(app, 'asia-southeast1');
 export const storage = getStorage(app);
 
 // ==========================================

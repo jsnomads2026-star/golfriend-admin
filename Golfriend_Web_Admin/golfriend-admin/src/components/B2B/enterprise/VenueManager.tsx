@@ -1,3 +1,4 @@
+import { functions } from '../../../firebaseConfig';
 // ==========================================
 // FILE: src/components/B2B/enterprise/VenueManager.tsx
 // Enterprise portal — Venues. Lists the courses this enterprise operates
@@ -7,7 +8,7 @@
 // ==========================================
 import { useState, useEffect } from 'react';
 import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../../firebaseConfig';
 import CourseCorrectionRequest from './CourseCorrectionRequest';
 
@@ -66,7 +67,7 @@ export default function VenueManager({ partnerUid }: { partnerUid: string }) {
     if (!claimCourseId) return notify('Select a venue to onboard.', 'error');
     setIsBusy(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'claimCourseOperator');
+      const fn = httpsCallable(functions, 'claimCourseOperator');
       const res: any = await fn({ courseId: claimCourseId });
       if (!res?.data?.success) throw new Error('Onboarding was not accepted.');
       notify(`Onboarded ${res.data.courseName} as an operated venue.`, 'success');

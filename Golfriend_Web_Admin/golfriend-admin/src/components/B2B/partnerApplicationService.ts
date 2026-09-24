@@ -1,9 +1,10 @@
-import {getFunctions, httpsCallable} from "firebase/functions";
+import { functions } from '../../firebaseConfig';
+import {httpsCallable} from "firebase/functions";
 
 // Transport only. Every authority decision belongs to the callable on the other end: this file
 // never selects a collection, never derives a status and never decides what an applicant may do.
 
-const call = async <T>(name: string, payload: Record<string, unknown> = {}) => (await httpsCallable(getFunctions(), name)(payload)).data as T;
+const call = async <T>(name: string, payload: Record<string, unknown> = {}) => (await httpsCallable(functions, name)(payload)).data as T;
 export const commandId = () => crypto.randomUUID().replaceAll("-", "_");
 
 const checksumOf = async (bytes: Uint8Array) =>

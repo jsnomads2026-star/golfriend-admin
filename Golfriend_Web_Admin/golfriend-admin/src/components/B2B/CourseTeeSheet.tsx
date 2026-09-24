@@ -1,9 +1,10 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/components/B2B/CourseTeeSheet.tsx
 // ==========================================
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 
 interface Player {
@@ -85,7 +86,7 @@ export default function CourseTeeSheet() {
     try {
       // 🔒 SERVER-AUTHORITATIVE: reputation/moderation writes go through the
       // reportPlayerIncident Cloud Function (authorized, fixed penalty, audited).
-      const reportPlayerIncident = httpsCallable(getFunctions(), 'reportPlayerIncident');
+      const reportPlayerIncident = httpsCallable(functions, 'reportPlayerIncident');
       const res: any = await reportPlayerIncident({
         targetUid: uid,
         gameId: selectedFlight.id,

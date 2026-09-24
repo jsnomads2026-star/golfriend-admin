@@ -1,6 +1,7 @@
+import { functions } from '../../firebaseConfig';
 import { useEffect, useState, useMemo } from 'react';
 import { collection, getDocs, query, where, limit } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import ManualOverride from './ManualOverride'; // 🔥 Injecting the God-Mode HUD
 
@@ -83,7 +84,7 @@ export default function PhotoValidator() {
   const handleOverride = async (user: any, forceApprove: boolean) => {
     setProcessingId(user.id);
     try {
-      const fn = httpsCallable(getFunctions(), 'resolvePhotoValidation');
+      const fn = httpsCallable(functions, 'resolvePhotoValidation');
       const res: any = await fn({
         targetUid: user.id,
         decision: forceApprove ? 'approve' : 'reject',
@@ -105,7 +106,7 @@ export default function PhotoValidator() {
     setProcessingId(claim.id);
 
     try {
-      const fn = httpsCallable(getFunctions(), 'resolvePhotoValidation');
+      const fn = httpsCallable(functions, 'resolvePhotoValidation');
       const res: any = await fn({
         targetUid: claim.id,
         decision: isApproved ? 'approve' : 'reject',

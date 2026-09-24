@@ -1,3 +1,4 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/components/admin/PartnerIngestion.tsx
 // Admin ingestion queue for partner applications (slice 1a).
@@ -9,7 +10,7 @@
 // Approval flags a provisioning HANDOFF only; it never grants partner status.
 // ==========================================
 import { useEffect, useState } from 'react';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { useT } from '../../i18n/hooks.ts';
 import { INGESTION } from '../../i18n/admin/ingestion.ts';
 
@@ -28,7 +29,7 @@ export default function PartnerIngestion() {
 
   const load = async () => {
     try {
-      const fn = httpsCallable(getFunctions(), 'listPartnerSubmissions');
+      const fn = httpsCallable(functions, 'listPartnerSubmissions');
       const res = await fn({});
       const data = res.data as { items?: Item[] };
       setItems(Array.isArray(data?.items) ? data.items : []);
@@ -47,7 +48,7 @@ export default function PartnerIngestion() {
   const review = async (id: string, decision: Decision) => {
     setBusyId(id); setNote(null);
     try {
-      const fn = httpsCallable(getFunctions(), 'reviewPartnerSubmission');
+      const fn = httpsCallable(functions, 'reviewPartnerSubmission');
       const res = await fn({ submissionId: id, decision, reviewNote: notes[id] || '' });
       const data = res.data as { success?: boolean; readyForProvisioning?: boolean };
       if (!data?.success) throw new Error('not accepted');

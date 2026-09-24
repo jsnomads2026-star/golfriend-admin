@@ -1,7 +1,8 @@
+import { functions } from '../../firebaseConfig';
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 export default function RaffleEngine() {
   const [eligiblePlayers, setEligiblePlayers] = useState<any[]>([]);
@@ -32,7 +33,7 @@ export default function RaffleEngine() {
       // 1. Server selects the winner (server RNG over the real registrations
       //    subcollection) and writes the authoritative displayState/raffleWinner.
       //    The client never picks or writes the winner.
-      const drawRaffleWinner = httpsCallable(getFunctions(), 'drawRaffleWinner');
+      const drawRaffleWinner = httpsCallable(functions, 'drawRaffleWinner');
       const res: any = await drawRaffleWinner({ tournamentId: 'PATTAYA_OPEN' });
 
       if (!res?.data?.success || !res?.data?.winnerNickname) {

@@ -1,4 +1,5 @@
-import {getFunctions, httpsCallable} from "firebase/functions";
+import { functions } from '../../firebaseConfig';
+import {httpsCallable} from "firebase/functions";
 
 // Thin transport only. Every value shown to a human comes from the stored receipt sealed by
 // the activation transaction; nothing here derives, totals or reformats an amount.
@@ -40,7 +41,7 @@ const call = async (name: string, payload: Record<string, unknown>): Promise<Tri
     return {state: "error", reason: "offline", trial: null, statement: null, verification: null, schema: ""};
   }
   try {
-    const result = await httpsCallable(getFunctions(), name)(payload);
+    const result = await httpsCallable(functions, name)(payload);
     const data = result.data as TrialReceiptResult;
     // A response that is not the expected contract is treated as unavailable, never rendered.
     if (!data || (data.state !== "ready" && data.state !== "unavailable")) {
@@ -63,6 +64,6 @@ export const partnerTrialReceiptService = {
    * window — all decided by the server. The sealed statement is never rewritten.
    */
   cancel: async () => {
-    await httpsCallable(getFunctions(), "cancelPartnerTrialV1")({commandId: crypto.randomUUID().replaceAll("-", "_")});
+    await httpsCallable(functions, "cancelPartnerTrialV1")({commandId: crypto.randomUUID().replaceAll("-", "_")});
   },
 };

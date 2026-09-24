@@ -1,5 +1,6 @@
+import { functions } from '../../firebaseConfig';
 import { useCallback, useEffect, useState } from "react";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
 
 type Copy = { title:string; loading:string; empty:string; error:string; unconfigured:string; course:string; organization:string; prepare:string; attempt:string; status:string; boundary:string };
 const COPY: Record<string, Copy> = {
@@ -12,7 +13,7 @@ const COPY: Record<string, Copy> = {
   fr:{title:"Publication neutre des réservations",loading:"Chargement de l’état de publication…",empty:"Aucune publication préparée.",error:"La limite de publication est indisponible. Aucune donnée n’a été transmise.",unconfigured:"PROVIDER_UNCONFIGURED — les rapports peuvent être préparés, mais aucune destination externe ni aucun identifiant n’est configuré.",course:"ID du parcours autorisé",organization:"ID de l’organisation",prepare:"Préparer la publication",attempt:"Tenter la publication",status:"État de la publication",boundary:"Uniquement les disponibilités, le cycle de réservation, les statuts, les reçus de messages et le rapprochement. Aucun paiement, frais, portefeuille, registre, règlement ni fonction Golfriend Trip."},
   de:{title:"Anbieterneutrale Buchungsveröffentlichung",loading:"Veröffentlichungsstatus wird geladen…",empty:"Keine vorbereiteten Veröffentlichungen.",error:"Die Veröffentlichungsgrenze ist nicht verfügbar. Es wurde nichts übertragen.",unconfigured:"PROVIDER_UNCONFIGURED — Berichte können vorbereitet werden, aber es sind kein externes Ziel und keine Zugangsdaten konfiguriert.",course:"ID des autorisierten Golfplatzes",organization:"Organisations-ID",prepare:"Veröffentlichung vorbereiten",attempt:"Veröffentlichung versuchen",status:"Veröffentlichungsstatus",boundary:"Nur Verfügbarkeit, Buchungsablauf, Status, Nachrichtenbelege und Abstimmung. Keine Zahlungen, Gebühren, Wallets, Hauptbücher, Abrechnung oder Golfriend-Trip-Funktionen."},
 };
-const call=async(name:string,data:unknown)=>(await httpsCallable(getFunctions(),name)(data)).data as any;
+const call=async(name:string,data:unknown)=>(await httpsCallable(functions,name)(data)).data as any;
 const command=()=>crypto.randomUUID().replaceAll("-","_");
 
 export default function BookingProviderPublicationV2({admin=false}:{admin?:boolean}) {

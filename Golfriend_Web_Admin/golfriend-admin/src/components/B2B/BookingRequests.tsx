@@ -1,3 +1,4 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/components/B2B/BookingRequests.tsx
 // Small-business portal: incoming booking requests for the operator's courses.
@@ -7,7 +8,7 @@
 // ==========================================
 import { useState, useEffect, useRef } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import { useT } from '../../i18n/hooks.ts';
 import { BOOKING_REQUESTS } from '../../i18n/partner/bookingRequests.ts';
@@ -96,7 +97,7 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
   const respond = async (bookingId: string, decision: 'confirm' | 'reject') => {
     setBusyId(bookingId);
     try {
-      const fn = httpsCallable(getFunctions(), 'respondBooking');
+      const fn = httpsCallable(functions, 'respondBooking');
       const res: any = await fn({ bookingId, decision });
       if (!res?.data?.success) throw new Error('Response was not accepted.');
       notify(decision === 'confirm' ? t('bookingConfirmed') : t('bookingRejected'), 'success');
@@ -110,7 +111,7 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
   const cancel = async (bookingId: string) => {
     setBusyId(bookingId);
     try {
-      const fn = httpsCallable(getFunctions(), 'cancelBooking');
+      const fn = httpsCallable(functions, 'cancelBooking');
       const res: any = await fn({ bookingId });
       if (!res?.data?.success) throw new Error('Cancellation was not accepted.');
       notify(t('bookingCancelled'), 'success');
@@ -126,7 +127,7 @@ export default function BookingRequests({ partnerUid }: { partnerUid: string }) 
     if (!text || !activeId) return;
     setSending(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'sendBookingMessage');
+      const fn = httpsCallable(functions, 'sendBookingMessage');
       const res: any = await fn({ bookingId: activeId, text });
       if (!res?.data?.success) throw new Error('Message was not sent.');
       setDraft('');

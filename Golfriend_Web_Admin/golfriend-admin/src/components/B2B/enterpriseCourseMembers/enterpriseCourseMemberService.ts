@@ -1,4 +1,5 @@
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { functions } from '../../../firebaseConfig';
+import { httpsCallable } from "firebase/functions";
 
 export const COURSE_MEMBER_SCHEMA =
   "golfriend.enterprise-course-member-management.v1" as const;
@@ -103,7 +104,7 @@ export interface CsvPreview {
 }
 
 const call = async <T>(name: string, payload: Record<string, unknown>) =>
-  (await httpsCallable(getFunctions(), name)(payload)).data as T;
+  (await httpsCallable(functions, name)(payload)).data as T;
 export const newMemberCommandId = () =>
   crypto.randomUUID().replaceAll("-", "_");
 export const courseMemberService = {

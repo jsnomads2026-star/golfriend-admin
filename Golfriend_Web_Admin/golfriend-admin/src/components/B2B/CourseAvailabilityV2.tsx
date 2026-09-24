@@ -1,7 +1,8 @@
+import { functions } from '../../firebaseConfig';
 import {useCallback, useEffect, useState} from 'react';
-import {getFunctions, httpsCallable} from 'firebase/functions';
+import {httpsCallable} from 'firebase/functions';
 
-const call = async (name: string, data: any = {}) => (await httpsCallable(getFunctions(), name)(data)).data as any;
+const call = async (name: string, data: any = {}) => (await httpsCallable(functions, name)(data)).data as any;
 const command = () => crypto.randomUUID().replaceAll('-', '_');
 const EN = {
   title: 'Course-provided availability', loading: 'Loading availability…', empty: 'No availability slots.',

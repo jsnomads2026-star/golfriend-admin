@@ -1,3 +1,4 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/components/B2B/CourseAvailability.tsx
 // Small-business portal: course onboarding + tee-time availability.
@@ -7,7 +8,7 @@
 // ==========================================
 import { useState, useEffect } from 'react';
 import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import { useT } from '../../i18n/hooks.ts';
 import { COURSE_AVAILABILITY } from '../../i18n/partner/courseAvailability.ts';
@@ -104,7 +105,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
     if (!claimCourseId) return notify(t('selectToOnboard'), 'error');
     setIsBusy(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'claimCourseOperator');
+      const fn = httpsCallable(functions, 'claimCourseOperator');
       const res: any = await fn({ courseId: claimCourseId });
       if (!res?.data?.success) throw new Error('Onboarding was not accepted.');
       notify(t('onboardedMsg').replace('{name}', res.data.courseName), 'success');
@@ -120,7 +121,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
     if (!courseId) return notify(t('selectCourseFirst'), 'error');
     setIsBusy(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'manageTeeTimeSlot');
+      const fn = httpsCallable(functions, 'manageTeeTimeSlot');
       const res: any = await fn({
         action: 'create', courseId, date, time,
         capacity: parseInt(capacity, 10),
@@ -137,7 +138,7 @@ export default function CourseAvailability({ partnerUid }: { partnerUid: string 
   const setStatus = async (slotId: string, status: 'open' | 'closed') => {
     setIsBusy(true);
     try {
-      const fn = httpsCallable(getFunctions(), 'manageTeeTimeSlot');
+      const fn = httpsCallable(functions, 'manageTeeTimeSlot');
       const res: any = await fn({ action: 'setStatus', slotId, status });
       if (!res?.data?.success) throw new Error('Status change was not accepted.');
       notify(status === 'open' ? t('slotOpenedMsg') : t('slotClosedMsg'), 'success');

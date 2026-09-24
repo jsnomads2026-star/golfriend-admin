@@ -1,5 +1,6 @@
+import { functions } from '../../firebaseConfig';
 import {useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent} from 'react';
-import {getFunctions, httpsCallable} from 'firebase/functions';
+import {httpsCallable} from 'firebase/functions';
 import {useT} from '../../i18n/hooks.ts';
 import {PLAY_BOOKING_DESK, type PlayBookingDeskKey} from '../../i18n/partner/playBookingDesk.ts';
 import {LOCALE_CODES, isCanonicalLocale, type CanonicalLocale} from '../../i18n/locales.ts';
@@ -12,7 +13,7 @@ type Raw = Record<string, any>;
 type BookingLocale = CanonicalLocale;
 type Action = 'confirm'|'alternative'|'accept_cancellation'|'decline_cancellation';
 type Pending = {booking: Raw; action: Action; commandId: string; recoveryCommandId: string; expiresAt: number; operationId?: string; operationDigest?: string; alternativeSlot?: Raw|null};
-const call = async (name: string, data: Raw = {}) => (await httpsCallable(getFunctions(), name)(data)).data as Raw;
+const call = async (name: string, data: Raw = {}) => (await httpsCallable(functions, name)(data)).data as Raw;
 const service = {load: () => call('getEnterpriseBookingCoordinationPortalV2'), preview: (value: Raw) => call('previewEnterpriseBookingActionV2', value), manage: (value: Raw) => call('manageEnterpriseBookingActionV2', value), recover: (value: Raw) => call('recoverPlayBookingConfirmationV2', value)};
 const locale = (): BookingLocale => {const value = localStorage.getItem('golfriend.locale'); return isCanonicalLocale(value) ? value : LOCALE_CODES[0];};
 const uuid = () => crypto.randomUUID().replaceAll('-', '_');

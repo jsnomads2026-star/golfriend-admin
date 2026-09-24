@@ -1,7 +1,8 @@
+import { functions } from '../../firebaseConfig';
 import { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
 import { collection, doc, updateDoc, serverTimestamp, onSnapshot, addDoc, query, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 export default function SupportModerationHub() {
   // --- STATE: SCHEMA #18 TICKETS ---
@@ -64,7 +65,6 @@ export default function SupportModerationHub() {
     // the target from the ticket, applies fixed per-tier penalties atomically
     // and once, and writes the blacklist from a server-read profile.
     try {
-      const functions = getFunctions();
       const applyModerationStrike = httpsCallable(functions, 'applyModerationStrike');
       const response: any = await applyModerationStrike({
         ticketId: activeTicket.id,

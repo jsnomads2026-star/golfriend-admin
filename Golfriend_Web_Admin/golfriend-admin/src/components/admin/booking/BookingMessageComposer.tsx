@@ -1,3 +1,4 @@
+import { functions } from '../../../firebaseConfig';
 // ==========================================
 // FILE: src/components/admin/booking/BookingMessageComposer.tsx
 // C2B — Eight-locale message template selector and sender.
@@ -10,7 +11,7 @@
 //   - No fabricated backend confirmation. All callable errors are surfaced.
 // ==========================================
 import { useState } from 'react';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { V2Theme } from '../../../theme/v2Theme';
 import type { BookingRowSlim } from './BookingDetailPanel';
 
@@ -151,7 +152,7 @@ export default function BookingMessageComposer({ booking, onDismiss }: Props) {
     setSendState('sending');
     setSendError('');
     try {
-      const fn = httpsCallable(getFunctions(), 'sendBookingMessage');
+      const fn = httpsCallable(functions, 'sendBookingMessage');
       const res: any = await fn({ bookingId: booking.id, text: draftText });
       if (!res?.data?.success) throw new Error('The server did not confirm the message.');
       setSendState('sent');

@@ -1,6 +1,7 @@
+import { functions } from '../../firebaseConfig';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getAuth } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import {
   collection,
   onSnapshot,
@@ -136,7 +137,7 @@ export default function BookingHandoff({ slot, lang, onBack }: Props) {
     setPhase('requesting');
     setErrorMsg('');
     try {
-      const fn = httpsCallable(getFunctions(), 'requestBooking');
+      const fn = httpsCallable(functions, 'requestBooking');
       const res = await fn({ slotId: slot.id });
       const data = (res.data || {}) as { success?: boolean; status?: string };
       if (data.success && data.status === 'pending') {
@@ -281,7 +282,7 @@ function ActiveBooking({
     setCancelling(true);
     setErrorMsg('');
     try {
-      const fn = httpsCallable(getFunctions(), 'cancelBooking');
+      const fn = httpsCallable(functions, 'cancelBooking');
       await fn({ bookingId });
       onCancelled();
     } catch (err: unknown) {
@@ -301,7 +302,7 @@ function ActiveBooking({
     setSending(true);
     setErrorMsg('');
     try {
-      const fn = httpsCallable(getFunctions(), 'sendBookingMessage');
+      const fn = httpsCallable(functions, 'sendBookingMessage');
       await fn({ bookingId, text });
       setDraft(''); // thread updates live via onSnapshot
     } catch (err: unknown) {

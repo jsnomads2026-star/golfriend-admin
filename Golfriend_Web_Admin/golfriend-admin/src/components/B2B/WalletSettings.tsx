@@ -1,6 +1,7 @@
+import { functions } from '../../firebaseConfig';
 import { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import GolfText from '../common/GolfText';
 
@@ -132,7 +133,6 @@ export default function WalletSettings({ partnerUid }: { partnerUid: string }) {
       // 🔒 SERVER-AUTHORITATIVE: the client is not permitted to write tier/badge/
       // contract/settlement state. The cancellation & penalty are settled by the
       // cancelB2BContract Cloud Function, which is self-scoped to the caller.
-      const functions = getFunctions();
       const cancelB2BContract = httpsCallable(functions, 'cancelB2BContract');
       const response: any = await cancelB2BContract({});
 

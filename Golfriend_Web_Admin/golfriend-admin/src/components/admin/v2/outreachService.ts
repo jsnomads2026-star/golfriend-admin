@@ -1,3 +1,4 @@
+import { functions } from '../../../firebaseConfig';
 // ============================================================================
 // Client transport for the enterprise outreach approval workflow.
 //
@@ -11,7 +12,7 @@
 // caller that believes an approval landed when it did not is exactly the failure mode this
 // whole lane exists to prevent.
 // ============================================================================
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 /** Mirrors the server projection. No identity but the caller's own relationship to a draft. */
 export interface OutreachRow {
@@ -64,7 +65,7 @@ const asOutcome = (value: unknown): CommandOutcome => {
 export const productionOutreachTransport: OutreachTransport = {
   async list() {
     try {
-      const call = httpsCallable(getFunctions(), 'listOutreachDrafts');
+      const call = httpsCallable(functions, 'listOutreachDrafts');
       const result = await call({ limit: 50 });
       const data = (result.data ?? {}) as Record<string, unknown>;
       if (data.ok !== true) {
@@ -79,7 +80,7 @@ export const productionOutreachTransport: OutreachTransport = {
   },
   async command(payload) {
     try {
-      const call = httpsCallable(getFunctions(), 'outreachDraftCommand');
+      const call = httpsCallable(functions, 'outreachDraftCommand');
       const result = await call(payload);
       return asOutcome(result.data);
     } catch {

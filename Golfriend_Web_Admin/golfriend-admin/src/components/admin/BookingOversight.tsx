@@ -1,3 +1,4 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/components/admin/BookingOversight.tsx
 // Admin booking oversight console (strictly NON-FINANCIAL).
@@ -7,7 +8,7 @@
 // ==========================================
 import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 import { V2Theme } from '../../theme/v2Theme';
 import { V2Badge, V2ControlRow } from '../../theme/v2Primitives';
@@ -95,7 +96,7 @@ export default function BookingOversight() {
   const resolve = async (bookingId: string, decision: Decision) => {
     setBusyId(bookingId);
     try {
-      const fn = httpsCallable(getFunctions(), 'adminResolveBooking');
+      const fn = httpsCallable(functions, 'adminResolveBooking');
       const res: any = await fn({ bookingId, decision });
       if (!res?.data?.success) throw new Error('Resolution was not accepted by the server.');
       const label = decision === 'confirm' ? 'confirmed' : decision === 'reject' ? 'rejected' : 'cancelled';

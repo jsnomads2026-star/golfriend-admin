@@ -1,3 +1,4 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/components/admin/CourseSyncConsole.tsx
 // Server-driven Golf-API course sync. The provider key lives only on the server;
@@ -5,7 +6,7 @@
 // "apply" mode and renders per-course success/conflict/error results.
 // ==========================================
 import { useState } from 'react';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 
 interface ResultRow {
   courseId: string;
@@ -46,7 +47,7 @@ export default function CourseSyncConsole() {
       if (ids.length) payload.courseIds = ids;
       else payload.limit = parseInt(limit, 10) || 10;
 
-      const fn = httpsCallable(getFunctions(), 'syncCoursesFromProvider');
+      const fn = httpsCallable(functions, 'syncCoursesFromProvider');
       const res: any = await fn(payload);
       if (!res?.data?.success) throw new Error('Sync did not complete.');
       setLastMode(mode);

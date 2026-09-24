@@ -1,9 +1,10 @@
+import { functions } from '../../firebaseConfig';
 // ==========================================
 // FILE: src/pages/B2BPartners.tsx (or src/components/B2B/B2BPartners.tsx)
 // ==========================================
 import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, orderBy, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { db } from '../../firebaseConfig';
 
 export default function B2BPartners() {
@@ -68,7 +69,7 @@ export default function B2BPartners() {
 
   // 🔒 SERVER-AUTHORITATIVE: tier/wallet grants are settled by adminManagePartner
   // (Director-gated, transactional, audited). The client never writes tier/chips.
-  const callPartner = (payload: any) => httpsCallable(getFunctions(), 'adminManagePartner')(payload);
+  const callPartner = (payload: any) => httpsCallable(functions, 'adminManagePartner')(payload);
 
   const handleUpgradeTier = async () => {
     if (!targetUser) return;
