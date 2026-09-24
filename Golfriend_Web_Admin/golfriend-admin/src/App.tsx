@@ -36,6 +36,7 @@ import EventGenesisConsole from './components/admin/EventGenesisConsole';
 import SponsorDashboard from './components/admin/sponsors/SponsorDashboard';
 import LiveAutomationLog from './components/admin/LiveAutomationLog';
 import SupportModerationHub from './components/admin/SupportModerationHub';
+import DirectorModeration from './components/admin/DirectorModeration';
 import PartnerVault from './components/admin/PartnerVault';
 // B2BPartners removed from navigation (adminManagePartner quarantined — fail-closed).
 import HRManagement from './components/admin/HRManagement'; // 🔥 HR & Staff
@@ -559,7 +560,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
         {/* 🔥 RENDER SYSTEM VAULT */}
         {activeTab === 'vault' && <PartnerVault />}
         {activeTab === 'automation' && <LiveAutomationLog />}
-        {activeTab === 'support' && <SupportModerationHub />}
+        {activeTab === 'support' && <><DirectorModeration /><SupportModerationHub /></>}
         {activeTab === 'bookingoversight' && <BookingOversight />}
         {activeTab === 'bookingaudit' && <BookingAudit />}
         {activeTab === 'hr' && <HRManagement />}
