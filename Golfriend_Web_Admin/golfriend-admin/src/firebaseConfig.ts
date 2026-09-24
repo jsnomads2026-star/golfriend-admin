@@ -48,7 +48,10 @@ if (ACTIVE_PROJECT === 'v2-preview') {
 export const APP_CHECK_ACTIVE = ACTIVE_PROJECT === 'v2-preview';
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app);
+// V2 callable exports live in asia-southeast1.  The Firebase SDK otherwise
+// defaults to us-central1, which is a different endpoint and must never be a
+// silent fallback for the V2 admin surface.
+export const functions = getFunctions(app, 'asia-southeast1');
 export const storage = getStorage(app);
 
 // Development-only precommission emulator wiring. All four services are pinned to
