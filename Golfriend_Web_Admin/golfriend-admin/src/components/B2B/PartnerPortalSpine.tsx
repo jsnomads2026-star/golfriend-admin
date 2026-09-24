@@ -33,7 +33,7 @@ export default function PartnerPortalSpine() {
     {state === "pending" && user && <PartnerApplicationJourney onSignOut={leave}/>} 
     {state === "ready" && <section><h1>Partner Portal</h1><p>Your organization access is active. Your approved workspace is loading.</p><a href="/partner">Open workspace</a></section>}
     {state === "inactive" && <section><h1>Partner Portal unavailable</h1><p>Your organization is not active. No action was taken.</p></section>}
-    {state === "denied" && <section><h1>Partner Portal unavailable</h1><p>This account is not linked to an approved organization.</p></section>}
+    {state === "denied" && user && <PartnerApplicationJourney onSignOut={leave}/>} 
     {state === "unavailable" && <section><h1>Partner Portal unavailable</h1><p>We could not verify access. No data was changed.</p></section>}
     {user && <PartnerInvitationAcceptance/>}
   </main>;
