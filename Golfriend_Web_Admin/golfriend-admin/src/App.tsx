@@ -268,7 +268,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
             setAdminData(next.exists() ? next.data() : null);
           }, (error) => {
             setAdminData(null);
-            setResolveError(`ADMIN_PROFILE_${String(error.code || 'UNKNOWN').replace(/[^A-Z0-9_-]/gi, '_').toUpperCase()}`);
+            setResolveError('ADMIN_PROFILE_UNAVAILABLE');
           });
         } else {
           // Exact authenticated-UID lookup only. The route may narrow organization scope,
@@ -281,7 +281,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
             setPartnerData(next.exists() ? next.data() : null);
           }, (error) => {
             setPartnerData(null);
-            setResolveError(`PARTNER_PROFILE_${String(error.code || 'UNKNOWN').replace(/[^A-Z0-9_-]/gi, '_').toUpperCase()}`);
+            setResolveError('PARTNER_PROFILE_UNAVAILABLE');
           });
         }
       } catch (error: any) {
