@@ -1,0 +1,3 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import {readFileSync} from 'node:fs';
+const source=readFileSync(new URL('./AdminMemberLedger.tsx',import.meta.url),'utf8');
+test('member ledger is Director-gated, callable-only, and complete in eight locales',()=>{for(const locale of ['en','th','ko','ja','zh','es','fr','de'])assert.match(source,new RegExp(`${locale}:\\{title:`));for(const name of ['v2AdminMemberLookup','v2AdminMemberLedger'])assert.match(source,new RegExp(name));assert.match(source,/if\(!isDirector\)/);assert.doesNotMatch(source,/getFirestore|collection\(|onSnapshot|setDoc|updateDoc|deleteDoc/);});

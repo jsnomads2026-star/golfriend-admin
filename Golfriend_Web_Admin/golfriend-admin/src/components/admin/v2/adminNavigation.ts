@@ -2,6 +2,7 @@ export const ADMIN_LOCALES = ['en', 'th', 'ko', 'ja', 'zh', 'es', 'fr', 'de'] as
 export type AdminLocale = (typeof ADMIN_LOCALES)[number];
 export const ADMIN_AREAS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'members', label: 'Members / Tee ledger' },
   { id: 'courses', label: 'Golf courses / Golf API data' },
   { id: 'bookings', label: 'Booking communications' },
   { id: 'partners', label: 'Partners / portal requests' },

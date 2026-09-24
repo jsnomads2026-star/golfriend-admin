@@ -67,6 +67,7 @@ import AdminTrialDecisions from './components/admin/v2/AdminTrialDecisions';
 import EconomyMasterControl from './components/admin/v2/EconomyMasterControl';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
 import OemShopAdmin from './components/admin/v2/OemShopAdmin';
+import AdminMemberLedger from './components/admin/v2/AdminMemberLedger';
 import { AdminIdentityContext, type AdminIdentity } from './components/admin/v2/AdminIdentityContext';
 import { useOnlineStatus } from './components/admin/v2/useOnlineStatus';
 
@@ -446,6 +447,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
   return <AdminIdentityContext.Provider value={adminIdentity}>
     <V2AdminShell activeArea={activeArea} onAreaChange={setActiveArea} onSignOut={executeSecureLogout}>
     {activeArea === 'overview' && <V2AdminOverview onOpen={setActiveArea} />}
+    {activeArea === 'members' && <AdminMemberLedger isDirector={adminData?.role === 'Director'} onOpenModeration={() => setActiveArea('bookings')} />}
     {activeArea === 'courses' && <V2CourseOperations />}
     {activeArea === 'courses' && <CourseAvailabilityV2 admin />}
     {activeArea === 'bookings' && <><PlayBookingLifecycleV2 admin /><BookingOperationsReportV2 admin /><BookingProviderPublicationV2 admin /><BookingOversight /><BookingAudit /><SupportModerationHub /></>}
