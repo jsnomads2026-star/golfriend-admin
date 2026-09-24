@@ -8,7 +8,7 @@ type Order = { orderId: string; state: string; grossAmount: number; currency: st
 const blank = (): Product => ({ productId: '', sku: '', names: Object.fromEntries(locales.map((locale) => [locale, ''])), descriptions: Object.fromEntries(locales.map((locale) => [locale, ''])), imageMediaIds: [], variants: [{ variantId: 'standard', label: 'Standard', stock: 0 }], prices: { THB: 0 }, active: false });
 
 export default function OemShopAdmin({ isDirector }: { isDirector: boolean }) {
-  const [products, setProducts] = useState<Product[]>([]), [orders, setOrders] = useState<Order[]>([]), [product, setProduct] = useState(blank), [status, setStatus] = useState(''), [notice, setNotice] = useState(''), [filter, setFilter] = useState('');
+  const [products, setProducts] = useState<Product[]>([]), [orders, setOrders] = useState<Order[]>([]), [product, setProduct] = useState(blank), [notice, setNotice] = useState(''), [filter, setFilter] = useState('');
   const call = <T,>(name: string, data: object = {}) => httpsCallable<object, T>(functions, name)(data).then((result) => result.data);
   const refresh = async () => { try { const catalogue = await call<{ products: Product[] }>('v2OemShopAdminProducts'); const result = await call<{ orders: Order[] }>('v2OemShopAdminOrders', filter ? { state: filter } : {}); setProducts(catalogue.products); setOrders(result.orders); } catch { setNotice('Shop data is unavailable. Check the server deployment and your Director access.'); } };
   useEffect(() => { if (isDirector) void refresh(); }, [isDirector, filter]);

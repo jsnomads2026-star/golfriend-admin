@@ -19,15 +19,15 @@ export const ADMIN_PRESENTATION: LocaleDict<AdminPresentationKey> = {
   de:{workspace:'Betriebsbereich',signOut:'Sicher abmelden',language:'Sprache',primaryNavigation:'Hauptnavigation',closeNavigation:'Navigation schließen',menu:'Menü',operations:'Golfriend Betrieb',admin:'Administration',overview:'Übersicht',courses:'Golfplätze und Buchungsdaten',bookings:'Buchungskommunikation',partners:'Partner und Portal-Anfragen',marketing:'Marketingmaterialien',advertising:'Werbung',exchange:'OEM- und Börsenveröffentlichung',reports:'Betriebsberichte',heroTitle:'Jede Runde zuverlässig verbinden.',heroLead:'Plätze, Buchungen, Partner, Veröffentlichungen und nachvollziehbare Berichte an einem Ort verwalten. Golfriend betreibt ausschließlich eigene Dienste.',boundaries:'Betriebsgrenzen',authority:'Berechtigung',authorityTitle:'Servergesteuerte Aktionen',authorityLead:'Bestehende Berechtigungen und Dienstgrenzen bleiben maßgeblich.',courseData:'Platzdaten',courseDataTitle:'Geschützte Synchronisierung',courseDataLead:'Vorschau, vertrauenswürdige Datensätze und manuelle Standortprüfungen bleiben erhalten.',teeTimes:'Startzeiten',teeTimesTitle:'Kommunikation statt Abrechnung',teeTimesLead:'Golfriend koordiniert Buchungen und bestätigt keine externen Zahlungen.',areas:'Betriebsbereiche',loading:'Wird geladen…',error:'Diese Informationen sind nicht verfügbar.',retry:'Erneut versuchen',empty:'Derzeit gibt es nichts zu prüfen.',reviewFlag:'Compliance-Texte müssen muttersprachlich und rechtlich geprüft werden.'},
 };
 
-export const ADMIN_ANALYTICS_PRESENTATION: LocaleDict<'analytics' | 'tee-analytics'> = {
-  en:{analytics:'Country user analytics','tee-analytics':'Tee economy analytics'},
-  th:{analytics:'การวิเคราะห์ผู้ใช้ตามประเทศ','tee-analytics':'การวิเคราะห์เศรษฐกิจ Tee'},
-  ko:{analytics:'국가별 사용자 분석','tee-analytics':'Tee 경제 분석'},
-  ja:{analytics:'国別ユーザー分析','tee-analytics':'Tee エコノミー分析'},
-  zh:{analytics:'国家或地区用户分析','tee-analytics':'Tee 经济分析'},
-  es:{analytics:'Análisis de usuarios por país','tee-analytics':'Análisis de la economía Tee'},
-  fr:{analytics:'Analyse des utilisateurs par pays','tee-analytics':'Analyse de l’économie Tee'},
-  de:{analytics:'Nutzeranalyse nach Land','tee-analytics':'Tee-Wirtschaftsanalyse'},
+export const ADMIN_ANALYTICS_PRESENTATION: LocaleDict<'analytics' | 'tee-analytics' | 'shop'> = {
+  en:{analytics:'Country user analytics','tee-analytics':'Tee economy analytics',shop:'OEM shop'},
+  th:{analytics:'การวิเคราะห์ผู้ใช้ตามประเทศ','tee-analytics':'การวิเคราะห์เศรษฐกิจ Tee',shop:'ร้านค้า OEM'},
+  ko:{analytics:'국가별 사용자 분석','tee-analytics':'Tee 경제 분석',shop:'OEM 스토어'},
+  ja:{analytics:'国別ユーザー分析','tee-analytics':'Tee エコノミー分析',shop:'OEM ショップ'},
+  zh:{analytics:'国家或地区用户分析','tee-analytics':'Tee 经济分析',shop:'OEM 商店'},
+  es:{analytics:'Análisis de usuarios por país','tee-analytics':'Análisis de la economía Tee',shop:'Tienda OEM'},
+  fr:{analytics:'Analyse des utilisateurs par pays','tee-analytics':'Analyse de l’économie Tee',shop:'Boutique OEM'},
+  de:{analytics:'Nutzeranalyse nach Land','tee-analytics':'Tee-Wirtschaftsanalyse',shop:'OEM-Shop'},
 };
 
 export const ADMIN_CONTROL_PRESENTATION: LocaleDict<'economy'> = {
