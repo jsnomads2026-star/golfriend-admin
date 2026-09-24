@@ -8,6 +8,7 @@ export const ADMIN_AREAS = [
   { id: 'marketing', label: 'Marketing assets' },
   { id: 'advertising', label: 'Advertising' },
   { id: 'exchange', label: 'OEM / Exchange publishing' },
+  { id: 'shop', label: 'OEM shop' },
   { id: 'reports', label: 'Reports to JHCC' },
 ] as const;
 export const ADMIN_ANALYTICS_AREAS = [

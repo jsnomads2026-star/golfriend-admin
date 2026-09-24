@@ -66,6 +66,7 @@ import V2AcquisitionReport from './components/admin/v2/V2AcquisitionReport';
 import AdminTrialDecisions from './components/admin/v2/AdminTrialDecisions';
 import EconomyMasterControl from './components/admin/v2/EconomyMasterControl';
 import { isAdminArea, type AdminArea } from './components/admin/v2/adminNavigation';
+import OemShopAdmin from './components/admin/v2/OemShopAdmin';
 import { AdminIdentityContext, type AdminIdentity } from './components/admin/v2/AdminIdentityContext';
 import { useOnlineStatus } from './components/admin/v2/useOnlineStatus';
 
@@ -462,6 +463,7 @@ function Dashboard({ mode, requestedOrganizationId = null }: { mode: 'admin' | '
     {activeArea === 'marketing' && <V2MarketingLibrary />}
     {activeArea === 'advertising' && <SponsorDashboard />}
     {activeArea === 'exchange' && <><VendorControlSystem /><OemProductForge /><BuyerCustomerCRM /></>}
+    {activeArea === 'shop' && <OemShopAdmin isDirector={adminData?.role === 'Director'} />}
     {activeArea === 'reports' && <V2AdminReports />}
     {activeArea === 'reports' && <V2AcquisitionReport />}
     {activeArea === 'economy' && <EconomyMasterControl />}
